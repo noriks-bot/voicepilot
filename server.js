@@ -321,6 +321,52 @@ app.get('/api/creatives/:id/files', (req, res) => {
     }
 });
 
+// Fetch creative file from Dropbox to local uploads/ + return ffprobe duration
+app.post('/api/creatives/fetch', async (req, res) => {
+    try {
+        const { path: dbxPath } = req.body || {};
+        if (!dbxPath) return res.status(400).json({ error: 'path required' });
+        const baseName = path.basename(dbxPath);
+        const safeName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const stamp = Date.now();
+        const localName = 'creative-' + stamp + '-' + safeName;
+        const localPath = path.join(__dirname, 'uploads', localName);
+        const token = await dropboxToken();
+        const dlResp = await fetch('https://content.dropboxapi.com/2/files/download', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Dropbox-API-Arg': _toAsciiJson({ path: dbxPath }),
+                'Dropbox-API-Path-Root': _toAsciiJson({ '.tag': 'root', 'root': DROPBOX_ROOT }),
+            }
+        });
+        if (!dlResp.ok) {
+            const errText = await dlResp.text();
+            return res.status(502).json({ error: 'Dropbox download failed: ' + dlResp.status + ' ' + errText.slice(0, 200) });
+        }
+        const buf = Buffer.from(await dlResp.arrayBuffer());
+        fs.writeFileSync(localPath, buf);
+        const { execSync } = require('child_process');
+        let duration = null;
+        try {
+            const out = execSync('ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ' + JSON.stringify(localPath), { encoding: 'utf8', timeout: 15000 });
+            duration = parseFloat(out.trim());
+            if (!Number.isFinite(duration)) duration = null;
+        } catch (e) { console.warn('[ffprobe] failed:', e.message); }
+        res.json({
+            ok: true,
+            localPath, localName,
+            originalName: baseName,
+            size: buf.length,
+            duration,
+            urlPath: '/uploads/' + localName,
+        });
+    } catch (e) {
+        console.error('[/api/creatives/fetch] error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ===== Dropbox share link helper + endpoint =====
 const _shareLinkCache = new Map();
 
@@ -377,6 +423,12 @@ async function dropboxGetSharedLink(filePath) {
     _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
     return url;
 }
+
+// Encode any string to ASCII-safe JSON for use in HTTP headers (Dropbox-API-Arg, etc.)
+function _toAsciiJson(obj) {
+    return JSON.stringify(obj).replace(/[\u0080-\uffff]/g, c => '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4));
+}
+
 
 app.get('/api/dropbox/share-link', async (req, res) => {
     try {
@@ -3249,11 +3301,13 @@ app.get('/api/srt/creative-duration', async (req, res) => {
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
         const tmpPath = path.join(tmpDir, 'srt-probe-' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_'));
         try {
+            const _tok = await dropboxToken();
             const dlRes = await fetch('https://content.dropboxapi.com/2/files/download', {
                 method: 'POST',
                 headers: {
-                    'Authorization': 'Bearer ' + (process.env.DROPBOX_ACCESS_TOKEN || ''),
-                    'Dropbox-API-Arg': JSON.stringify({ path: file.path })
+                    'Authorization': 'Bearer ' + _tok,
+                    'Dropbox-API-Arg': _toAsciiJson({ path: file.path }),
+                    'Dropbox-API-Path-Root': _toAsciiJson({ '.tag': 'root', 'root': DROPBOX_ROOT })
                 }
             });
             if (!dlRes.ok) {
@@ -3568,8 +3622,11 @@ Return ONLY valid JSON array:
         const targetDur = Math.max(probedVideoDur, probedAudioDur, videoDuration);
         console.log(`[${job.id}] [VO] ${lang} durations: video=${probedVideoDur.toFixed(2)}s, audio=${probedAudioDur.toFixed(2)}s, target=${targetDur.toFixed(2)}s`);
         
-        // Create ASS subtitles (bottom-center, subtitle style)
-        const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,5,30,30,200,1`;
+        // Create ASS subtitles with configurable position (middle vs bottom 25%)
+        // ASS Alignment: 5=middle-center, 2=bottom-center
+        // For 1080x1920 vertical: middle = Align 5 + MarginV 200; bottom 25% = Align 2 + MarginV 480 (25% of 1920)
+        const _vpos = (job.textPosition === 'bottom') ? { align: 2, marginV: 480 } : { align: 5, marginV: 200 };
+        const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,${_vpos.align},30,30,${_vpos.marginV},1`;
         
         let ass = `[Script Info]
 Title: ${job.name} ${lang} VO
@@ -3646,7 +3703,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 // Voice-over SLO preview - generate video with Slovenian subtitles + TTS
 app.post('/api/localizer/vo-preview', async (req, res) => {
-    const { videoClean, script, videoDuration } = req.body;
+    const { videoClean, script, videoDuration, textPosition } = req.body;
     if (!videoClean || !script?.length) {
         return res.status(400).json({ error: 'Missing videoClean or script' });
     }
@@ -3662,7 +3719,8 @@ app.post('/api/localizer/vo-preview', async (req, res) => {
     fs.mkdirSync(ttsDir, { recursive: true });
     
     // Create ASS subtitle file
-    const subsStyle = "Style: Default,Noto Sans,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,5,30,30,200,1";
+    const _pp = (textPosition === 'bottom') ? { align: 2, marginV: 480 } : { align: 5, marginV: 200 };
+    const subsStyle = `Style: Default,Noto Sans,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,${_pp.align},30,30,${_pp.marginV},1`;
     
     let ass = `[Script Info]
 Title: VO Preview SLO
