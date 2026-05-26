@@ -402,75 +402,7 @@ function scheduleDailySync() {
     console.log('[creatives:sync] next daily sync at', next.toISOString());
     setTimeout(() => {
         syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] daily failed:', e));
-const _shareLinkCache = new Map();
-
-async function dropboxGetSharedLink(filePath) {
-    if (!filePath) throw new Error('path required');
-    const cached = _shareLinkCache.get(filePath);
-    if (cached && cached.exp > Date.now()) return cached.url;
-    const token = await dropboxToken();
-    const headers = {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': 'application/json',
-        'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', 'root': DROPBOX_ROOT }),
-    };
-    // 1) Try to list existing shared links
-    let r = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
-        method: 'POST', headers,
-        body: JSON.stringify({ path: filePath, direct_only: true }),
-    });
-    if (r.ok) {
-        const j = await r.json();
-        if (j.links && j.links.length > 0) {
-            const url = j.links[0].url;
-            _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
-            return url;
-        }
-    }
-    // 2) Create one
-    r = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
-        method: 'POST', headers,
-        body: JSON.stringify({
-            path: filePath,
-            settings: { requested_visibility: 'public' },
-        }),
-    });
-    if (!r.ok) {
-        const txt = await r.text();
-        // If link already exists (409), fallback to list
-        if (txt.includes('shared_link_already_exists')) {
-            const r2 = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
-                method: 'POST', headers,
-                body: JSON.stringify({ path: filePath, direct_only: true }),
-            });
-            const j2 = await r2.json();
-            if (j2.links && j2.links.length > 0) {
-                const url = j2.links[0].url;
-                _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
-                return url;
-            }
-        }
-        throw new Error('create_shared_link failed: ' + r.status + ' ' + txt.slice(0, 200));
-    }
-    const j = await r.json();
-    const url = j.url;
-    _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
-    return url;
-}
-
-app.get('/api/dropbox/share-link', async (req, res) => {
-    try {
-        const p = req.query.path;
-        if (!p) return res.status(400).json({ error: 'path required' });
-        const url = await dropboxGetSharedLink(String(p));
-        // Convert ?dl=0 to ?dl=0 (preview) or ?raw=1 for direct media
-        res.json({ url, previewUrl: url, rawUrl: url.replace(/\?dl=0$/, '?raw=1') });
-    } catch (e) {
-        console.error('[share-link] error:', e.message);
-        res.status(500).json({ error: e.message });
-    }
-});
-scheduleDailySync();
+        scheduleDailySync();
     }, delay);
 }
 scheduleDailySync();
@@ -3510,7 +3442,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.3[orig];[1:a]volume=1.0[vo];[orig][vo]amix=inputs=2:duration=first[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${videoDuration} "${outVideo}" 2>&1`);
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${videoDuration} "${outVideo}" 2>&1`);
             } else {
                 // No original audio - just voiceover
                 await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outVideo}" 2>&1`);
@@ -3632,7 +3564,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 const hasAudio = probeResult.stdout.trim().length > 0;
                 
                 if (hasAudio) {
-                    await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.15[orig];[1:a]volume=1.0[vo];[orig][vo]amix=inputs=2:duration=first[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
+                    await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
                 } else {
                     await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
                 }
