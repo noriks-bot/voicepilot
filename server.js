@@ -104,12 +104,20 @@ function parseCreativeFilename(name) {
     else if (/BOXER|BOKSER/i.test(upper)) productType = 'boxers';
     else if (/STARTER/i.test(upper)) productType = 'starter';
     else if (/KOMPLET|2P5|BUNDLE/i.test(upper)) productType = 'komplet';
-    const dateMatch = name.match(/(\d{2})-(\d{2})-(\d{2})/);
+    // Match DD-MM-YYYY or DD-MM-YY (must come BEFORE shorter pattern to catch full year)
+    let fileDate = null;
+    const m4 = name.match(/(\d{2})-(\d{2})-(\d{4})/);
+    if (m4) {
+        fileDate = m4[3] + '-' + m4[2] + '-' + m4[1];
+    } else {
+        const m2 = name.match(/(\d{2})-(\d{2})-(\d{2})(?!\d)/);
+        if (m2) fileDate = '20' + m2[3] + '-' + m2[2] + '-' + m2[1];
+    }
     return {
         creativeId: idMatch ? ('ID' + idMatch[1]) : null,
         country: country || null,
         productType,
-        fileDate: dateMatch ? ('20' + dateMatch[1] + '-' + dateMatch[2] + '-' + dateMatch[3]) : null,
+        fileDate: fileDate,
     };
 }
 

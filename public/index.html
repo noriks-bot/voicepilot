@@ -1543,6 +1543,8 @@
             min-width: 110px;
         }
         .creatives-matrix thead th.country-col { min-width: 52px; }
+        .creatives-matrix th.date-col { min-width: 90px; text-align: center !important; }
+        .creatives-matrix td.date-cell { text-align: center; font-size: 12px; color: #4B5563; white-space: nowrap; padding: 8px 10px !important; font-variant-numeric: tabular-nums; }
         .creatives-matrix th.wt-col, .creatives-matrix td.wt-cell { background: #FFF7ED; border-left: 2px solid #FED7AA; border-right: 2px solid #FED7AA; }
         .creatives-matrix th.author-col, .creatives-matrix td.author-cell { min-width: 90px; text-align: center; padding: 8px 6px; }
         .author-pill { display: inline-block; padding: 2px 7px; margin: 1px 1px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; }
@@ -2578,6 +2580,7 @@
                 <table class="creatives-matrix">
                     <thead>
                         <tr>
+                            <th class="date-col">Datum</th>
                             <th class="sticky-col">ID</th>
                             <th class="prod-col">Produkt</th>
                             <th class="author-col" title="Avtor kreative">Avtor</th>
@@ -2597,7 +2600,7 @@
                         </tr>
                     </thead>
                     <tbody id="creatives-tbody">
-                        <tr class="loading-row"><td colspan="16"><span class="spinner"></span>Nalagam kreative ...</td></tr>
+                        <tr class="loading-row"><td colspan="17"><span class="spinner"></span>Nalagam kreative ...</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -7554,7 +7557,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         async function loadCreatives(forceRefresh) {
             const tbody = document.getElementById('creatives-tbody');
             const meta = document.getElementById('creatives-meta');
-            const colspan = CREATIVE_COUNTRIES.length + 5; // +ID +Produkt +Avtor +WT +Pokritost
+            const colspan = CREATIVE_COUNTRIES.length + 6; // +Datum +ID +Produkt +Avtor +WT +Pokritost
             if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Nalagam kreative ...</td></tr>';
             try {
                 const r = await fetch('/api/creatives');
@@ -7575,7 +7578,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const btn = document.getElementById('btn-refresh-creatives');
             if (btn) { btn.disabled = true; btn.textContent = 'Sinhronizacija ...'; }
             const tbody = document.getElementById('creatives-tbody');
-            const colspan = CREATIVE_COUNTRIES.length + 5; // +ID +Produkt +Avtor +WT +Pokritost
+            const colspan = CREATIVE_COUNTRIES.length + 6; // +Datum +ID +Produkt +Avtor +WT +Pokritost
             if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Sinhroniziram z Dropboxom ...</td></tr>';
             try {
                 const r = await fetch('/api/creatives/sync', { method: 'POST' });
@@ -7601,7 +7604,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const q = (document.getElementById('creatives-search').value || '').toLowerCase().trim();
             const productFilter = document.getElementById('creatives-product').value;
             const statusFilter = document.getElementById('creatives-status').value;
-            const colspan = CREATIVE_COUNTRIES.length + 5; // +ID +Produkt +Avtor +WT +Pokritost
+            const colspan = CREATIVE_COUNTRIES.length + 6; // +Datum +ID +Produkt +Avtor +WT +Pokritost
 
             let rows = _creativesData.creatives || [];
             if (q) rows = rows.filter(c => (c.creativeId || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q));
@@ -7648,7 +7651,13 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const authorCell = '<td class="author-cell">' + (authorList.length
                     ? authorList.map(function(a){return '<span class="author-pill author-' + a.toLowerCase() + '">' + a + '</span>';}).join(' ')
                     : '<span class="author-empty">-</span>') + '</td>';
+                const dateStr = c.fileDate ? (function(d){
+                    const parts = d.split('-'); // YYYY-MM-DD
+                    if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
+                    return d;
+                })(c.fileDate) : '-';
                 return '<tr>' +
+                    '<td class="date-cell">' + dateStr + '</td>' +
                     '<td class="sticky-col"><span class="creative-id">' + c.creativeId + '</span></td>' +
                     '<td><span class="product-pill ' + product + '">' + product + '</span></td>' +
                     authorCell +
