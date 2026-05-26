@@ -304,13 +304,12 @@ function readCreativesFromDb() {
         authors: [...(g.authors||[])].sort(),
     }));
     arr.sort((a, b) => {
-        // Sort by latestModified (Dropbox actual timestamp, most reliable) — newest first
-        // fileDate (parsed from filename) is unreliable due to typos like 2027 instead of 2026
-        if (a.latestModified && b.latestModified) {
-            if (a.latestModified !== b.latestModified) return b.latestModified.localeCompare(a.latestModified);
-        } else if (a.latestModified) return -1;
-        else if (b.latestModified) return 1;
-        if (a.fileDate && b.fileDate) return b.fileDate.localeCompare(a.fileDate);
+        // Sort by fileDate (parsed from video filename) — newest first
+        if (a.fileDate && b.fileDate) {
+            if (a.fileDate !== b.fileDate) return b.fileDate.localeCompare(a.fileDate);
+        } else if (a.fileDate) return -1;
+        else if (b.fileDate) return 1;
+        if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);
         const an = parseInt((a.creativeId || '').replace(/\D/g, '')) || 0;
         const bn = parseInt((b.creativeId || '').replace(/\D/g, '')) || 0;
         return bn - an;

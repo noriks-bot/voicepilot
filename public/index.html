@@ -7617,12 +7617,16 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 });
             }
 
-            // Sort by newest date first (latestModified > fileDate fallback)
+            // Sort by fileDate (from filename) first, newest on top
             rows.sort((a, b) => {
-                const ta = a.latestModified ? new Date(a.latestModified).getTime() : (a.fileDate ? new Date(a.fileDate).getTime() : 0);
-                const tb = b.latestModified ? new Date(b.latestModified).getTime() : (b.fileDate ? new Date(b.fileDate).getTime() : 0);
+                const da = a.fileDate || '';
+                const db = b.fileDate || '';
+                if (da && db && da !== db) return db.localeCompare(da);
+                if (da && !db) return -1;
+                if (!da && db) return 1;
+                const ta = a.latestModified ? new Date(a.latestModified).getTime() : 0;
+                const tb = b.latestModified ? new Date(b.latestModified).getTime() : 0;
                 if (tb !== ta) return tb - ta;
-                // Tie-break: numeric ID descending
                 const an = parseInt((a.creativeId||'').replace(/\D/g,''))||0;
                 const bn = parseInt((b.creativeId||'').replace(/\D/g,''))||0;
                 return bn - an;
@@ -7663,7 +7667,12 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     ? authorList.map(function(a){return '<span class="author-pill author-' + a.toLowerCase() + '">' + a + '</span>';}).join(' ')
                     : '<span class="author-empty">-</span>') + '</td>';
                 const dateStr = (function(){
-                    // Prefer latestModified (newest file timestamp) > fileDate (parsed from name)
+                    // Use fileDate parsed from video filename (user's requirement)
+                    if (c.fileDate) {
+                        const parts = c.fileDate.split('-'); // YYYY-MM-DD
+                        if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
+                        return c.fileDate;
+                    }
                     if (c.latestModified) {
                         const d = new Date(c.latestModified);
                         if (!isNaN(d)) {
@@ -7671,11 +7680,6 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                             const mm = String(d.getMonth()+1).padStart(2,'0');
                             return dd + '.' + mm + '.' + d.getFullYear();
                         }
-                    }
-                    if (c.fileDate) {
-                        const parts = c.fileDate.split('-');
-                        if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
-                        return c.fileDate;
                     }
                     return '-';
                 })();
