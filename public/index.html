@@ -990,7 +990,7 @@
         [style*="color:#666"], [style*="color: #666"] {
             color: var(--text-tertiary) !important;
         }
-        [style*="color:#fff"]:not(.btn-primary):not(.btn) {
+        [style*="color:#fff"]:not(.btn-primary):not(.btn):not([style*="background:#0A59D2"]):not([style*="background:#10B981"]):not([style*="background:#10b981"]):not([style*="background:#0847A8"]):not([style*="background:#059669"]):not([style*="background:#DC2626"]):not([style*="background:#B91C1C"]) {
             color: var(--text-body) !important;
         }
         [style*="color:#10b981"] {
@@ -2065,6 +2065,32 @@
         #mode-voiceover > div[style*="padding:0"] { padding: 0 !important; max-width: none !important; }
         /* OVERRIDE all-creatives toolbar */
         .activity-wrap { background: transparent !important; }
+                /* Force white text on solid blue / brand / success / danger buttons */
+        button[style*="background:#0A59D2"],
+        button[style*="background: #0A59D2"],
+        button[style*="background:#0847A8"],
+        button[style*="background:#10B981"],
+        button[style*="background: #10B981"],
+        button[style*="background:#10b981"],
+        button[style*="background:#059669"],
+        button[style*="background:#DC2626"],
+        button[style*="background:#B91C1C"],
+        a.btn[style*="background:#0A59D2"],
+        a.btn[style*="background:#10B981"],
+        .btn-primary,
+        .btn-refresh,
+        .btn-brand {
+            color: #FFFFFF !important;
+        }
+        button[style*="background:#0A59D2"] *,
+        button[style*="background:#10B981"] *,
+        .btn-primary *,
+        .btn-refresh * { color: #FFFFFF !important; }
+        /* Numeric badges (step circles) — white digit on brand bg */
+        [style*="background:#0A59D2"][style*="border-radius:6px"],
+        [style*="background: #0A59D2"][style*="border-radius:6px"] { color: #FFFFFF !important; }
+        /* ========== END FORCED WHITE BUTTONS ========== */
+
         /* ========== END UNIFIED DESIGN SYSTEM v2 ========== */
 
         </style>
