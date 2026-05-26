@@ -771,6 +771,255 @@
             background: #333;
             color: #f87171;
         }
+    
+        /* ========== SAAS LAYOUT v2 ========== */
+        :root {
+            --bg-0: #0a0a0b;
+            --bg-1: #111114;
+            --bg-2: #16161b;
+            --bg-3: #1d1d24;
+            --border: #26262e;
+            --border-soft: #1e1e26;
+            --text: #f5f5f7;
+            --text-dim: #9c9ca8;
+            --text-mute: #5e5e6e;
+            --accent: #8b5cf6;
+            --accent-2: #a78bfa;
+            --accent-soft: #8b5cf61a;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.4);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.25);
+        }
+
+        body {
+            background: var(--bg-0) !important;
+            color: var(--text);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            letter-spacing: -0.01em;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 248px 1fr;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-1);
+            border-right: 1px solid var(--border-soft);
+            padding: 24px 16px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px 24px 12px;
+            border-bottom: 1px solid var(--border-soft);
+            margin-bottom: 16px;
+        }
+        .sidebar-brand .logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), #ec4899);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 4px 12px var(--accent-soft);
+        }
+        .sidebar-brand .title {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .sidebar-brand .subtitle {
+            font-size: 11px;
+            color: var(--text-mute);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .sidebar-section-label {
+            font-size: 10px;
+            color: var(--text-mute);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 12px 12px 6px 12px;
+            font-weight: 600;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            color: var(--text-dim);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            margin-bottom: 2px;
+            text-decoration: none;
+            border: 1px solid transparent;
+        }
+        .nav-item:hover {
+            background: var(--bg-2);
+            color: var(--text);
+        }
+        .nav-item.active {
+            background: var(--accent-soft);
+            color: var(--accent-2);
+            border-color: var(--accent);
+        }
+        .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+        .nav-item .label { flex: 1; }
+        .nav-item .badge {
+            font-size: 10px;
+            background: var(--bg-3);
+            padding: 2px 7px;
+            border-radius: 999px;
+            color: var(--text-mute);
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-soft);
+        }
+        .sidebar-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-2);
+        }
+        .sidebar-user .avatar {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, var(--accent), #ec4899);
+            border-radius: 50%;
+            display:flex; align-items:center; justify-content:center;
+            font-weight: 700;
+            color: #fff;
+            font-size: 13px;
+        }
+        .sidebar-user .user-name { font-size: 13px; font-weight: 600; }
+        .sidebar-user .user-role { font-size: 11px; color: var(--text-mute); }
+        .sidebar-user .logout-btn-sm {
+            margin-left: auto;
+            background: transparent;
+            border: none;
+            color: var(--text-mute);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+        }
+        .sidebar-user .logout-btn-sm:hover { color: var(--danger); }
+
+        /* Main content area */
+        .main-area {
+            padding: 32px 40px;
+            max-width: 1500px;
+            width: 100%;
+            min-width: 0;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+        .page-title h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin: 0;
+        }
+        .page-title p {
+            color: var(--text-dim);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        .page-actions { display: flex; gap: 10px; align-items: center; }
+
+        /* Cards used by Home + Settings */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            background: var(--bg-1);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: border-color 0.15s;
+        }
+        .stat-card:hover { border-color: var(--accent); }
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--text-mute);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .stat-card .trend {
+            font-size: 12px;
+            color: var(--success);
+            margin-top: 4px;
+        }
+
+        .card {
+            background: var(--bg-1);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Hide original mode-tabs (the redundant header tab bar) */
+        .mode-tabs { display: none !important; }
+
+        /* Hide original container header (replaced by sidebar + page-header) */
+        .app-shell .container > header { display: none !important; }
+        .app-shell .container { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+
+        @media (max-width: 1024px) {
+            .app-shell { grid-template-columns: 64px 1fr; }
+            .sidebar { padding: 16px 8px; }
+            .nav-item .label, .nav-item .badge, .sidebar-brand .title, .sidebar-brand .subtitle, .sidebar-section-label, .sidebar-user .user-name, .sidebar-user .user-role { display: none; }
+            .nav-item { justify-content: center; }
+            .main-area { padding: 20px; }
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        /* ========== END SAAS LAYOUT v2 ========== */
+
     </style>
 </head>
 <body>
@@ -813,7 +1062,133 @@
         </div>
     </div>
     
-    <div class="container">
+
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="logo">🎙️</div>
+                <div>
+                    <div class="title">Voicepilot</div>
+                    <div class="subtitle">Noriks</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section-label">Workspace</div>
+            <a class="nav-item" data-page="home" onclick="switchPage('home')">
+                <span class="icon">🏠</span><span class="label">Home</span>
+            </a>
+            <a class="nav-item" data-page="srtmaker" onclick="switchPage('srtmaker')">
+                <span class="icon">📝</span><span class="label">SRT Maker</span>
+                <span class="badge">soon</span>
+            </a>
+            <a class="nav-item active" data-page="voiceover" onclick="switchPage('voiceover')">
+                <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
+            </a>
+            <a class="nav-item" href="downloads.html">
+                <span class="icon">🎬</span><span class="label">All Creatives</span>
+            </a>
+
+            <div class="sidebar-section-label">Account</div>
+            <a class="nav-item" data-page="settings" onclick="switchPage('settings')">
+                <span class="icon">⚙️</span><span class="label">Settings</span>
+            </a>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="avatar" id="sidebar-avatar">?</div>
+                    <div>
+                        <div class="user-name" id="sidebar-user-name">User</div>
+                        <div class="user-role">Noriks team</div>
+                    </div>
+                    <button class="logout-btn-sm" onclick="logout()" title="Odjava">⏏</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-area">
+            <!-- HOME page -->
+            <section class="page-content" id="page-home" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>Dobrodošel nazaj</h1>
+                        <p>Pregled aktivnosti in hitri dostop.</p>
+                    </div>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card"><div class="label">Aktivni job-i</div><div class="value" id="stat-active">0</div><div class="trend">v teku</div></div>
+                    <div class="stat-card"><div class="label">Končani danes</div><div class="value" id="stat-done">0</div><div class="trend">↑ produktivno</div></div>
+                    <div class="stat-card"><div class="label">Skupaj kreativ</div><div class="value" id="stat-total">—</div><div class="trend">arhiv</div></div>
+                    <div class="stat-card"><div class="label">Status API</div><div class="value" style="font-size:18px; color:var(--success);">● Online</div><div class="trend">ElevenLabs + OpenAI</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">⚡ Hitri start</div>
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                        <button class="nav-item" style="justify-content:flex-start; background:var(--bg-2);" onclick="switchPage('voiceover')"><span class="icon">🎙️</span><span class="label">Nov voiceover</span></button>
+                        <a class="nav-item" style="justify-content:flex-start; background:var(--bg-2);" href="downloads.html"><span class="icon">📥</span><span class="label">Downloads</span></a>
+                        <button class="nav-item" style="justify-content:flex-start; background:var(--bg-2);" onclick="switchPage('settings')"><span class="icon">⚙️</span><span class="label">Nastavitve</span></button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SRT MAKER page (placeholder) -->
+            <section class="page-content" id="page-srtmaker" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>SRT Maker</h1>
+                        <p>Generiraj .srt subtitle datoteke iz tekstov.</p>
+                    </div>
+                </div>
+                <div class="card" style="text-align:center; padding:60px 24px;">
+                    <div style="font-size:48px; margin-bottom:12px;">🚧</div>
+                    <div style="font-size:18px; font-weight:600; margin-bottom:6px;">V pripravi</div>
+                    <div style="color:var(--text-dim);">SRT generator bo na voljo kmalu.</div>
+                </div>
+            </section>
+
+            <!-- VOICEOVER page wraps existing .container -->
+            <section class="page-content" id="page-voiceover">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>🎙️ Voiceover Maker</h1>
+                        <p>Podnapisi + AI govor iz tekstov knjižnice.</p>
+                    </div>
+                    <div class="page-actions">
+                        <a href="downloads.html" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
+                    </div>
+                </div>
+                <!-- INSERT_CONTAINER_HERE -->
+            </section>
+
+            <!-- SETTINGS page -->
+            <section class="page-content" id="page-settings" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>Nastavitve</h1>
+                        <p>API status, glasovi, splošne nastavitve.</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">🔌 API povezave</div>
+                    <div style="display:grid; gap:10px;">
+                        <div style="display:flex; justify-content:space-between; padding:12px; background:var(--bg-2); border-radius:8px;">
+                            <span>ElevenLabs TTS</span><span style="color:var(--success);">● connected</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; padding:12px; background:var(--bg-2); border-radius:8px;">
+                            <span>OpenAI Whisper / GPT</span><span style="color:var(--success);">● connected</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">🎤 Privzeti glasovi</div>
+                    <div style="color:var(--text-dim); font-size:13px;">Trenutno: <strong style="color:var(--text);">Daniel (onwK4e9ZLuTAKqWW03F9)</strong> za vse trge.</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">📦 O aplikaciji</div>
+                    <div style="color:var(--text-dim); font-size:13px;">Voicepilot • Noriks internal tool • <a href="https://github.com/noriks-bot/voicepilot" target="_blank" style="color:var(--accent-2);">GitHub repo</a></div>
+                </div>
+            </section>
+
+                <div class="container">
         <header>
             <h1>🎙️ <span>Voicepilot</span></h1>
             <div style="display:flex; gap:15px; align-items:center;">
@@ -5574,6 +5949,35 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 saveVideoPairsToStorage();
             }
         });
+    
+        // ========== PAGE NAVIGATION ==========
+        window.switchPage = function(page) {
+            document.querySelectorAll('.page-content').forEach(p => p.style.display = 'none');
+            const target = document.getElementById('page-' + page);
+            if (target) target.style.display = 'block';
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const navItem = document.querySelector('.nav-item[data-page="' + page + '"]');
+            if (navItem) navItem.classList.add('active');
+            try { localStorage.setItem('voicepilot_page', page); } catch(e) {}
+        };
+        document.addEventListener('DOMContentLoaded', function() {
+            let initial = 'voiceover';
+            try { initial = localStorage.getItem('voicepilot_page') || 'voiceover'; } catch(e) {}
+            switchPage(initial);
+            // Sync user info to sidebar
+            try {
+                const u = localStorage.getItem('voicepilot_user');
+                if (u) {
+                    const user = JSON.parse(u);
+                    document.getElementById('sidebar-user-name').textContent = user.name || user.username || 'User';
+                    document.getElementById('sidebar-avatar').textContent = (user.name || user.username || '?').charAt(0).toUpperCase();
+                }
+            } catch(e) {}
+        });
+
     </script>
+            </section>
+        </main>
+    </div>
 </body>
 </html>
