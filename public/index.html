@@ -1634,6 +1634,200 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        
+        /* Home - section heading */
+        .section-heading {
+            font-size: 13px;
+            font-weight: 700;
+            color: #052F70;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 28px 0 14px;
+        }
+        /* Home - quick action cards */
+        .quick-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+        .quick-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 20px;
+            background: #fff;
+            border: 1px solid #EDEBE8;
+            border-radius: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.18s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .quick-card:hover {
+            border-color: #0A59D2;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(10, 89, 210, 0.10);
+        }
+        .quick-card:hover .quick-arrow {
+            transform: translateX(4px);
+            color: #0A59D2;
+            opacity: 1;
+        }
+        .quick-icon {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 11px;
+            background: #EEF3FB;
+            color: #0A59D2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .quick-card.quick-primary {
+            background: linear-gradient(135deg, #0A59D2 0%, #052F70 100%);
+            border-color: transparent;
+            color: #fff;
+        }
+        .quick-card.quick-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(10, 89, 210, 0.30);
+        }
+        .quick-card.quick-primary .quick-icon {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+        }
+        .quick-card.quick-primary .quick-desc {
+            color: rgba(255, 255, 255, 0.78);
+        }
+        .quick-card.quick-primary .quick-arrow {
+            color: #fff;
+            opacity: 0.7;
+        }
+        .quick-body { flex: 1; min-width: 0; }
+        .quick-title {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+        .quick-desc {
+            font-size: 12px;
+            color: #57534e;
+            line-height: 1.45;
+        }
+        .quick-arrow {
+            font-size: 18px;
+            font-weight: 600;
+            color: #57534e;
+            opacity: 0.4;
+            transition: all 0.18s ease;
+        }
+
+        /* Latest activity table */
+        .activity-wrap {
+            background: #fff;
+            border: 1px solid #EDEBE8;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .activity-table thead th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #052F70;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            background: #FAF9F7;
+            border-bottom: 1px solid #EDEBE8;
+        }
+        .activity-table tbody td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #F4F2F0;
+            vertical-align: middle;
+        }
+        .activity-table tbody tr:last-child td { border-bottom: none; }
+        .activity-table tbody tr:hover td { background: #FAF9F7; }
+        .activity-job {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #0A59D2;
+            font-weight: 600;
+        }
+        .activity-source {
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #0A0A0A;
+        }
+        .activity-langs {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .lang-chip {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 4px;
+            background: #EEF3FB;
+            color: #0A59D2;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .status-done { background: #DCFCE7; color: #15803d; }
+        .status-running { background: #DBEAFE; color: #1D4ED8; }
+        .status-failed { background: #FEE2E2; color: #B91C1C; }
+        .status-pending { background: #FEF3C7; color: #B45309; }
+        .activity-time {
+            color: #57534e;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid #E0DFDD;
+            color: #052F70;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-ghost:hover { background: #FAF9F7; border-color: #0A59D2; }
+        .btn-link {
+            background: transparent;
+            border: none;
+            color: #0A59D2;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-family: inherit;
+        }
+        .btn-link:hover { background: #EEF3FB; }
+
         /* ========== END ALL CREATIVES MATRIX CSS ========== */
     </style>
 </head>
@@ -1738,13 +1932,79 @@
                     <div class="stat-card"><div class="label">Skupaj kreativ</div><div class="value" id="stat-total">—</div><div class="trend">arhiv</div></div>
                     <div class="stat-card"><div class="label">Status API</div><div class="value" style="font-size:18px; color:var(--success);">● Online</div><div class="trend">ElevenLabs + OpenAI</div></div>
                 </div>
-                <div class="card">
-                    <div class="card-title">⚡ Hitri start</div>
-                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
-                        <button class="nav-item" style="justify-content:flex-start; background:var(--bg-2);" onclick="switchPage('voiceover')"><span class="icon">🎙️</span><span class="label">Nov voiceover</span></button>
-                        <a class="nav-item" style="justify-content:flex-start; background:var(--bg-2);" href="downloads.html"><span class="icon">📥</span><span class="label">Downloads</span></a>
-                        <button class="nav-item" style="justify-content:flex-start; background:var(--bg-2);" onclick="switchPage('settings')"><span class="icon">⚙️</span><span class="label">Nastavitve</span></button>
-                    </div>
+
+                <div class="section-heading">Hitri start</div>
+                <div class="quick-grid">
+                    <a class="quick-card quick-primary" onclick="switchPage('voiceover')">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">Nov voiceover</div>
+                            <div class="quick-desc">Naloži video + tekst, generiraj AI govor in podnapise.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                    <a class="quick-card" onclick="switchPage('localize')">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">Lokaliziraj video</div>
+                            <div class="quick-desc">Prevedi + dub video v vse jezike trgov.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                    <a class="quick-card" onclick="switchPage('creatives')">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">All Creatives</div>
+                            <div class="quick-desc">Pregled vseh kreativ + status lokalizacij.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                    <a class="quick-card" href="downloads.html">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">Downloads</div>
+                            <div class="quick-desc">Knjižnica izhodov: video, srt, mp3.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                    <a class="quick-card" onclick="switchPage('srtmaker')">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="10" y1="13" x2="14" y2="13"/><line x1="10" y1="17" x2="14" y2="17"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">SRT Maker</div>
+                            <div class="quick-desc">Generiraj .srt podnapise iz teksta.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                    <a class="quick-card" onclick="switchPage('settings')">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">Nastavitve</div>
+                            <div class="quick-desc">API ključi, glasovi, jeziki.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                </div>
+
+                <div class="section-heading" style="display:flex; align-items:center; justify-content:space-between;">
+                    <span>Latest activity</span>
+                    <button class="btn-ghost" onclick="loadHomeActivity()" id="btn-refresh-activity">Osvezi</button>
+                </div>
+                <div class="activity-wrap">
+                    <table class="activity-table">
+                        <thead>
+                            <tr>
+                                <th>Job</th>
+                                <th>Vir</th>
+                                <th>Jeziki</th>
+                                <th>Status</th>
+                                <th>Cas</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-tbody">
+                            <tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam aktivnost ...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
 
@@ -6815,6 +7075,97 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         }
 
         // ========== END ALL CREATIVES ==========
+        // ========== HOME ACTIVITY ==========
+        function _fmtRelTime(iso) {
+            if (!iso) return '-';
+            const t = new Date(iso).getTime();
+            if (isNaN(t)) return '-';
+            const d = Date.now() - t;
+            if (d < 60000) return 'pravkar';
+            if (d < 3600000) return Math.floor(d/60000) + ' min';
+            if (d < 86400000) return Math.floor(d/3600000) + ' h';
+            return Math.floor(d/86400000) + ' d';
+        }
+        function _statusLabel(s) {
+            const map = { done: 'Koncano', completed: 'Koncano', complete: 'Koncano',
+                running: 'V teku', processing: 'V teku', in_progress: 'V teku',
+                failed: 'Napaka', error: 'Napaka',
+                pending: 'Caka', queued: 'Caka' };
+            return map[s] || (s || '-');
+        }
+        function _statusClass(s) {
+            if (!s) return 'status-pending';
+            if (['done','completed','complete'].includes(s)) return 'status-done';
+            if (['running','processing','in_progress'].includes(s)) return 'status-running';
+            if (['failed','error'].includes(s)) return 'status-failed';
+            return 'status-pending';
+        }
+        async function loadHomeActivity() {
+            const tbody = document.getElementById('activity-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam aktivnost ...</td></tr>';
+            try {
+                const r = await fetch('/api/localizer/jobs');
+                const d = await r.json();
+                let jobs = (d.jobs || []).slice();
+                jobs.sort((a, b) => {
+                    const at = new Date(a.createdAt || a.created_at || a.startedAt || 0).getTime();
+                    const bt = new Date(b.createdAt || b.created_at || b.startedAt || 0).getTime();
+                    return bt - at;
+                });
+                jobs = jobs.slice(0, 20);
+
+                const active = jobs.filter(j => ['running','processing','in_progress'].includes(j.status)).length;
+                const today = new Date().toDateString();
+                const doneToday = jobs.filter(j => {
+                    if (!['done','completed','complete'].includes(j.status)) return false;
+                    const dt = new Date(j.completedAt || j.finishedAt || j.updatedAt || j.createdAt || 0);
+                    return dt.toDateString() === today;
+                }).length;
+                const elActive = document.getElementById('stat-active'); if (elActive) elActive.textContent = active;
+                const elDone = document.getElementById('stat-done'); if (elDone) elDone.textContent = doneToday;
+
+                if (jobs.length === 0) {
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Se ni naročil. Začni z <a href="#" onclick="switchPage('voiceover'); return false;" style="color:#0A59D2; font-weight:600;">Nov voiceover</a>.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = jobs.map(j => {
+                    const id = (j.id || '').slice(0, 14);
+                    const src = j.filename || j.sourceFile || j.source || j.video || '-';
+                    const langs = j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []);
+                    const langHtml = (langs && langs.length) ?
+                        langs.slice(0, 6).map(l => '<span class="lang-chip">' + (l || '').toUpperCase() + '</span>').join('') +
+                        (langs.length > 6 ? '<span class="lang-chip">+' + (langs.length - 6) + '</span>' : '') :
+                        '<span style="color:#9ca3af; font-size:11px;">-</span>';
+                    const status = j.status || 'pending';
+                    const when = j.createdAt || j.created_at || j.startedAt || null;
+                    return '<tr>' +
+                        '<td><span class="activity-job">' + (id || '-') + '</span></td>' +
+                        '<td><div class="activity-source" title="' + String(src).replace(/"/g, '&quot;') + '">' + String(src) + '</div></td>' +
+                        '<td><div class="activity-langs">' + langHtml + '</div></td>' +
+                        '<td><span class="status-pill ' + _statusClass(status) + '">' + _statusLabel(status) + '</span></td>' +
+                        '<td class="activity-time">' + _fmtRelTime(when) + '</td>' +
+                        '<td><button class="btn-link" onclick="switchPage('voiceover')">Odpri</button></td>' +
+                        '</tr>';
+                }).join('');
+            } catch (e) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Napaka: ' + e.message + '</td></tr>';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(loadHomeActivity, 800);
+        });
+        (function(){
+            const _orig = window.switchPage;
+            if (typeof _orig === 'function') {
+                window.switchPage = function(page) {
+                    _orig(page);
+                    if (page === 'home') loadHomeActivity();
+                };
+            }
+        })();
+        // ========== END HOME ACTIVITY ==========
 
     </script>
             </section>
