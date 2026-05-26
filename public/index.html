@@ -1805,6 +1805,7 @@
             border-bottom: 1px solid #F0F0F0;
             vertical-align: middle;
         }
+        .creative-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; background: #DBEAFE; color: #1E40AF; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; vertical-align: middle; }
         .activity-table tbody tr:last-child td { border-bottom: none; }
         .activity-table tbody tr:hover td { background: #FAF9F7; }
         .activity-job {
@@ -7782,6 +7783,10 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
 
                 tbody.innerHTML = jobs.map(j => {
                     const id = (j.id || '').slice(0, 14);
+                    // Extract creative ID (e.g. ID210) from job name/filename
+                    const nameSrc = j.name || j.filename || j.videoClean || j.video || '';
+                    const creMatch = String(nameSrc).match(/ID\d+/i);
+                    const creativeId = creMatch ? creMatch[0].toUpperCase() : null;
                     const src = j.filename || j.sourceFile || j.source || j.video || '-';
                     const langs = j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []);
                     const langHtml = (langs && langs.length) ?
@@ -7791,7 +7796,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     const status = j.status || 'pending';
                     const when = j.createdAt || j.created_at || j.startedAt || null;
                     return '<tr>' +
-                        '<td><span class="activity-job">' + (id || '-') + '</span></td>' +
+                        '<td><span class="activity-job">' + (id || '-') + '</span>' + (creativeId ? ' <span class="creative-badge" title="Kreativa">' + creativeId + '</span>' : '') + '</td>' +
                         '<td><div class="activity-source" title="' + String(src).replace(/"/g, '&quot;') + '">' + String(src) + '</div></td>' +
                         '<td><div class="activity-langs">' + langHtml + '</div></td>' +
                         '<td><span class="status-pill ' + _statusClass(status) + '">' + _statusLabel(status) + '</span></td>' +
