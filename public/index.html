@@ -1552,12 +1552,44 @@
         }
         .creatives-matrix tbody tr:hover td { background: #FAF9F7; }
         .creatives-matrix tbody tr:hover td.sticky-col { background: #FAF9F7; }
-        .cc-cell { font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
-        .cc-yes { color: #16a34a; }
-        .cc-no { color: #dc2626; opacity: 0.55; }
-        .cc-link { cursor: pointer; transition: background 0.15s; }
-        .cc-link:hover { background: #DCFCE7 !important; color: #15803d; transform: scale(1.05); }
-        .cc-link[data-loading="1"] { opacity: 0.6; cursor: wait; }
+        .cc-cell {
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            padding: 0 !important;
+        }
+        .cc-cell > .cc-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 38px;
+            border-radius: 6px;
+            margin: 3px;
+            font-size: 16px;
+            line-height: 1;
+            transition: all 0.15s ease;
+        }
+        .cc-yes > .cc-mark {
+            background: #DCFCE7;
+            color: #15803d;
+            border: 1px solid #BBF7D0;
+        }
+        .cc-no > .cc-mark {
+            background: #FEE2E2;
+            color: #B91C1C;
+            border: 1px solid #FECACA;
+            opacity: 0.75;
+        }
+        .cc-link { cursor: pointer; }
+        .cc-link:hover > .cc-mark {
+            background: #16a34a;
+            color: #fff;
+            border-color: #15803d;
+            transform: scale(1.06);
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.30);
+        }
+        .cc-link[data-loading="1"] > .cc-mark { opacity: 0.6; cursor: wait; }
         .cov-cell { text-align: left !important; padding-left: 12px !important; min-width: 130px; }
         .cov-bar { display: inline-block; width: 70px; height: 6px; background: #EDEBE8; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 8px; }
         .cov-fill { display: block; height: 100%; background: #0A59D2; border-radius: 3px; }
@@ -7076,9 +7108,9 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     const file = (c.filesByCountry || {})[cc];
                     if (has && file && file.path) {
                         const safePath = file.path.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                        return '<td class="cc-cell cc-yes cc-link" data-path="' + safePath + '" onclick="openDropboxLink(this)" title="' + (file.name || '') + '">+</td>';
+                        return '<td class="cc-cell cc-yes cc-link" data-path="' + safePath + '" onclick="openDropboxLink(this)" title="Klikni za odpiranje na Dropbox: ' + (file.name || '') + '"><span class="cc-mark">+</span></td>';
                     }
-                    return '<td class="cc-cell ' + (has ? 'cc-yes' : 'cc-no') + '">' + (has ? '+' : '-') + '</td>';
+                    return '<td class="cc-cell ' + (has ? 'cc-yes' : 'cc-no') + '"><span class="cc-mark">' + (has ? '+' : '-') + '</span></td>';
                 }).join('');
                 const localCount = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && present.has(cc)).length;
                 const totalLocal = CREATIVE_COUNTRIES.length - 1;
@@ -7096,9 +7128,10 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const path = td.getAttribute('data-path');
             if (!path) return;
             if (td.dataset.loading === '1') return;
-            const original = td.textContent;
+            const mark = td.querySelector('.cc-mark') || td;
+            const original = mark.textContent;
             td.dataset.loading = '1';
-            td.textContent = '...';
+            mark.textContent = '...';
             try {
                 const r = await fetch('/api/dropbox/share-link?path=' + encodeURIComponent(path));
                 const j = await r.json();
@@ -7107,7 +7140,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             } catch (e) {
                 alert('Napaka pri odpiranju Dropbox linka: ' + e.message);
             } finally {
-                td.textContent = original;
+                mark.textContent = original;
                 td.dataset.loading = '0';
             }
         }
