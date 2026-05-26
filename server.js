@@ -33,6 +33,206 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ========== DROPBOX CREATIVES API ==========
+const DROPBOX_APP_KEY = process.env.DROPBOX_APP_KEY || '';
+const DROPBOX_APP_SECRET = process.env.DROPBOX_APP_SECRET || '';
+const DROPBOX_REFRESH_TOKEN = process.env.DROPBOX_REFRESH_TOKEN || '';
+const DROPBOX_ROOT = process.env.DROPBOX_ROOT || '';
+const DROPBOX_FOLDERS = [
+    '/NORIKS Team Folder/TEJA - KREATIVE/FINAL CREATIVES 🔥',
+    '/NORIKS Team Folder/FLORES',
+    '/NORIKS Team Folder/TEJA - KREATIVE/Extra',
+    '/NORIKS Team Folder/Faraz',
+    '/NORIKS Team Folder/Wasif',
+    '/NORIKS Team Folder/SERBIA - CONTENT/Final',
+    '/NORIKS Team Folder/NORIKS_GP/TRANSLATED CREATIVES',
+];
+
+let _dbxToken = null;
+let _dbxTokenExp = 0;
+async function dropboxToken() {
+    if (_dbxToken && Date.now() < _dbxTokenExp) return _dbxToken;
+    const body = `grant_type=refresh_token&refresh_token=${DROPBOX_REFRESH_TOKEN}&client_id=${DROPBOX_APP_KEY}&client_secret=${DROPBOX_APP_SECRET}`;
+    const r = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+    });
+    const j = await r.json();
+    if (!j.access_token) throw new Error('Dropbox token refresh failed: ' + JSON.stringify(j));
+    _dbxToken = j.access_token;
+    _dbxTokenExp = Date.now() + (j.expires_in * 1000) - 60000;
+    return _dbxToken;
+}
+
+async function dropboxListFolder(folderPath) {
+    const token = await dropboxToken();
+    const headers = {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', 'root': DROPBOX_ROOT }),
+    };
+    const all = [];
+    let body = JSON.stringify({ path: folderPath, recursive: true, limit: 2000 });
+    let url = 'https://api.dropboxapi.com/2/files/list_folder';
+    while (true) {
+        const r = await fetch(url, { method: 'POST', headers, body });
+        if (!r.ok) {
+            const txt = await r.text();
+            throw new Error('Dropbox list_folder ' + folderPath + ' -> ' + r.status + ': ' + txt.slice(0, 200));
+        }
+        const j = await r.json();
+        if (j.entries) all.push(...j.entries);
+        if (!j.has_more) break;
+        url = 'https://api.dropboxapi.com/2/files/list_folder/continue';
+        body = JSON.stringify({ cursor: j.cursor });
+    }
+    return all;
+}
+
+function parseCreativeFilename(name) {
+    const COUNTRIES = ['HR','CZ','PL','GR','SK','IT','HU','SI','RO','DE','BG','AT'];
+    const idMatch = name.match(/ID(\d+)/i);
+    const upper = name.toUpperCase();
+    const country = COUNTRIES.find(c =>
+        upper.includes('_' + c + '_') || upper.includes('_' + c + '.') ||
+        upper.includes('-' + c + '_') || upper.includes('-' + c + '.') ||
+        upper.startsWith(c + '_') || upper.startsWith(c + '-')
+    );
+    let productType = 'other';
+    if (/SHIRT|MAJIC/i.test(upper)) productType = 'shirts';
+    else if (/BOXER|BOKSER/i.test(upper)) productType = 'boxers';
+    else if (/STARTER/i.test(upper)) productType = 'starter';
+    else if (/KOMPLET|2P5|BUNDLE/i.test(upper)) productType = 'komplet';
+    const dateMatch = name.match(/(\d{2})-(\d{2})-(\d{2})/);
+    return {
+        creativeId: idMatch ? ('ID' + idMatch[1]) : null,
+        country: country || null,
+        productType,
+        fileDate: dateMatch ? ('20' + dateMatch[1] + '-' + dateMatch[2] + '-' + dateMatch[3]) : null,
+    };
+}
+
+let creativesCache = null;
+let creativesCacheTime = 0;
+const CREATIVES_CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+async function buildCreativesIndex() {
+    const VIDEO_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+    const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp'];
+    const ALL_EXT = [...VIDEO_EXT, ...IMAGE_EXT];
+
+    const results = await Promise.all(
+        DROPBOX_FOLDERS.map(fp => dropboxListFolder(fp).catch(e => {
+            console.error('[creatives] folder failed:', fp, e.message);
+            return [];
+        }))
+    );
+    const files = results.flat()
+        .filter(f => f['.tag'] === 'file' && ALL_EXT.some(ext => f.name.toLowerCase().endsWith(ext)))
+        .map(f => {
+            const p = parseCreativeFilename(f.name);
+            const isVideo = VIDEO_EXT.some(ext => f.name.toLowerCase().endsWith(ext));
+            return {
+                name: f.name,
+                path: f.path_display || f.path_lower,
+                creativeId: p.creativeId,
+                country: p.country,
+                productType: p.productType,
+                fileDate: p.fileDate,
+                mediaType: isVideo ? 'video' : 'image',
+                size: f.size || 0,
+                modified: f.server_modified || null,
+            };
+        })
+        .filter(f => f.creativeId);
+
+    const groups = {};
+    for (const f of files) {
+        const id = f.creativeId.toUpperCase();
+        if (!groups[id]) {
+            groups[id] = {
+                creativeId: id,
+                productType: f.productType,
+                fileDate: f.fileDate,
+                countries: new Set(),
+                files: [],
+                videoCount: 0,
+                imageCount: 0,
+                latestModified: null,
+            };
+        }
+        const g = groups[id];
+        if (f.country) g.countries.add(f.country);
+        g.files.push(f);
+        if (f.mediaType === 'video') g.videoCount++;
+        else g.imageCount++;
+        if (f.modified && (!g.latestModified || f.modified > g.latestModified)) g.latestModified = f.modified;
+        if (!g.productType || g.productType === 'other') g.productType = f.productType;
+        if (!g.fileDate && f.fileDate) g.fileDate = f.fileDate;
+    }
+
+    const arr = Object.values(groups).map(g => ({
+        creativeId: g.creativeId,
+        productType: g.productType,
+        fileDate: g.fileDate,
+        countries: [...g.countries].sort(),
+        countryCount: g.countries.size,
+        fileCount: g.files.length,
+        videoCount: g.videoCount,
+        imageCount: g.imageCount,
+        latestModified: g.latestModified,
+    }));
+
+    arr.sort((a, b) => {
+        if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);
+        const an = parseInt((a.creativeId || '').replace(/\D/g, '')) || 0;
+        const bn = parseInt((b.creativeId || '').replace(/\D/g, '')) || 0;
+        return bn - an;
+    });
+
+    return { creatives: arr, total: arr.length, totalFiles: files.length, cachedAt: new Date().toISOString() };
+}
+
+app.get('/api/creatives', async (req, res) => {
+    try {
+        const force = req.query.refresh === '1';
+        if (!force && creativesCache && (Date.now() - creativesCacheTime) < CREATIVES_CACHE_TTL) {
+            return res.json({ ...creativesCache, cached: true });
+        }
+        const data = await buildCreativesIndex();
+        creativesCache = data;
+        creativesCacheTime = Date.now();
+        res.json({ ...data, cached: false });
+    } catch (e) {
+        console.error('[GET /api/creatives] error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/creatives/:id/files', async (req, res) => {
+    try {
+        const VIDEO_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+        const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp'];
+        const ALL_EXT = [...VIDEO_EXT, ...IMAGE_EXT];
+        const wantId = String(req.params.id).toUpperCase();
+        const results = await Promise.all(DROPBOX_FOLDERS.map(fp => dropboxListFolder(fp).catch(() => [])));
+        const files = results.flat()
+            .filter(f => f['.tag'] === 'file' && ALL_EXT.some(ext => f.name.toLowerCase().endsWith(ext)))
+            .map(f => {
+                const p = parseCreativeFilename(f.name);
+                const isVideo = VIDEO_EXT.some(ext => f.name.toLowerCase().endsWith(ext));
+                return { ...p, name: f.name, path: f.path_display || f.path_lower, size: f.size, modified: f.server_modified, mediaType: isVideo ? 'video' : 'image' };
+            })
+            .filter(f => f.creativeId && f.creativeId.toUpperCase() === wantId);
+        res.json({ creativeId: wantId, files });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+// ========== END DROPBOX CREATIVES API ==========
+
+
 // Image proxy for CORS - fetch external images and serve with proper headers
 app.get('/api/image-proxy', async (req, res) => {
     const imageUrl = req.query.url;

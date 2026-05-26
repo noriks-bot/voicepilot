@@ -1018,6 +1018,152 @@
             .main-area { padding: 20px; }
             .stat-grid { grid-template-columns: repeat(2, 1fr); }
         }
+        
+        /* Creatives Table */
+        .creatives-toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .creatives-toolbar input.search {
+            flex: 1;
+            min-width: 240px;
+            padding: 10px 14px;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 13px;
+        }
+        .creatives-toolbar select {
+            padding: 10px 14px;
+            background: var(--bg-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 13px;
+        }
+        .creatives-toolbar .btn-refresh {
+            padding: 10px 18px;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .creatives-toolbar .btn-refresh:hover { background: var(--accent-2); }
+        .creatives-toolbar .meta {
+            color: var(--text-mute);
+            font-size: 12px;
+            margin-left: auto;
+        }
+
+        .creatives-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-1);
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .creatives-table thead {
+            background: var(--bg-2);
+        }
+        .creatives-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-mute);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+        }
+        .creatives-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-soft);
+            font-size: 13px;
+            vertical-align: middle;
+        }
+        .creatives-table tr:hover td { background: var(--bg-2); }
+        .creatives-table tr:last-child td { border-bottom: none; }
+
+        .creative-id {
+            font-weight: 700;
+            color: var(--accent-2);
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+
+        .product-pill {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .product-pill.shirts { background: #3b82f620; color: #60a5fa; }
+        .product-pill.boxers { background: #ec489920; color: #f472b6; }
+        .product-pill.starter { background: #f59e0b20; color: #fbbf24; }
+        .product-pill.komplet { background: #10b98120; color: #34d399; }
+        .product-pill.other { background: #6b728020; color: #9ca3af; }
+
+        .country-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .country-chip {
+            display: inline-block;
+            padding: 3px 8px;
+            background: var(--bg-3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text);
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+        .country-chip.empty {
+            color: var(--text-mute);
+            border-style: dashed;
+        }
+
+        .file-count {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+        .file-count .video { color: #60a5fa; }
+        .file-count .image { color: #f472b6; }
+
+        .empty-row td {
+            text-align: center;
+            color: var(--text-mute);
+            padding: 60px 16px;
+        }
+
+        .loading-row td {
+            text-align: center;
+            color: var(--text-dim);
+            padding: 40px 16px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 18px; height: 18px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         /* ========== END SAAS LAYOUT v2 ========== */
 
     </style>
@@ -1084,7 +1230,7 @@
             <a class="nav-item active" data-page="voiceover" onclick="switchPage('voiceover')">
                 <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
             </a>
-            <a class="nav-item" href="downloads.html">
+            <a class="nav-item" data-page="creatives" onclick="switchPage('creatives')">
                 <span class="icon">🎬</span><span class="label">All Creatives</span>
             </a>
 
@@ -1157,6 +1303,61 @@
                     </div>
                 </div>
                 <!-- INSERT_CONTAINER_HERE -->
+            </section>
+
+
+            <!-- ALL CREATIVES page -->
+            <section class="page-content" id="page-creatives" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>🎬 All Creatives</h1>
+                        <p>Pregled vseh kreativ iz Dropboxa, grupiranih po ID + jeziki lokalizacije.</p>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn-refresh" onclick="loadCreatives(true)">🔄 Osveži</button>
+                    </div>
+                </div>
+
+                <div class="creatives-toolbar">
+                    <input class="search" id="creatives-search" placeholder="🔍 Išči po ID, produktu..." oninput="renderCreatives()">
+                    <select id="creatives-product" onchange="renderCreatives()">
+                        <option value="">Vsi produkti</option>
+                        <option value="shirts">Majice</option>
+                        <option value="boxers">Bokserice</option>
+                        <option value="starter">Starter Pack</option>
+                        <option value="komplet">Komplet</option>
+                        <option value="other">Drugo</option>
+                    </select>
+                    <select id="creatives-country" onchange="renderCreatives()">
+                        <option value="">Vse države</option>
+                        <option value="SI">SI</option>
+                        <option value="HR">HR</option>
+                        <option value="CZ">CZ</option>
+                        <option value="SK">SK</option>
+                        <option value="HU">HU</option>
+                        <option value="PL">PL</option>
+                        <option value="RO">RO</option>
+                        <option value="GR">GR</option>
+                        <option value="IT">IT</option>
+                        <option value="DE">DE</option>
+                    </select>
+                    <div class="meta" id="creatives-meta">—</div>
+                </div>
+
+                <table class="creatives-table">
+                    <thead>
+                        <tr>
+                            <th style="width:120px;">ID</th>
+                            <th style="width:130px;">Produkt</th>
+                            <th>Lokalizacije</th>
+                            <th style="width:140px;">Datoteke</th>
+                            <th style="width:140px;">Zadnja sprememba</th>
+                        </tr>
+                    </thead>
+                    <tbody id="creatives-tbody">
+                        <tr class="loading-row"><td colspan="5"><span class="spinner"></span>Naloži kreative ...</td></tr>
+                    </tbody>
+                </table>
             </section>
 
             <!-- SETTINGS page -->
@@ -5974,6 +6175,71 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 }
             } catch(e) {}
         });
+
+    
+        // ========== ALL CREATIVES ==========
+        let _creativesData = null;
+        async function loadCreatives(forceRefresh) {
+            const tbody = document.getElementById('creatives-tbody');
+            const meta = document.getElementById('creatives-meta');
+            if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><span class="spinner"></span>Naloži kreative iz Dropboxa ...</td></tr>';
+            try {
+                const url = '/api/creatives' + (forceRefresh ? '?refresh=1' : '');
+                const r = await fetch(url);
+                const data = await r.json();
+                if (data.error) throw new Error(data.error);
+                _creativesData = data;
+                if (meta) {
+                    const ts = data.cachedAt ? new Date(data.cachedAt).toLocaleString('sl-SI') : '';
+                    meta.textContent = (data.total || 0) + ' ID · ' + (data.totalFiles || 0) + ' datotek · ' + (data.cached ? 'cache ' : 'live ') + ts;
+                }
+                renderCreatives();
+            } catch (e) {
+                if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="5">❌ Napaka: ' + e.message + '</td></tr>';
+            }
+        }
+
+        function renderCreatives() {
+            if (!_creativesData) return;
+            const tbody = document.getElementById('creatives-tbody');
+            const q = (document.getElementById('creatives-search').value || '').toLowerCase().trim();
+            const productFilter = document.getElementById('creatives-product').value;
+            const countryFilter = document.getElementById('creatives-country').value;
+
+            let rows = _creativesData.creatives;
+            if (q) rows = rows.filter(c => (c.creativeId || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q));
+            if (productFilter) rows = rows.filter(c => c.productType === productFilter);
+            if (countryFilter) rows = rows.filter(c => (c.countries || []).includes(countryFilter));
+
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Ni kreativ za prikaz</td></tr>';
+                return;
+            }
+
+            const html = rows.map(c => {
+                const chips = (c.countries && c.countries.length)
+                    ? c.countries.map(cc => '<span class="country-chip">' + cc + '</span>').join('')
+                    : '<span class="country-chip empty">—</span>';
+                const modified = c.latestModified ? new Date(c.latestModified).toLocaleDateString('sl-SI') : '—';
+                const product = c.productType || 'other';
+                return '<tr>' +
+                    '<td><span class="creative-id">' + c.creativeId + '</span></td>' +
+                    '<td><span class="product-pill ' + product + '">' + product + '</span></td>' +
+                    '<td><div class="country-chips">' + chips + ' <span style="color:var(--text-mute); font-size:11px; margin-left:6px;">(' + c.countryCount + ')</span></div></td>' +
+                    '<td><span class="file-count"><span class="video">' + c.videoCount + ' 🎬</span> · <span class="image">' + c.imageCount + ' 🖼</span></span></td>' +
+                    '<td style="color:var(--text-dim);">' + modified + '</td>' +
+                    '</tr>';
+            }).join('');
+            tbody.innerHTML = html;
+        }
+
+        // Auto-load when switching to creatives page
+        const _origSwitchPage = window.switchPage;
+        window.switchPage = function(page) {
+            if (typeof _origSwitchPage === 'function') _origSwitchPage(page);
+            if (page === 'creatives' && !_creativesData) loadCreatives(false);
+        };
+        // ========== END ALL CREATIVES ==========
 
     </script>
             </section>
