@@ -2152,7 +2152,6 @@
             </a>
             <a class="nav-item" data-page="srtmaker" onclick="switchPage('srtmaker')">
                 <span class="icon">📝</span><span class="label">SRT Maker</span>
-                <span class="badge">soon</span>
             </a>
             <a class="nav-item active" data-page="voiceover" onclick="switchPage('voiceover')">
                 <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
@@ -2276,19 +2275,242 @@
                 </div>
             </section>
 
-            <!-- SRT MAKER page (placeholder) -->
+            <!-- SRT MAKER page -->
             <section class="page-content" id="page-srtmaker" style="display:none;">
                 <div class="page-header">
                     <div class="page-title">
-                        <h1>SRT Maker</h1>
-                        <p>Generiraj .srt subtitle datoteke iz tekstov.</p>
+                        <h1>📝 SRT Maker</h1>
+                        <p>Iz teksta (ena vrstica = en kader) zgeneriraj časovno SRT skripto.</p>
                     </div>
                 </div>
-                <div class="card" style="text-align:center; padding:60px 24px;">
-                    <div style="font-size:48px; margin-bottom:12px;">🚧</div>
-                    <div style="font-size:18px; font-weight:600; margin-bottom:6px;">V pripravi</div>
-                    <div style="color:var(--text-dim);">SRT generator bo na voljo kmalu.</div>
+
+                <!-- Step 1: Script input -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">1</span> Skript</h4>
+                    <p style="color:#78716c; font-size:13px; margin:0 0 14px 34px;">Vsaka vrstica = en kader / segment.</p>
+                    <textarea id="srt-input" style="width:100%; min-height:240px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:14px; resize:vertical; line-height:1.7; font-family:'JetBrains Mono', monospace; box-sizing:border-box;" placeholder="Stop buying t-shirts that make you look worse.&#10;Every time you pull your shirt down... that's a sign.&#10;NORIKS — the t-shirt that fixes everything.&#10;Slim at the top. Loose at the bottom.&#10;Hides the belly. Highlights the chest.&#10;Join 100,000+ happy customers.&#10;4 + 2 FREE — this week only. 🔥"></textarea>
                 </div>
+
+                <!-- Step 2: Duration mode -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Trajanje</h4>
+                    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-left:34px;">
+                        <label id="srt-mode-auto-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="auto" checked onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#9889; Avtomatsko</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Predlagamo trajanje glede na tekst</div>
+                            </div>
+                        </label>
+                        <label id="srt-mode-fixed-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="fixed" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127919; Fiksno trajanje</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Vpi&scaron;i sekunde ali izberi z drsnikom</div>
+                            </div>
+                        </label>
+                        <label id="srt-mode-creative-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="from-creative" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127916; Iz creative</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Preberi dol&zcaron;ino izbranega videa</div>
+                            </div>
+                        </label>
+                    </div>
+                    <div id="srt-fixed-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
+                        <div style="display:flex; align-items:center; gap:14px;">
+                            <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Trajanje:</span>
+                            <input type="range" id="srt-duration" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'range\');" style="flex:1; accent-color:#0A59D2;">
+                            <input type="number" id="srt-duration-num" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'num\');" style="width:80px; padding:8px 10px; border:1px solid #E7E5E4; border-radius:8px; font-size:14px; font-weight:700; color:#0A59D2; text-align:center;">
+                            <span style="color:#57534e; font-size:13px; font-weight:600;">s</span>
+                        </div>
+                        <div style="color:#78716c; font-size:11px; margin-top:8px;">10&ndash;120 sekund. AI bo (po potrebi) skraj&scaron;al/zdru&zcaron;il vrstice.</div>
+                    </div>
+                    <div id="srt-creative-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
+                        <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
+                            <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Creative:</span>
+                            <input type="text" id="srt-creative-search" placeholder="Vpi&scaron;i ID ali ime... (npr. ID210FA)" oninput="window._srtFilterCreatives()" style="flex:1; padding:10px 12px; border:1px solid #E7E5E4; border-radius:8px; font-size:13px; font-family:JetBrains Mono,monospace;">
+                        </div>
+                        <div id="srt-creative-list" style="max-height:200px; overflow-y:auto; border:1px solid #E7E5E4; border-radius:8px; background:#fff; display:none;"></div>
+                        <div id="srt-creative-selected" style="display:none; margin-top:10px; padding:10px 12px; background:#F0F6FF; border:1px solid #0A59D2; border-radius:8px; font-size:13px;">
+                            <span style="color:#57534e;">Izbrano: </span>
+                            <span id="srt-creative-name" style="font-weight:600; color:#0F172A; font-family:JetBrains Mono,monospace;"></span>
+                            <span id="srt-creative-dur" style="color:#0A59D2; font-weight:700; margin-left:8px;"></span>
+                            <button onclick="window._srtClearCreative()" style="float:right; background:none; border:none; color:#B91C1C; cursor:pointer; font-size:12px;">&times;</button>
+                        </div>
+                        <div style="color:#78716c; font-size:11px; margin-top:8px;">Preberemo trajanje izbranega videa in ga uporabimo kot fiksno.</div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Generate -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">3</span> Generiraj SRT</h4>
+                    <button id="btn-srt-generate" onclick="window._srtGenerate()" style="width:100%; padding:14px; background:#0A59D2; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(10,89,210,0.2);" onmouseover="this.style.background='#0847A8';" onmouseout="this.style.background='#0A59D2';">✨ Generiraj SRT</button>
+                    <div id="srt-status" style="margin-top:12px; font-size:13px; color:#78716c; display:none;"></div>
+                </div>
+
+                <!-- Step 4: Output -->
+                <div id="srt-output-card" style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04); display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                        <h4 style="margin:0; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#10b981; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">✓</span> SRT izhod <span id="srt-meta" style="color:#78716c; font-size:12px; font-weight:400; margin-left:8px;"></span></h4>
+                        <div style="display:flex; gap:8px;">
+                            <button onclick="window._srtCopy()" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; transition:all 0.15s ease;" onmouseover="this.style.background='#F0F6FF';" onmouseout="this.style.background='#fff';">📋 Kopiraj</button>
+                            <button onclick="window._srtDownload()" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; transition:all 0.15s ease;" onmouseover="this.style.background='#F0F6FF';" onmouseout="this.style.background='#fff';">⬇️ .srt</button>
+                        </div>
+                    </div>
+                    <textarea id="srt-output" readonly style="width:100%; min-height:280px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:13px; resize:vertical; line-height:1.6; font-family:'JetBrains Mono', monospace; box-sizing:border-box;"></textarea>
+                </div>
+
+                <script>
+                window._srtSyncDur = function(src) {
+                    const range = document.getElementById('srt-duration');
+                    const num = document.getElementById('srt-duration-num');
+                    if (src === 'range') { num.value = Math.max(10, Math.min(120, Number(range.value) || 30)); }
+                    else { range.value = Math.max(10, Math.min(120, Number(num.value) || 30)); }
+                };
+                window._srtCreativesCache = null;
+                window._srtSelectedCreative = null;
+                window._srtLoadCreatives = async function() {
+                    if (window._srtCreativesCache) return;
+                    try {
+                        const r = await fetch('/api/creatives');
+                        const d = await r.json();
+                        const items = d.creatives || d.items || [];
+                        window._srtCreativesCache = items;
+                    } catch (e) { window._srtCreativesCache = []; }
+                };
+                window._srtFilterCreatives = function() {
+                    const q = (document.getElementById('srt-creative-search').value || '').toLowerCase().trim();
+                    const list = document.getElementById('srt-creative-list');
+                    if (!q || q.length < 2) { list.style.display = 'none'; return; }
+                    const items = (window._srtCreativesCache || []).filter(c => (c.id || '').toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q)).slice(0, 30);
+                    if (items.length === 0) { list.innerHTML = '<div style="padding:12px; color:#9ca3af; font-size:13px;">Ni zadetkov za "' + q + '".</div>'; list.style.display = 'block'; return; }
+                    list.innerHTML = items.map(c => '<div onclick="window._srtPickCreative(\'' + (c.id||'') + '\')" style="padding:10px 12px; border-bottom:1px solid #f3f4f6; cursor:pointer; font-size:13px;" onmouseover="this.style.background=\'#F0F6FF\'" onmouseout="this.style.background=\'#fff\'"><span style="font-family:JetBrains Mono,monospace; font-weight:600; color:#0A59D2;">' + (c.id || '?') + '</span><span style="color:#57534e; margin-left:8px;">' + ((c.productType || c.name || '').substring(0, 40)) + '</span><span style="color:#9ca3af; margin-left:8px; font-size:11px;">' + (c.videoCount || 0) + ' video</span></div>').join('');
+                    list.style.display = 'block';
+                };
+                window._srtPickCreative = async function(id) {
+                    document.getElementById('srt-creative-list').style.display = 'none';
+                    document.getElementById('srt-creative-search').value = id;
+                    document.getElementById('srt-creative-name').textContent = 'Berem dol\u017eino...';
+                    document.getElementById('srt-creative-dur').textContent = '';
+                    document.getElementById('srt-creative-selected').style.display = 'block';
+                    try {
+                        const r = await fetch('/api/srt/creative-duration?id=' + encodeURIComponent(id));
+                        const d = await r.json();
+                        if (!r.ok) throw new Error(d.error || 'Napaka');
+                        window._srtSelectedCreative = { id, duration: d.duration, fileName: d.fileName };
+                        document.getElementById('srt-creative-name').textContent = d.fileName || id;
+                        document.getElementById('srt-creative-dur').textContent = '\u2192 ' + d.duration.toFixed(1) + 's';
+                    } catch (e) {
+                        document.getElementById('srt-creative-name').textContent = 'Napaka: ' + e.message;
+                        document.getElementById('srt-creative-dur').textContent = '';
+                        window._srtSelectedCreative = null;
+                    }
+                };
+                window._srtClearCreative = function() {
+                    window._srtSelectedCreative = null;
+                    document.getElementById('srt-creative-selected').style.display = 'none';
+                    document.getElementById('srt-creative-search').value = '';
+                    document.getElementById('srt-creative-list').style.display = 'none';
+                };
+                window._srtUpdMode = function() {
+                    const mode = document.querySelector('input[name="srt-mode"]:checked').value;
+                    const auto = document.getElementById('srt-mode-auto-lbl');
+                    const fixed = document.getElementById('srt-mode-fixed-lbl');
+                    const creat = document.getElementById('srt-mode-creative-lbl');
+                    const ctrlsFixed = document.getElementById('srt-fixed-controls');
+                    const ctrlsCreat = document.getElementById('srt-creative-controls');
+                    [auto, fixed, creat].forEach(el => { if (el) { el.style.background = '#fff'; el.style.borderColor = '#E7E5E4'; }});
+                    if (ctrlsFixed) ctrlsFixed.style.display = 'none';
+                    if (ctrlsCreat) ctrlsCreat.style.display = 'none';
+                    if (mode === 'auto') {
+                        if (auto) { auto.style.background = '#F0F6FF'; auto.style.borderColor = '#0A59D2'; }
+                    } else if (mode === 'fixed') {
+                        if (fixed) { fixed.style.background = '#F0F6FF'; fixed.style.borderColor = '#0A59D2'; }
+                        if (ctrlsFixed) ctrlsFixed.style.display = 'block';
+                    } else if (mode === 'from-creative') {
+                        if (creat) { creat.style.background = '#F0F6FF'; creat.style.borderColor = '#0A59D2'; }
+                        if (ctrlsCreat) ctrlsCreat.style.display = 'block';
+                        window._srtLoadCreatives();
+                    }
+                };
+                window._srtGenerate = async function() {
+                    const text = document.getElementById('srt-input').value.trim();
+                    const mode = document.querySelector('input[name="srt-mode"]:checked').value;
+                    let duration = Number((document.getElementById('srt-duration-num') || document.getElementById('srt-duration')).value);
+                    let creativeId = null;
+                    if (mode === 'from-creative') {
+                        if (!window._srtSelectedCreative) {
+                            const s = document.getElementById('srt-status');
+                            s.style.display = 'block'; s.style.color = '#B91C1C';
+                            s.textContent = '\u26a0\ufe0f Izberi kreativo iz seznama.';
+                            return;
+                        }
+                        duration = window._srtSelectedCreative.duration;
+                        creativeId = window._srtSelectedCreative.id;
+                    }
+                    const btn = document.getElementById('btn-srt-generate');
+                    const status = document.getElementById('srt-status');
+                    const outCard = document.getElementById('srt-output-card');
+                    const out = document.getElementById('srt-output');
+                    const meta = document.getElementById('srt-meta');
+                    if (!text) {
+                        status.style.display = 'block';
+                        status.style.color = '#B91C1C';
+                        status.textContent = '⚠️ Vpiši vsaj eno vrstico.';
+                        return;
+                    }
+                    btn.disabled = true;
+                    btn.textContent = mode === 'fixed' ? '⏳ AI razporeja čas...' : '⏳ Računam timing...';
+                    status.style.display = 'block';
+                    status.style.color = '#78716c';
+                    status.textContent = 'Generiram SRT...';
+                    try {
+                        const r = await fetch('/api/srt/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text, mode, duration, creativeId })
+                        });
+                        const data = await r.json();
+                        if (!r.ok) throw new Error(data.error || 'Napaka');
+                        out.value = data.srt;
+                        const segCount = (data.segments || []).length;
+                        meta.textContent = `· ${segCount} segmentov · ${data.videoDuration}s · ${data.mode === 'fixed' ? 'fiksno' : 'avto'}`;
+                        outCard.style.display = 'block';
+                        outCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        status.style.color = '#15803d';
+                        status.textContent = `✓ Generirano: ${segCount} segmentov, skupaj ${data.videoDuration}s`;
+                    } catch (e) {
+                        status.style.color = '#B91C1C';
+                        status.textContent = '✗ Napaka: ' + e.message;
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = '✨ Generiraj SRT';
+                    }
+                };
+                window._srtCopy = function() {
+                    const out = document.getElementById('srt-output');
+                    out.select();
+                    document.execCommand('copy');
+                    const status = document.getElementById('srt-status');
+                    status.style.display = 'block';
+                    status.style.color = '#15803d';
+                    status.textContent = '📋 Kopirano v odložišče!';
+                    setTimeout(() => { if (status.textContent.startsWith('📋')) status.style.display = 'none'; }, 2000);
+                };
+                window._srtDownload = function() {
+                    const srt = document.getElementById('srt-output').value;
+                    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'subtitle-' + Date.now() + '.srt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+                </script>
             </section>
 
             <!-- VOICEOVER page wraps existing .container -->
@@ -2396,6 +2618,7 @@
                         <thead>
                             <tr>
                                 <th>Ime</th>
+                                <th>Tip</th>
                                 <th>Jeziki</th>
                                 <th>Status</th>
                                 <th>Cas</th>
@@ -2403,7 +2626,7 @@
                             </tr>
                         </thead>
                         <tbody id="downloads-tbody">
-                            <tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>
+                            <tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam ...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2818,6 +3041,29 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 <!-- Step 3: Preview & Generate -->
                 <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
                     <h4 style="margin:0 0 16px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">3</span> Predogled & Generiranje</h4>
+                    <div style="margin-bottom:16px; padding:14px 16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
+                        <div style="font-size:13px; font-weight:600; color:#0F172A; margin-bottom:10px;">📍 Pozicija besedila</div>
+                        <div style="display:flex; gap:10px;">
+                            <label id="vo-pos-middle-lbl" style="flex:1; padding:10px 12px; border:2px solid #0A59D2; background:#EFF6FF; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                                <input type="radio" name="vo-text-position" value="middle" checked onchange="window._voUpdPos()">
+                                <div><div style="font-weight:600; font-size:13px; color:#0F172A;">🎯 Sredina</div><div style="font-size:11px; color:#57534E;">50% višine (kot zdaj)</div></div>
+                            </label>
+                            <label id="vo-pos-bottom-lbl" style="flex:1; padding:10px 12px; border:2px solid #E7E5E4; background:#fff; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                                <input type="radio" name="vo-text-position" value="bottom" onchange="window._voUpdPos()">
+                                <div><div style="font-weight:600; font-size:13px; color:#0F172A;">⬇️ Spodaj</div><div style="font-size:11px; color:#57534E;">25% od dna ekrana</div></div>
+                            </label>
+                        </div>
+                    </div>
+                    <script>
+                    window._voUpdPos = function() {
+                        var mid = document.getElementById('vo-pos-middle-lbl');
+                        var bot = document.getElementById('vo-pos-bottom-lbl');
+                        var val = (document.querySelector('input[name="vo-text-position"]:checked') || {}).value || 'middle';
+                        if (val === 'middle') { mid.style.border='2px solid #0A59D2'; mid.style.background='#EFF6FF'; bot.style.border='2px solid #E7E5E4'; bot.style.background='#fff'; }
+                        else { bot.style.border='2px solid #0A59D2'; bot.style.background='#EFF6FF'; mid.style.border='2px solid #E7E5E4'; mid.style.background='#fff'; }
+                    };
+                    window._voGetTextPosition = function() { return (document.querySelector('input[name="vo-text-position"]:checked') || {}).value || 'middle'; };
+                    </script>
                     <button id="btn-vo-preview" style="width:100%; padding:14px; background:#0A59D2; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; margin-bottom:16px; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(10,89,210,0.2);" onmouseover="this.style.background='#0847A8';" onmouseout="this.style.background='#0A59D2';">🇸🇮 Generiraj SLO predogled</button>
                     
                     <div id="vo-script-editor" style="display:none;">
@@ -2979,7 +3225,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     });
                     btn.textContent = '⏳ Generiram SLO preview...';
                     var previewResp = await window.postJSON('/api/localizer/vo-preview', {
-                        videoClean: voVideoFile, script: currentScript, videoDuration: voVideoDuration || 30
+                        videoClean: voVideoFile, script: currentScript, videoDuration: voVideoDuration || 30, textPosition: window._voGetTextPosition && window._voGetTextPosition()
                     });
                     if (previewResp.previewUrl) {
                         document.getElementById('vo-preview-video').src = previewResp.previewUrl + '?t=' + Date.now();
@@ -3034,7 +3280,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         namingParts: {id: voId, date: voDate, product: voProduct, type: 'VO', author: author},
                         texts: editedScript.map(function(s){return {text: s.text};}),
                         mode: 'voiceover', voiceoverScript: editedScript, videoDuration: voVideoDuration || 30,
-                        countries: countries, source: 'library', style: 'white', fontSize: 90
+                        countries: countries, source: 'library', style: 'white', fontSize: 90, textPosition: window._voGetTextPosition && window._voGetTextPosition()
                     });
                     alert('✅ Voice-over generiranje startano! Poglej v Downloads.');
                     // Reset form so user can upload new video immediately
@@ -5260,7 +5506,8 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const previewResp = await window.postJSON('/api/localizer/vo-preview', {
                     videoClean: voVideoFile,
                     script: voScript,
-                    videoDuration: voVideoDuration
+                    videoDuration: voVideoDuration,
+                    textPosition: window._voGetTextPosition && window._voGetTextPosition()
                 });
                 
                 if (previewResp.previewUrl) {
@@ -5330,7 +5577,8 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     countries: selectedCountries,
                     source: 'library',
                     style: 'white',
-                    fontSize: 90
+                    fontSize: 90,
+                    textPosition: window._voGetTextPosition && window._voGetTextPosition()
                 });
                 
                 alert('✅ Voice-over generiranje startano! Poglej v Downloads.');
@@ -7491,7 +7739,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const btn = document.getElementById('btn-refresh-downloads');
             if (!tbody) return;
             if (btn) btn.disabled = true;
-            tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>';
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam ...</td></tr>';
             try {
                 const [genRes, jobsRes] = await Promise.all([
                     fetch('/api/localizer/generated-videos').then(r => r.json()),
@@ -7500,19 +7748,46 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const rows = [];
                 // 1) Completed jobs from generated folder
                 for (const j of (genRes.jobs || [])) {
-                    const videos = (j.videos || []).filter(v => v.name && v.name.endsWith('.mp4'));
+                    const videos = (j.videos || []).filter(v => v.name && v.name.toLowerCase().endsWith('.mp4') && !v.name.startsWith('tts-') && !v.name.startsWith('vo-subs-'));
                     if (videos.length === 0) continue;
+                    const KNOWN_COUNTRIES = ['SI','HR','HU','PL','SK','CZ','RO','GR','BG','IT','DE','AT','US','EN','FR','ES','NL','SE','NO','DK','FI','BA','RS','ME','MK'];
                     const filesByLang = {};
                     for (const v of videos) {
-                        const cm = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
-                        if (cm) filesByLang[cm[1]] = v.name;
+                        let cc = null;
+                        const mid = v.name.match(/_\d{2}-\d{2}-\d{2}_([A-Z]{2})_/);
+                        if (mid && KNOWN_COUNTRIES.includes(mid[1])) cc = mid[1];
+                        if (!cc) {
+                            const end = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
+                            if (end && KNOWN_COUNTRIES.includes(end[1])) cc = end[1];
+                        }
+                        if (!cc) {
+                            const any = v.name.match(/_([A-Z]{2})_/g);
+                            if (any) {
+                                for (const tok of any) {
+                                    const code = tok.replace(/_/g, '');
+                                    if (KNOWN_COUNTRIES.includes(code)) { cc = code; break; }
+                                }
+                            }
+                        }
+                        if (cc) filesByLang[cc] = v.name;
                     }
                     let displayName = j.id;
                     let creativeId = '';
+                    let detectedMode = j.mode || '';
                     if (videos[0]) {
-                        const baseName = videos[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
+                        let baseName = videos[0].name.replace(/\.mp4$/, '');
+                        for (const cc of Object.keys(filesByLang)) {
+                            baseName = baseName.replace(new RegExp('_' + cc + '_', 'g'), '_');
+                            baseName = baseName.replace(new RegExp('_' + cc + '$'), '');
+                        }
+                        baseName = baseName.replace(/_(VO|SRT)(_VO|_SRT)?$/, '');
                         displayName = baseName;
                         creativeId = _creativeIdFromName(baseName);
+                        if (!detectedMode) {
+                            if (/_VO(_|\.|$)/i.test(videos[0].name)) detectedMode = 'voiceover';
+                            else if (/_SRT(_|\.|$)/i.test(videos[0].name)) detectedMode = 'subtitles';
+                            else detectedMode = 'localizer';
+                        }
                     }
                     let ts = j.timestamp;
                     if (!ts && j.id) {
@@ -7522,7 +7797,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     rows.push({
                         kind: 'completed', id: j.id, name: displayName, creativeId,
                         languages: Object.keys(filesByLang), filesByLang, timestamp: ts,
-                        fileCount: videos.length, status: 'done'
+                        fileCount: videos.length, status: 'done', mode: detectedMode
                     });
                 }
                 // 2) In-progress jobs (not done)
@@ -7543,12 +7818,13 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     rows.push({
                         kind: 'in_progress', id: j.id, name: j.name || j.filename || j.id, creativeId,
                         languages: langs, completedLangs, timestamp: ts, fileCount: completedLangs.length,
-                        status: st, totalCount: langs.length, currentLang: j.currentLang || ''
+                        status: st, totalCount: langs.length, currentLang: j.currentLang || '',
+                        mode: j.mode || 'localizer'
                     });
                 }
                 rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                 if (rows.length === 0) {
-                    tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
                     return;
                 }
                 tbody.innerHTML = rows.map(r => {
@@ -7578,9 +7854,17 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     const action = r.kind === 'completed' ?
                         '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none;">ZIP &darr;</a>' :
                         '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
+                    // Job type pill
+                    let typeBg, typeFg, typeLbl;
+                    const m = (r.mode || '').toLowerCase();
+                    if (m === 'voiceover' || m === 'vo') { typeBg = '#EDE9FE'; typeFg = '#6D28D9'; typeLbl = 'Voiceover'; }
+                    else if (m === 'subtitles' || m === 'srt') { typeBg = '#CFFAFE'; typeFg = '#0E7490'; typeLbl = 'Podnapisi'; }
+                    else { typeBg = '#E0E7FF'; typeFg = '#3730A3'; typeLbl = 'Lokalizator'; }
+                    const typePill = '<span style="display:inline-block; padding:3px 10px; background:' + typeBg + '; color:' + typeFg + '; border-radius:12px; font-size:11px; font-weight:600;">' + typeLbl + '</span>';
                     return '<tr>' +
                         '<td>' + creativeIdHtml + '<span class="activity-source" style="font-weight:600;">' + String(r.name) + '</span>' +
                         '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div></td>' +
+                        '<td>' + typePill + '</td>' +
                         '<td><div class="activity-langs" style="display:flex; flex-wrap:wrap; gap:4px;">' + (langsHtml || '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>') + '</div></td>' +
                         '<td>' + _statusBadge(r.status) + '</td>' +
                         '<td class="activity-time">' + _fmtDateDl(r.timestamp) + '</td>' +
@@ -7588,7 +7872,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         '</tr>';
                 }).join('');
             } catch (e) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Napaka: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Napaka: ' + e.message + '</td></tr>';
             } finally {
                 if (btn) btn.disabled = false;
             }
