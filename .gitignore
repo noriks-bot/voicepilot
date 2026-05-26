@@ -9,3 +9,12 @@ public/temp/
 *.mp3
 *.wav
 .DS_Store
+
+# SQLite DB
+creatives.db
+creatives.db-shm
+creatives.db-wal
+
+# Backups
+*.bak
+*.bak.*

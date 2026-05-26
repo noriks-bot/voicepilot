@@ -113,123 +113,224 @@ function parseCreativeFilename(name) {
     };
 }
 
-let creativesCache = null;
-let creativesCacheTime = 0;
-const CREATIVES_CACHE_TTL = 30 * 60 * 1000; // 30 min
+// ===== SQLite DB for creatives =====
+const Database = require('better-sqlite3');
+const CREATIVES_DB_PATH = path.join(__dirname, 'creatives.db');
+const creativesDb = new Database(CREATIVES_DB_PATH);
+creativesDb.pragma('journal_mode = WAL');
 
-async function buildCreativesIndex() {
-    const VIDEO_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
-    const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp'];
-    const ALL_EXT = [...VIDEO_EXT, ...IMAGE_EXT];
-
-    const results = await Promise.all(
-        DROPBOX_FOLDERS.map(fp => dropboxListFolder(fp).catch(e => {
-            console.error('[creatives] folder failed:', fp, e.message);
-            return [];
-        }))
+creativesDb.exec(`
+    CREATE TABLE IF NOT EXISTS creative_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        creative_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        path TEXT NOT NULL UNIQUE,
+        country TEXT,
+        product_type TEXT,
+        file_date TEXT,
+        media_type TEXT,
+        size INTEGER DEFAULT 0,
+        modified TEXT,
+        synced_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
-    const files = results.flat()
-        .filter(f => f['.tag'] === 'file' && ALL_EXT.some(ext => f.name.toLowerCase().endsWith(ext)))
-        .map(f => {
-            const p = parseCreativeFilename(f.name);
-            const isVideo = VIDEO_EXT.some(ext => f.name.toLowerCase().endsWith(ext));
-            return {
-                name: f.name,
-                path: f.path_display || f.path_lower,
-                creativeId: p.creativeId,
-                country: p.country,
-                productType: p.productType,
-                fileDate: p.fileDate,
-                mediaType: isVideo ? 'video' : 'image',
-                size: f.size || 0,
-                modified: f.server_modified || null,
-            };
-        })
-        .filter(f => f.creativeId);
+    CREATE INDEX IF NOT EXISTS idx_creative_id ON creative_files(creative_id);
+    CREATE INDEX IF NOT EXISTS idx_country ON creative_files(country);
+    CREATE TABLE IF NOT EXISTS sync_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+`);
 
+const _insertFile = creativesDb.prepare(`
+    INSERT INTO creative_files (creative_id, name, path, country, product_type, file_date, media_type, size, modified, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(path) DO UPDATE SET
+        creative_id = excluded.creative_id,
+        name = excluded.name,
+        country = excluded.country,
+        product_type = excluded.product_type,
+        file_date = excluded.file_date,
+        media_type = excluded.media_type,
+        size = excluded.size,
+        modified = excluded.modified,
+        synced_at = CURRENT_TIMESTAMP
+`);
+const _setMeta = creativesDb.prepare(`INSERT INTO sync_meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
+const _getMeta = creativesDb.prepare(`SELECT value FROM sync_meta WHERE key = ?`);
+
+let _syncInProgress = false;
+async function syncCreativesFromDropbox() {
+    if (_syncInProgress) return { ok: false, reason: 'already running' };
+    _syncInProgress = true;
+    const startedAt = Date.now();
+    try {
+        console.log('[creatives:sync] starting Dropbox scan...');
+        const VIDEO_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+        const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp'];
+        const ALL_EXT = [...VIDEO_EXT, ...IMAGE_EXT];
+
+        const results = await Promise.all(
+            DROPBOX_FOLDERS.map(fp => dropboxListFolder(fp).catch(e => {
+                console.error('[creatives:sync] folder failed:', fp, e.message);
+                return [];
+            }))
+        );
+
+        const files = results.flat()
+            .filter(f => f['.tag'] === 'file' && ALL_EXT.some(ext => f.name.toLowerCase().endsWith(ext)))
+            .map(f => {
+                const p = parseCreativeFilename(f.name);
+                const isVideo = VIDEO_EXT.some(ext => f.name.toLowerCase().endsWith(ext));
+                return {
+                    creativeId: p.creativeId,
+                    name: f.name,
+                    path: f.path_display || f.path_lower,
+                    country: p.country,
+                    productType: p.productType,
+                    fileDate: p.fileDate,
+                    mediaType: isVideo ? 'video' : 'image',
+                    size: f.size || 0,
+                    modified: f.server_modified || null,
+                };
+            })
+            .filter(f => f.creativeId);
+
+        const insertTx = creativesDb.transaction((items) => {
+            creativesDb.exec('DELETE FROM creative_files');
+            for (const f of items) {
+                _insertFile.run(f.creativeId.toUpperCase(), f.name, f.path, f.country, f.productType, f.fileDate, f.mediaType, f.size, f.modified);
+            }
+        });
+        insertTx(files);
+
+        const finishedAt = new Date().toISOString();
+        _setMeta.run('last_sync', finishedAt);
+        _setMeta.run('last_sync_count', String(files.length));
+        const dur = Date.now() - startedAt;
+        console.log(`[creatives:sync] done - ${files.length} files in ${dur}ms`);
+        return { ok: true, files: files.length, durationMs: dur, syncedAt: finishedAt };
+    } catch (e) {
+        console.error('[creatives:sync] error:', e);
+        return { ok: false, error: e.message };
+    } finally {
+        _syncInProgress = false;
+    }
+}
+
+function readCreativesFromDb() {
+    const rows = creativesDb.prepare('SELECT * FROM creative_files').all();
     const groups = {};
-    for (const f of files) {
-        const id = f.creativeId.toUpperCase();
+    for (const r of rows) {
+        const id = (r.creative_id || '').toUpperCase();
         if (!groups[id]) {
             groups[id] = {
                 creativeId: id,
-                productType: f.productType,
-                fileDate: f.fileDate,
+                productType: r.product_type || 'other',
+                fileDate: r.file_date,
                 countries: new Set(),
-                files: [],
+                fileCount: 0,
                 videoCount: 0,
                 imageCount: 0,
                 latestModified: null,
             };
         }
         const g = groups[id];
-        if (f.country) g.countries.add(f.country);
-        g.files.push(f);
-        if (f.mediaType === 'video') g.videoCount++;
+        if (r.country) g.countries.add(r.country);
+        g.fileCount++;
+        if (r.media_type === 'video') g.videoCount++;
         else g.imageCount++;
-        if (f.modified && (!g.latestModified || f.modified > g.latestModified)) g.latestModified = f.modified;
-        if (!g.productType || g.productType === 'other') g.productType = f.productType;
-        if (!g.fileDate && f.fileDate) g.fileDate = f.fileDate;
+        if (r.modified && (!g.latestModified || r.modified > g.latestModified)) g.latestModified = r.modified;
+        if ((!g.productType || g.productType === 'other') && r.product_type) g.productType = r.product_type;
+        if (!g.fileDate && r.file_date) g.fileDate = r.file_date;
     }
-
     const arr = Object.values(groups).map(g => ({
         creativeId: g.creativeId,
         productType: g.productType,
         fileDate: g.fileDate,
         countries: [...g.countries].sort(),
         countryCount: g.countries.size,
-        fileCount: g.files.length,
+        fileCount: g.fileCount,
         videoCount: g.videoCount,
         imageCount: g.imageCount,
         latestModified: g.latestModified,
     }));
-
     arr.sort((a, b) => {
         if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);
         const an = parseInt((a.creativeId || '').replace(/\D/g, '')) || 0;
         const bn = parseInt((b.creativeId || '').replace(/\D/g, '')) || 0;
         return bn - an;
     });
-
-    return { creatives: arr, total: arr.length, totalFiles: files.length, cachedAt: new Date().toISOString() };
+    const lastSync = _getMeta.get('last_sync')?.value || null;
+    return {
+        creatives: arr,
+        total: arr.length,
+        totalFiles: rows.length,
+        lastSyncAt: lastSync,
+    };
 }
 
-app.get('/api/creatives', async (req, res) => {
+app.get('/api/creatives', (req, res) => {
     try {
-        const force = req.query.refresh === '1';
-        if (!force && creativesCache && (Date.now() - creativesCacheTime) < CREATIVES_CACHE_TTL) {
-            return res.json({ ...creativesCache, cached: true });
+        const data = readCreativesFromDb();
+        if (data.total === 0 && !_syncInProgress) {
+            console.log('[creatives] empty DB, triggering background sync...');
+            syncCreativesFromDropbox().catch(() => {});
         }
-        const data = await buildCreativesIndex();
-        creativesCache = data;
-        creativesCacheTime = Date.now();
-        res.json({ ...data, cached: false });
+        res.json(data);
     } catch (e) {
         console.error('[GET /api/creatives] error:', e);
         res.status(500).json({ error: e.message });
     }
 });
 
-app.get('/api/creatives/:id/files', async (req, res) => {
+app.post('/api/creatives/sync', async (req, res) => {
     try {
-        const VIDEO_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
-        const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp'];
-        const ALL_EXT = [...VIDEO_EXT, ...IMAGE_EXT];
-        const wantId = String(req.params.id).toUpperCase();
-        const results = await Promise.all(DROPBOX_FOLDERS.map(fp => dropboxListFolder(fp).catch(() => [])));
-        const files = results.flat()
-            .filter(f => f['.tag'] === 'file' && ALL_EXT.some(ext => f.name.toLowerCase().endsWith(ext)))
-            .map(f => {
-                const p = parseCreativeFilename(f.name);
-                const isVideo = VIDEO_EXT.some(ext => f.name.toLowerCase().endsWith(ext));
-                return { ...p, name: f.name, path: f.path_display || f.path_lower, size: f.size, modified: f.server_modified, mediaType: isVideo ? 'video' : 'image' };
-            })
-            .filter(f => f.creativeId && f.creativeId.toUpperCase() === wantId);
-        res.json({ creativeId: wantId, files });
+        const result = await syncCreativesFromDropbox();
+        if (!result.ok) return res.status(409).json(result);
+        const data = readCreativesFromDb();
+        res.json({ ...result, ...data });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
+
+app.get('/api/creatives/:id/files', (req, res) => {
+    try {
+        const wantId = String(req.params.id).toUpperCase();
+        const rows = creativesDb.prepare('SELECT name, path, country, product_type, file_date, media_type, size, modified FROM creative_files WHERE creative_id = ? ORDER BY modified DESC').all(wantId);
+        res.json({ creativeId: wantId, files: rows.map(r => ({
+            name: r.name, path: r.path, country: r.country, productType: r.product_type,
+            fileDate: r.file_date, mediaType: r.media_type, size: r.size, modified: r.modified,
+        })) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+function scheduleDailySync() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(3, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delay = next.getTime() - now.getTime();
+    console.log('[creatives:sync] next daily sync at', next.toISOString());
+    setTimeout(() => {
+        syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] daily failed:', e));
+        scheduleDailySync();
+    }, delay);
+}
+scheduleDailySync();
+
+setTimeout(() => {
+    const count = creativesDb.prepare('SELECT COUNT(*) AS c FROM creative_files').get().c;
+    if (count === 0) {
+        console.log('[creatives:sync] DB empty, running initial sync...');
+        syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] initial failed:', e));
+    } else {
+        console.log('[creatives:sync] DB has', count, 'files (skipping initial sync)');
+    }
+}, 3000);
+
 // ========== END DROPBOX CREATIVES API ==========
 
 

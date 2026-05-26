@@ -50,8 +50,21 @@
         .mode-tab h3 { font-size: 16px; margin-bottom: 5px; }
         .mode-tab p { font-size: 13px; color: #888; }
         
-        .mode-content { display: none; }
-        .mode-content.active { display: block; }
+        .mode-content { display: none !important; }
+        /* mode-content shown only on voiceover page, controlled by JS in switchPage */
+
+        /* PAGE-BASED VISIBILITY: container + mode-content only show on relevant pages */
+        body:not(.page-voiceover):not(.page-localize) > .app-shell > .main-area > .container,
+        body:not(.page-voiceover):not(.page-localize) .container {
+            display: none !important;
+        }
+        body.page-voiceover #mode-voiceover { display: block !important; }
+        body.page-voiceover #mode-localize,
+        body.page-voiceover #mode-library { display: none !important; }
+        body.page-localize #mode-localize { display: block !important; }
+        body.page-localize #mode-voiceover,
+        body.page-localize #mode-library { display: none !important; }
+        body:not(.page-voiceover):not(.page-localize) .mode-content { display: none !important; }
         
         .layout {
             display: grid;
@@ -792,8 +805,8 @@
 
             /* Text */
             --text-primary: #052F70;     /* deep navy headlines */
-            --text-body: #0A0A0A;         /* near-black body */
-            --text-secondary: #57534e;    /* muted gray */
+            --text-body: #1c1917;         /* warm near-black body (stone-900) */
+            --text-secondary: #57534e;    /* muted gray (stone-600) */
             --text-tertiary: #78716c;
             --text-muted: #a8a29e;
 
@@ -832,6 +845,161 @@
             --shadow-md: 0 4px 12px rgba(5, 47, 112, 0.06), 0 2px 4px rgba(5, 47, 112, 0.04);
             --shadow-lg: 0 12px 32px rgba(5, 47, 112, 0.08), 0 4px 8px rgba(5, 47, 112, 0.04);
         }
+
+        /* ========== ELEVENLABS PALETTE OVERRIDES — legacy elements ========== */
+        /* Force buttons/inputs/cards to use ElevenLabs blue brand instead of green */
+        .btn-primary {
+            background: var(--brand) !important;
+            color: #FFFFFF !important;
+            border: 1px solid var(--brand) !important;
+            font-weight: 600;
+            border-radius: var(--radius);
+            transition: background 0.15s ease, transform 0.05s ease;
+        }
+        .btn-primary:hover { background: var(--brand-hover) !important; }
+        .btn-primary:disabled {
+            background: var(--bg-elev-3) !important;
+            color: var(--text-muted) !important;
+            border-color: var(--border) !important;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: var(--bg-elev-1) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid var(--border) !important;
+            font-weight: 500;
+            border-radius: var(--radius);
+        }
+        .btn-secondary:hover {
+            background: var(--bg-hover) !important;
+            border-color: var(--border-strong) !important;
+        }
+        .btn {
+            border-radius: var(--radius);
+            font-weight: 500;
+        }
+        .btn-sm { font-size: 12px; padding: 6px 12px; }
+
+        /* Product / gender toggle buttons → blue brand */
+        .product-btn.active,
+        .gender-btn.active {
+            background: var(--brand) !important;
+            color: #FFFFFF !important;
+            border-color: var(--brand) !important;
+        }
+        .product-btn,
+        .gender-btn {
+            background: var(--bg-elev-1) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid var(--border) !important;
+        }
+
+        /* Cards / panels / containers */
+        .card, .container > *, .layout > * {
+            background: var(--bg-app);
+        }
+        .container {
+            background: transparent;
+            color: var(--text-body);
+        }
+        /* Form inputs everywhere */
+        input[type="text"], input[type="number"], input[type="email"], input[type="password"],
+        select, textarea {
+            background: var(--bg-app) !important;
+            color: var(--text-body) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: var(--radius-sm);
+        }
+        input[type="text"]:focus, input[type="number"]:focus, input[type="email"]:focus,
+        input[type="password"]:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--brand) !important;
+            box-shadow: 0 0 0 3px var(--brand-glow);
+        }
+
+        /* Upload zones */
+        .upload-zone {
+            background: var(--bg-subtle) !important;
+            border: 2px dashed var(--border-strong) !important;
+            color: var(--text-secondary) !important;
+            border-radius: var(--radius-lg);
+            transition: all 0.15s ease;
+        }
+        .upload-zone:hover {
+            background: var(--bg-hover) !important;
+            border-color: var(--brand) !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Library / pairs sidebar */
+        .library, #pairs-sidebar {
+            background: var(--bg-app) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            box-shadow: var(--shadow-xs);
+        }
+        .library h3, #pairs-sidebar h3 {
+            color: var(--text-primary) !important;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        /* Page header typography */
+        .page-header h1 {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 28px;
+            letter-spacing: -0.02em;
+        }
+        .page-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        /* Headings on legacy mode-content */
+        .mode-content h3, .mode-content h4 {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .mode-content label {
+            color: var(--text-secondary);
+        }
+
+        /* Status pills (text inputs that show status) */
+        #pair-text-status, #pair-clean-status, #pair-analysis-status {
+            color: var(--text-primary);
+        }
+        /* Override #1a1a1a dark panels to white */
+        [style*="background:#1a1a1a"], [style*="background: #1a1a1a"] {
+            background: var(--bg-elev-2) !important;
+        }
+        [style*="background:#0f0f0f"], [style*="background: #0f0f0f"] {
+            background: var(--bg-app) !important;
+        }
+        [style*="border:1px solid #333"], [style*="border: 1px solid #333"] {
+            border: 1px solid var(--border) !important;
+        }
+        [style*="color:#888"], [style*="color: #888"] {
+            color: var(--text-secondary) !important;
+        }
+        [style*="color:#666"], [style*="color: #666"] {
+            color: var(--text-tertiary) !important;
+        }
+        [style*="color:#fff"]:not(.btn-primary):not(.btn) {
+            color: var(--text-body) !important;
+        }
+        [style*="color:#10b981"] {
+            color: var(--success) !important;
+        }
+        [style*="background:#10b981"] {
+            background: var(--brand) !important;
+            color: #FFFFFF !important;
+        }
+        /* ========== END OVERRIDES ========== */
+
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
         *::selection { background: var(--brand-glow-strong); color: var(--text-primary); }
@@ -1333,6 +1501,135 @@
         }
         /* ========== END ELEVENLABS WHITE THEME v4 ========== */
 
+    
+        /* Creatives Matrix Table */
+        .creatives-matrix-wrap {
+            background: var(--bg-1, #fff);
+            border: 1px solid var(--border-soft, #EDEBE8);
+            border-radius: 14px;
+            overflow: auto;
+            max-width: 100%;
+        }
+        .creatives-matrix {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+            min-width: 900px;
+        }
+        .creatives-matrix thead th {
+            position: sticky; top: 0;
+            background: #FDFCFC;
+            text-align: center;
+            padding: 12px 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #052F70;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 2px solid #E0DFDD;
+            z-index: 2;
+        }
+        .creatives-matrix thead th.sticky-col,
+        .creatives-matrix tbody td.sticky-col {
+            position: sticky; left: 0;
+            background: #FDFCFC;
+            z-index: 3;
+            text-align: left;
+            padding-left: 16px;
+            border-right: 1px solid #EDEBE8;
+            min-width: 110px;
+        }
+        .creatives-matrix thead th.country-col { min-width: 52px; }
+        .creatives-matrix thead th.count-col { min-width: 120px; }
+        .creatives-matrix tbody td {
+            padding: 10px 6px;
+            text-align: center;
+            border-bottom: 1px solid #F2F0EE;
+            vertical-align: middle;
+        }
+        .creatives-matrix tbody tr:hover td { background: #FAF9F7; }
+        .creatives-matrix tbody tr:hover td.sticky-col { background: #FAF9F7; }
+        .cc-cell { font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+        .cc-yes { color: #16a34a; }
+        .cc-no { color: #dc2626; opacity: 0.55; }
+        .cov-cell { text-align: left !important; padding-left: 12px !important; min-width: 130px; }
+        .cov-bar { display: inline-block; width: 70px; height: 6px; background: #EDEBE8; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 8px; }
+        .cov-fill { display: block; height: 100%; background: #0A59D2; border-radius: 3px; }
+        .cov-num { font-size: 12px; color: #57534e; font-family: 'JetBrains Mono', monospace; }
+
+        .creative-id {
+            font-weight: 700;
+            color: #0A59D2;
+            font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+            font-size: 12px;
+        }
+        .product-pill {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: #EDEBE8;
+            color: #57534e;
+        }
+        .product-pill.shirts { background: #DBEAFE; color: #1D4ED8; }
+        .product-pill.boxers { background: #FCE7F3; color: #BE185D; }
+        .product-pill.starter { background: #FEF3C7; color: #B45309; }
+        .product-pill.komplet { background: #D1FAE5; color: #047857; }
+
+        .creatives-toolbar {
+            display: flex; gap: 10px; align-items: center; margin: 16px 0 18px; flex-wrap: wrap;
+        }
+        .creatives-toolbar input.search,
+        .creatives-toolbar select {
+            padding: 9px 12px;
+            background: #fff;
+            border: 1px solid #E0DFDD;
+            border-radius: 8px;
+            color: #052F70;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .creatives-toolbar input.search { flex: 1; min-width: 220px; }
+        .creatives-toolbar input.search:focus,
+        .creatives-toolbar select:focus { outline: none; border-color: #0A59D2; }
+        .creatives-toolbar .meta { color: #57534e; font-size: 12px; margin-left: auto; }
+        .btn-refresh {
+            padding: 9px 18px;
+            background: #0A59D2;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-refresh:hover { background: #052F70; }
+        .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .empty-row td, .loading-row td {
+            text-align: center;
+            color: #57534e;
+            padding: 50px 12px;
+            font-size: 13px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid #E0DFDD;
+            border-top-color: #0A59D2;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ========== END ALL CREATIVES MATRIX CSS ========== */
     </style>
 </head>
 <body>
@@ -1396,6 +1693,9 @@
             </a>
             <a class="nav-item active" data-page="voiceover" onclick="switchPage('voiceover')">
                 <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
+            </a>
+            <a class="nav-item" data-page="localize" onclick="switchPage('localize')">
+                <span class="icon">🔄</span><span class="label">Lokaliziraj video</span>
             </a>
             <a class="nav-item" data-page="creatives" onclick="switchPage('creatives')">
                 <span class="icon">🎬</span><span class="label">All Creatives</span>
@@ -1473,58 +1773,77 @@
             </section>
 
 
+            <!-- LOKALIZIRAJ VIDEO page (wraps existing #mode-localize via CSS) -->
+            <section class="page-content" id="page-localize" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>🔄 Lokaliziraj obstoječi video</h1>
+                        <p>Naloži video pare (text + clean), zaznaj teksti, lokaliziraj v vse trge.</p>
+                    </div>
+                    <div class="page-actions">
+                        <a href="downloads.html" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
+                    </div>
+                </div>
+                <!-- Actual UI lives in #mode-localize inside .container, made visible via body.page-localize CSS -->
+            </section>
+
             <!-- ALL CREATIVES page -->
             <section class="page-content" id="page-creatives" style="display:none;">
                 <div class="page-header">
                     <div class="page-title">
-                        <h1>🎬 All Creatives</h1>
-                        <p>Pregled vseh kreativ iz Dropboxa, grupiranih po ID + jeziki lokalizacije.</p>
+                        <h1>All Creatives</h1>
+                        <p>Pregled vseh kreativ iz Dropboxa, status lokalizacije po jezikih.</p>
                     </div>
                     <div class="page-actions">
-                        <button class="btn-refresh" onclick="loadCreatives(true)">🔄 Osveži</button>
+                        <button class="btn-refresh" onclick="refreshCreatives()" id="btn-refresh-creatives">Osvezi iz Dropboxa</button>
                     </div>
                 </div>
 
                 <div class="creatives-toolbar">
-                    <input class="search" id="creatives-search" placeholder="🔍 Išči po ID, produktu..." oninput="renderCreatives()">
+                    <input class="search" id="creatives-search" placeholder="Isci po ID, produktu..." oninput="renderCreatives()">
                     <select id="creatives-product" onchange="renderCreatives()">
                         <option value="">Vsi produkti</option>
                         <option value="shirts">Majice</option>
                         <option value="boxers">Bokserice</option>
-                        <option value="starter">Starter Pack</option>
+                        <option value="starter">Starter</option>
                         <option value="komplet">Komplet</option>
                         <option value="other">Drugo</option>
                     </select>
-                    <select id="creatives-country" onchange="renderCreatives()">
-                        <option value="">Vse države</option>
-                        <option value="SI">SI</option>
-                        <option value="HR">HR</option>
-                        <option value="CZ">CZ</option>
-                        <option value="SK">SK</option>
-                        <option value="HU">HU</option>
-                        <option value="PL">PL</option>
-                        <option value="RO">RO</option>
-                        <option value="GR">GR</option>
-                        <option value="IT">IT</option>
-                        <option value="DE">DE</option>
+                    <select id="creatives-status" onchange="renderCreatives()">
+                        <option value="">Vsi statusi</option>
+                        <option value="incomplete">Manjkajo lokalizacije</option>
+                        <option value="complete">Vsi jeziki ok</option>
                     </select>
-                    <div class="meta" id="creatives-meta">—</div>
+                    <div class="meta" id="creatives-meta">-</div>
                 </div>
 
-                <table class="creatives-table">
+                <div class="creatives-matrix-wrap">
+                <table class="creatives-matrix">
                     <thead>
                         <tr>
-                            <th style="width:120px;">ID</th>
-                            <th style="width:130px;">Produkt</th>
-                            <th>Lokalizacije</th>
-                            <th style="width:140px;">Datoteke</th>
-                            <th style="width:140px;">Zadnja sprememba</th>
+                            <th class="sticky-col">ID</th>
+                            <th class="prod-col">Produkt</th>
+                            <th class="country-col" data-cc="EN">EN</th>
+                            <th class="country-col" data-cc="SI">SI</th>
+                            <th class="country-col" data-cc="HR">HR</th>
+                            <th class="country-col" data-cc="SK">SK</th>
+                            <th class="country-col" data-cc="CZ">CZ</th>
+                            <th class="country-col" data-cc="HU">HU</th>
+                            <th class="country-col" data-cc="PL">PL</th>
+                            <th class="country-col" data-cc="RO">RO</th>
+                            <th class="country-col" data-cc="GR">GR</th>
+                            <th class="country-col" data-cc="IT">IT</th>
+                            <th class="country-col" data-cc="DE">DE</th>
+                            <th class="country-col" data-cc="BG">BG</th>
+                            <th class="country-col" data-cc="AT">AT</th>
+                            <th class="count-col">Pokritost</th>
                         </tr>
                     </thead>
                     <tbody id="creatives-tbody">
-                        <tr class="loading-row"><td colspan="5"><span class="spinner"></span>Naloži kreative ...</td></tr>
+                        <tr class="loading-row"><td colspan="16"><span class="spinner"></span>Nalagam kreative ...</td></tr>
                     </tbody>
                 </table>
+                </div>
             </section>
 
             <!-- SETTINGS page -->
@@ -2291,7 +2610,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         })();
         </script>
         <!-- MODE 2: Localize (Bulk) -->
-        <div class="mode-content" id="mode-localize" style="display:none !important;">
+        <div class="mode-content" id="mode-localize">
             <div class="layout">
                 <!-- Left Sidebar: Video Pairs List -->
                 <div class="library" id="pairs-sidebar">
@@ -6326,6 +6645,17 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             const navItem = document.querySelector('.nav-item[data-page="' + page + '"]');
             if (navItem) navItem.classList.add('active');
+            // Set body class for page-based CSS visibility
+            document.body.className = document.body.className.replace(/\bpage-\S+/g, '').trim() + ' page-' + page;
+            // Toggle mode-content active state
+            document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
+            if (page === 'voiceover') {
+                const mv = document.getElementById('mode-voiceover');
+                if (mv) { mv.classList.add('active'); mv.style.display = ''; }
+            } else if (page === 'localize') {
+                const ml = document.getElementById('mode-localize');
+                if (ml) { ml.classList.add('active'); ml.style.cssText = ''; }
+            }
             try { localStorage.setItem('voicepilot_page', page); } catch(e) {}
         };
         document.addEventListener('DOMContentLoaded', function() {
@@ -6345,24 +6675,50 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
 
     
         // ========== ALL CREATIVES ==========
+        const CREATIVE_COUNTRIES = ["EN", "SI", "HR", "SK", "CZ", "HU", "PL", "RO", "GR", "IT", "DE", "BG", "AT"];
         let _creativesData = null;
+
         async function loadCreatives(forceRefresh) {
             const tbody = document.getElementById('creatives-tbody');
             const meta = document.getElementById('creatives-meta');
-            if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="5"><span class="spinner"></span>Naloži kreative iz Dropboxa ...</td></tr>';
+            const colspan = CREATIVE_COUNTRIES.length + 3;
+            if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Nalagam kreative ...</td></tr>';
             try {
-                const url = '/api/creatives' + (forceRefresh ? '?refresh=1' : '');
-                const r = await fetch(url);
+                const r = await fetch('/api/creatives');
                 const data = await r.json();
                 if (data.error) throw new Error(data.error);
                 _creativesData = data;
                 if (meta) {
-                    const ts = data.cachedAt ? new Date(data.cachedAt).toLocaleString('sl-SI') : '';
-                    meta.textContent = (data.total || 0) + ' ID · ' + (data.totalFiles || 0) + ' datotek · ' + (data.cached ? 'cache ' : 'live ') + ts;
+                    const ts = data.lastSyncAt ? new Date(data.lastSyncAt).toLocaleString('sl-SI') : 'nikoli';
+                    meta.textContent = (data.total || 0) + ' ID, ' + (data.totalFiles || 0) + ' datotek, sync: ' + ts;
                 }
                 renderCreatives();
             } catch (e) {
-                if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="5">❌ Napaka: ' + e.message + '</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="' + colspan + '">Napaka: ' + e.message + '</td></tr>';
+            }
+        }
+
+        async function refreshCreatives() {
+            const btn = document.getElementById('btn-refresh-creatives');
+            if (btn) { btn.disabled = true; btn.textContent = 'Sinhronizacija ...'; }
+            const tbody = document.getElementById('creatives-tbody');
+            const colspan = CREATIVE_COUNTRIES.length + 3;
+            if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Sinhroniziram z Dropboxom ...</td></tr>';
+            try {
+                const r = await fetch('/api/creatives/sync', { method: 'POST' });
+                const data = await r.json();
+                if (data.error || data.ok === false) throw new Error(data.error || data.reason || 'sync failed');
+                _creativesData = data;
+                const meta = document.getElementById('creatives-meta');
+                if (meta) {
+                    const ts = data.syncedAt ? new Date(data.syncedAt).toLocaleString('sl-SI') : '';
+                    meta.textContent = (data.total || 0) + ' ID, ' + (data.totalFiles || 0) + ' datotek, sync: ' + ts;
+                }
+                renderCreatives();
+            } catch (e) {
+                if (tbody) tbody.innerHTML = '<tr class="empty-row"><td colspan="' + colspan + '">Napaka: ' + e.message + '</td></tr>';
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Osvezi iz Dropboxa'; }
             }
         }
 
@@ -6371,41 +6727,53 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const tbody = document.getElementById('creatives-tbody');
             const q = (document.getElementById('creatives-search').value || '').toLowerCase().trim();
             const productFilter = document.getElementById('creatives-product').value;
-            const countryFilter = document.getElementById('creatives-country').value;
+            const statusFilter = document.getElementById('creatives-status').value;
+            const colspan = CREATIVE_COUNTRIES.length + 3;
 
-            let rows = _creativesData.creatives;
+            let rows = _creativesData.creatives || [];
             if (q) rows = rows.filter(c => (c.creativeId || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q));
             if (productFilter) rows = rows.filter(c => c.productType === productFilter);
-            if (countryFilter) rows = rows.filter(c => (c.countries || []).includes(countryFilter));
+            if (statusFilter) {
+                rows = rows.filter(c => {
+                    const present = countriesPresent(c);
+                    const missing = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && !present.has(cc));
+                    return statusFilter === 'incomplete' ? missing.length > 0 : missing.length === 0;
+                });
+            }
 
             if (rows.length === 0) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Ni kreativ za prikaz</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="' + colspan + '">Ni kreativ za prikaz</td></tr>';
                 return;
             }
 
-            const html = rows.map(c => {
-                const chips = (c.countries && c.countries.length)
-                    ? c.countries.map(cc => '<span class="country-chip">' + cc + '</span>').join('')
-                    : '<span class="country-chip empty">—</span>';
-                const modified = c.latestModified ? new Date(c.latestModified).toLocaleDateString('sl-SI') : '—';
+            tbody.innerHTML = rows.map(c => {
+                const present = countriesPresent(c);
+                const cells = CREATIVE_COUNTRIES.map(cc => {
+                    const has = present.has(cc);
+                    return '<td class="cc-cell ' + (has ? 'cc-yes' : 'cc-no') + '">' + (has ? '+' : '-') + '</td>';
+                }).join('');
+                const localCount = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && present.has(cc)).length;
+                const totalLocal = CREATIVE_COUNTRIES.length - 1;
                 const product = c.productType || 'other';
                 return '<tr>' +
-                    '<td><span class="creative-id">' + c.creativeId + '</span></td>' +
+                    '<td class="sticky-col"><span class="creative-id">' + c.creativeId + '</span></td>' +
                     '<td><span class="product-pill ' + product + '">' + product + '</span></td>' +
-                    '<td><div class="country-chips">' + chips + ' <span style="color:var(--text-mute); font-size:11px; margin-left:6px;">(' + c.countryCount + ')</span></div></td>' +
-                    '<td><span class="file-count"><span class="video">' + c.videoCount + ' 🎬</span> · <span class="image">' + c.imageCount + ' 🖼</span></span></td>' +
-                    '<td style="color:var(--text-dim);">' + modified + '</td>' +
+                    cells +
+                    '<td class="cov-cell"><span class="cov-bar"><span class="cov-fill" style="width:' + Math.round(localCount/totalLocal*100) + '%"></span></span><span class="cov-num">' + localCount + '/' + totalLocal + '</span></td>' +
                     '</tr>';
             }).join('');
-            tbody.innerHTML = html;
         }
 
-        // Auto-load when switching to creatives page
-        const _origSwitchPage = window.switchPage;
-        window.switchPage = function(page) {
-            if (typeof _origSwitchPage === 'function') _origSwitchPage(page);
-            if (page === 'creatives' && !_creativesData) loadCreatives(false);
-        };
+        function countriesPresent(c) {
+            const set = new Set();
+            // EN = "non-localized" original exists = creative has files without country tag (or total > sum of country files)
+            // proxy: if fileCount > countryCount localized files, treat as having EN original
+            // simpler heuristic: always show EN as present if creative has any files at all (it always has source)
+            set.add('EN');
+            (c.countries || []).forEach(cc => set.add(cc));
+            return set;
+        }
+
         // ========== END ALL CREATIVES ==========
 
     </script>
