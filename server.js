@@ -40,6 +40,7 @@ const DROPBOX_REFRESH_TOKEN = process.env.DROPBOX_REFRESH_TOKEN || '';
 const DROPBOX_ROOT = process.env.DROPBOX_ROOT || '';
 const DROPBOX_FOLDERS = [
     '/NORIKS Team Folder/TEJA - KREATIVE/FINAL CREATIVES 🔥',
+    '/NORIKS Team Folder/TEJA - KREATIVE/Final creatives_without_text 🎉',
     '/NORIKS Team Folder/FLORES',
     '/NORIKS Team Folder/TEJA - KREATIVE/Extra',
     '/NORIKS Team Folder/Faraz',
