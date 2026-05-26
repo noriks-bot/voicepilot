@@ -4037,6 +4037,56 @@ app.post('/api/localizer/job/:id/cancel', (req, res) => {
     res.json({ success: true, message: 'Job will be cancelled' });
 });
 
+// Regenerate a job — clones original params and starts new generation
+app.post('/api/localizer/regenerate/:id', async (req, res) => {
+    const orig = localizerJobs.get(req.params.id);
+    if (!orig) return res.status(404).json({ error: 'Job not found' });
+    if (!orig.videoClean) return res.status(400).json({ error: 'Missing videoClean on original job' });
+
+    const videoPath = path.join(__dirname, 'uploads', orig.videoClean);
+    if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'Source video not found on disk' });
+
+    const newJobId = `gen-${Date.now()}`;
+    const newJob = {
+        id: newJobId,
+        name: orig.name,
+        namingParts: orig.namingParts,
+        videoClean: orig.videoClean,
+        texts: orig.texts,
+        style: orig.style,
+        fontSize: orig.fontSize,
+        hookStyle: orig.hookStyle,
+        ctaStyle: orig.ctaStyle,
+        perTextStyles: orig.perTextStyles,
+        uppercase: orig.uppercase,
+        countries: orig.countries,
+        source: orig.source,
+        mode: orig.mode,
+        voiceoverScript: orig.voiceoverScript,
+        videoDuration: orig.videoDuration,
+        status: 'translating',
+        completed: 0,
+        currentLang: '',
+        outputs: {},
+        regeneratedFrom: orig.id,
+        created: new Date().toISOString()
+    };
+
+    localizerJobs.set(newJobId, newJob);
+    persistJobs();
+
+    const generator = (newJob.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
+    generator(newJob, videoPath).catch(e => {
+        newJob.status = 'error';
+        newJob.error = e.message;
+        persistJobs();
+        console.error(`[${newJobId}] Regen error:`, e);
+    });
+
+    console.log(`Regenerated job ${orig.id} -> ${newJobId}`);
+    res.json({ jobId: newJobId, status: 'started', regeneratedFrom: orig.id });
+});
+
 // List all generated videos
 app.get('/api/localizer/generated-videos', (req, res) => {
     try {

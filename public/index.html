@@ -7414,12 +7414,16 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             }).join('');
         }
         
-        window.regenJob = function(jobId) {
-            if (!confirm('Regeneriraj job ' + jobId + '?\n\nTo bo odprlo Voiceover Maker s preteklim scriptom.')) return;
-            // Open voicemaker page; user can re-run with original script
-            const link = document.querySelector('[data-page="voicemaker"]') || document.querySelector('[onclick*="voicemaker"]');
-            if (link && link.click) link.click();
-            else location.hash = '#voicemaker';
+        window.regenJob = async function(jobId) {
+            if (!confirm('Regeneriraj job ' + jobId + '?\n\nIsti video, isti tekst, ista nastavitev — samo se enkrat poženemo generacijo.')) return;
+            try {
+                const r = await fetch('/api/localizer/regenerate/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const data = await r.json();
+                if (!r.ok) { alert('Napaka: ' + (data.error || r.statusText)); return; }
+                // Refresh downloads to show new in-progress job
+                if (typeof loadDownloads === 'function') loadDownloads();
+                else if (typeof renderDownloads === 'function') renderDownloads(allDownloadJobs);
+            } catch (e) { alert('Napaka pri regeneraciji: ' + (e.message || e)); }
         };
         window.markDownloaded = function(key) {
             downloadedItems[key] = true;
@@ -7986,7 +7990,8 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         (r.kind === 'completed' ? ' &middot; ' + r.fileCount + ' datotek' : '');
                     let action;
                     if (r.kind === 'completed' && (r.status === 'done' || r.status === 'completed')) {
-                        action = '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none;">ZIP &darr;</a>';
+                        action = '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none; margin-right:6px;">ZIP &darr;</a>' +
+                            '<button onclick="window.regenJob(\'' + r.id + '\')" title="Generiraj ponovno z istimi parametri" style="font-weight:600; padding:6px 10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:6px; cursor:pointer; font-size:12px;">🔄</button>';
                     } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error'].includes(r.status)) {
                         const tip = r.statusReason ? r.statusReason.replace(/"/g,'') : 'Job ni dokončan';
                         action = '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + '" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
@@ -8000,9 +8005,20 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     else if (m === 'subtitles' || m === 'srt') { typeBg = '#CFFAFE'; typeFg = '#0E7490'; typeLbl = 'Podnapisi'; }
                     else { typeBg = '#E0E7FF'; typeFg = '#3730A3'; typeLbl = 'Lokalizator'; }
                     const typePill = '<span style="display:inline-block; padding:3px 10px; background:' + typeBg + '; color:' + typeFg + '; border-radius:12px; font-size:11px; font-weight:600;">' + typeLbl + '</span>';
+                    let progressBarHtml = '';
+                    if (r.kind === 'in_progress' && r.totalCount > 0) {
+                        const doneN = (r.completedLangs || []).length;
+                        const pct = Math.max(2, Math.round((doneN / r.totalCount) * 100));
+                        const isErr = ['error','failed','failed_tts','failed_stale'].includes(r.status);
+                        const barColor = isErr ? '#DC2626' : (pct >= 100 ? '#16A34A' : '#0A59D2');
+                        progressBarHtml = '<div style="margin-top:6px; width:100%; max-width:260px; height:6px; background:#E5E7EB; border-radius:3px; overflow:hidden;">' +
+                            '<div style="height:100%; width:' + pct + '%; background:' + barColor + '; transition:width 0.4s ease;"></div>' +
+                            '</div>' +
+                            '<div style="font-size:10px; color:#6B7280; margin-top:3px;">' + doneN + '/' + r.totalCount + ' jezikov &middot; ' + pct + '%' + (r.currentLang ? ' &middot; ' + r.currentLang + ' ...' : '') + '</div>';
+                    }
                     return '<tr>' +
                         '<td>' + creativeIdHtml + '<span class="activity-source" style="font-weight:600;">' + String(r.name) + '</span>' +
-                        '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div></td>' +
+                        '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div>' + progressBarHtml + '</td>' +
                         '<td>' + typePill + '</td>' +
                         '<td><div class="activity-langs" style="display:flex; flex-wrap:wrap; gap:4px;">' + (langsHtml || '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>') + '</div></td>' +
                         '<td>' + _statusBadge(r.status) + '</td>' +
@@ -8041,17 +8057,14 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
 
 <script>
 window._regenJob = async function(jobId) {
-    if (!confirm('Regeneriraj video ' + jobId + '? Originalni job bo izbrisan.')) return;
+    if (!confirm('Regeneriraj job ' + jobId + '?')) return;
     try {
-        const r = await fetch('/api/localizer/job/' + jobId, { method: 'DELETE' });
-        if (r.ok) {
-            alert('Job izbrisan. Pojdi v Voiceover Maker in zaženi novo generacijo.');
-            if (typeof loadDownloadsPage === 'function') loadDownloadsPage();
-        } else {
-            const t = await r.text();
-            alert('Brisanje ni uspelo: ' + t);
-        }
-    } catch (e) { alert('Napaka: ' + e.message); }
+        const r = await fetch('/api/localizer/regenerate/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const data = await r.json();
+        if (!r.ok) { alert('Napaka: ' + (data.error || r.statusText)); return; }
+        if (typeof loadDownloadsPage === 'function') loadDownloadsPage();
+        if (typeof loadDownloads === 'function') loadDownloads();
+    } catch (e) { alert('Napaka pri regeneraciji: ' + (e.message || e)); }
 };
 </script>
 </body>
