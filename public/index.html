@@ -2158,39 +2158,25 @@
                 <div class="page-header">
                     <div class="page-title">
                         <h1>Downloads</h1>
-                        <p>Vsi generirani videoposnetki in datoteke.</p>
+                        <p>Generirani videoposnetki - klikni za prenos.</p>
                     </div>
                     <div class="page-actions">
                         <button class="btn-refresh" onclick="loadDownloadsPage()" id="btn-refresh-downloads">Osvezi</button>
                     </div>
                 </div>
 
-                <div class="creatives-toolbar">
-                    <input class="search" id="downloads-search" placeholder="Isci po imenu, ID ..." oninput="renderDownloads()">
-                    <select id="downloads-status" onchange="renderDownloads()">
-                        <option value="">Vsi statusi</option>
-                        <option value="done">Koncani</option>
-                        <option value="running">V teku</option>
-                        <option value="failed">Napaka</option>
-                    </select>
-                    <div class="meta" id="downloads-meta">-</div>
-                </div>
-
                 <div class="activity-wrap">
                     <table class="activity-table downloads-table">
                         <thead>
                             <tr>
-                                <th>Job</th>
-                                <th>Ime / Source</th>
+                                <th>Ime</th>
                                 <th>Jeziki</th>
-                                <th>Datoteke</th>
-                                <th>Status</th>
                                 <th>Cas</th>
-                                <th>Akcije</th>
+                                <th style="text-align:right;">Prenos</th>
                             </tr>
                         </thead>
                         <tbody id="downloads-tbody">
-                            <tr class="empty-row"><td colspan="7"><span class="spinner"></span>Nalagam downloads ...</td></tr>
+                            <tr class="empty-row"><td colspan="4"><span class="spinner"></span>Nalagam ...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -7285,135 +7271,48 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         }
         async function loadDownloadsPage() {
             const tbody = document.getElementById('downloads-tbody');
-            const meta = document.getElementById('downloads-meta');
             const btn = document.getElementById('btn-refresh-downloads');
             if (!tbody) return;
             if (btn) btn.disabled = true;
-            tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><span class="spinner"></span>Nalagam downloads ...</td></tr>';
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="4"><span class="spinner"></span>Nalagam ...</td></tr>';
             try {
-                const [jobsRes, vidRes] = await Promise.all([
-                    fetch('/api/localizer/jobs').then(r => r.json()),
-                    fetch('/api/localizer/generated-videos').then(r => r.json()),
-                ]);
-                const inProgress = (jobsRes.jobs || []).filter(j => !['done','completed','complete'].includes(j.status));
-                const completed = (vidRes.jobs || []);
-                const rows = [];
-                for (const j of inProgress) {
-                    // Extract timestamp from job ID (gen-1779800971352 -> 1779800971352 ms)
-                    let ts = j.createdAt || j.created_at || j.startedAt || j.updatedAt || null;
-                    if (!ts && j.id) {
-                        const idMatch = String(j.id).match(/(\d{10,})/);
-                        if (idMatch) ts = Number(idMatch[1]);
+                const res = await fetch('/api/localizer/generated-videos').then(r => r.json());
+                const jobs = (res.jobs || []).map(j => {
+                    const videos = (j.videos || []).filter(v => v.name && v.name.endsWith('.mp4'));
+                    const langs = new Set();
+                    for (const v of videos) {
+                        const m = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
+                        if (m) langs.add(m[1]);
                     }
-                    rows.push({
-                        kind: 'in_progress',
-                        id: j.id,
-                        name: j.filename || j.sourceFile || j.video || j.id,
-                        languages: j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []),
-                        fileCount: j.outputs ? Object.keys(j.outputs).length : 0,
-                        status: j.status || 'pending',
-                        timestamp: ts,
-                    });
-                }
-                for (const j of completed) {
-                    const videos = j.videos || [];
-                    const mp4s = videos.filter(v => v.name && v.name.endsWith('.mp4'));
-                    const allLangs = new Set();
-                    for (const v of mp4s) { const c = _detectCountryDl(v.name); if (c) allLangs.add(c); }
-                    let displayName = j.id;
-                    if (mp4s[0]) displayName = mp4s[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
+                    let name = j.id;
+                    if (videos[0]) name = videos[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
                     let ts = j.timestamp;
                     if (!ts && j.id) {
                         const idMatch = String(j.id).match(/(\d{10,})/);
                         if (idMatch) ts = Number(idMatch[1]);
                     }
-                    rows.push({
-                        kind: 'completed',
-                        id: j.id,
-                        name: displayName,
-                        languages: [...allLangs],
-                        fileCount: videos.length,
-                        videos: videos,
-                        status: 'done',
-                        timestamp: ts,
-                        totalSize: videos.reduce((a,v) => a + (v.size||0), 0),
-                    });
-                }
-                rows.sort((a, b) => {
-                    const at = a.timestamp ? new Date(/^\d+$/.test(String(a.timestamp)) ? Number(a.timestamp) : a.timestamp).getTime() : 0;
-                    const bt = b.timestamp ? new Date(/^\d+$/.test(String(b.timestamp)) ? Number(b.timestamp) : b.timestamp).getTime() : 0;
-                    return bt - at;
+                    return { id: j.id, name, languages: [...langs], timestamp: ts, fileCount: videos.length };
                 });
-                _downloadsData = rows;
-                if (meta) meta.textContent = rows.length + ' job-ov, ' + completed.reduce((a,j)=>a+(j.videos||[]).length, 0) + ' datotek';
-                renderDownloads();
+                jobs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                if (jobs.length === 0) {
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Se ni generiranih videov.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = jobs.map(r => {
+                    const langs = (r.languages || []).map(l => '<span class="lang-chip">' + l + '</span>').join('');
+                    return '<tr>' +
+                        '<td><div class="activity-source">' + String(r.name) + '</div>' +
+                        '<div style="color:#9ca3af; font-size:11px; margin-top:2px;">' + String(r.id) + ' &middot; ' + r.fileCount + ' datotek</div></td>' +
+                        '<td><div class="activity-langs">' + (langs || '<span style="color:#9ca3af; font-size:11px;">-</span>') + '</div></td>' +
+                        '<td class="activity-time">' + _fmtDateDl(r.timestamp) + '</td>' +
+                        '<td style="text-align:right;"><a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi ZIP" style="font-weight:600;">Prenesi ZIP</a></td>' +
+                        '</tr>';
+                }).join('');
             } catch (e) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Napaka: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Napaka: ' + e.message + '</td></tr>';
             } finally {
                 if (btn) btn.disabled = false;
             }
-        }
-        function renderDownloads() {
-            const tbody = document.getElementById('downloads-tbody');
-            if (!tbody || !_downloadsData) return;
-            const q = (document.getElementById('downloads-search').value || '').toLowerCase().trim();
-            const statusFilter = document.getElementById('downloads-status').value;
-            let rows = _downloadsData;
-            if (q) rows = rows.filter(r => (r.name || '').toLowerCase().includes(q) || (r.id || '').toLowerCase().includes(q));
-            if (statusFilter) rows = rows.filter(r => {
-                if (statusFilter === 'done') return r.status === 'done';
-                if (statusFilter === 'running') return ['running','processing','in_progress'].includes(r.status);
-                if (statusFilter === 'failed') return ['failed','error'].includes(r.status);
-                return true;
-            });
-            if (rows.length === 0) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Ni izhodov za prikaz.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = rows.map(r => {
-                const langs = (r.languages || []).slice(0, 8).map(l => '<span class="lang-chip">' + l + '</span>').join('') +
-                    ((r.languages || []).length > 8 ? '<span class="lang-chip">+' + (r.languages.length - 8) + '</span>' : '');
-                const statusCls = _statusClass(r.status);
-                const statusLbl = _statusLabel(r.status);
-                const sizeStr = r.totalSize ? ' (' + _fmtSize(r.totalSize) + ')' : '';
-                const actions = r.kind === 'completed' ?
-                    '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi ZIP">ZIP</a>' +
-                    ' <button class="btn-link" onclick="showDownloadFiles(&quot;' + r.id + '&quot;)" title="Pokazi datoteke">Datoteke</button>' :
-                    '<span style="color:#9ca3af; font-size:11px;">-</span>';
-                return '<tr>' +
-                    '<td><span class="activity-job">' + String(r.id).slice(0, 18) + '</span></td>' +
-                    '<td><div class="activity-source" title="' + String(r.name).replace(/"/g, '&quot;') + '">' + String(r.name) + '</div></td>' +
-                    '<td><div class="activity-langs">' + (langs || '<span style="color:#9ca3af; font-size:11px;">-</span>') + '</div></td>' +
-                    '<td><span style="font-family:JetBrains Mono,monospace; font-size:12px; color:#57534e;">' + (r.fileCount || 0) + sizeStr + '</span></td>' +
-                    '<td><span class="status-pill ' + statusCls + '">' + statusLbl + '</span></td>' +
-                    '<td class="activity-time">' + _fmtDateDl(r.timestamp) + '</td>' +
-                    '<td>' + actions + '</td>' +
-                    '</tr>';
-            }).join('');
-        }
-        function showDownloadFiles(jobId) {
-            const row = (_downloadsData || []).find(r => r.id === jobId);
-            if (!row || !row.videos) return;
-            const list = row.videos.map(v => {
-                const cc = _detectCountryDl(v.name) || '';
-                return '<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #F4F2F0; font-size:13px;">' +
-                    '<span style="font-family:JetBrains Mono,monospace;">' + (cc ? '['+cc+'] ' : '') + v.name + '</span>' +
-                    '<span style="display:flex; gap:8px; align-items:center;">' +
-                    '<span style="color:#57534e; font-size:11px;">' + _fmtSize(v.size) + '</span>' +
-                    '<a class="btn-link" href="/uploads/generated/' + jobId + '/' + encodeURIComponent(v.name) + '" download>Prenesi</a>' +
-                    '</span></div>';
-            }).join('');
-            const overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;';
-            overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-            const modal = document.createElement('div');
-            modal.style.cssText = 'background:#fff;border-radius:14px;padding:24px;max-width:720px;width:90%;max-height:80vh;overflow:auto;';
-            modal.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-                '<h3 style="margin:0;font-size:16px;color:#052F70;">Datoteke - ' + jobId + '</h3>' +
-                '<button class="btn-ghost" id="dl-modal-close">Zapri</button></div>' + list;
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
-            modal.querySelector('#dl-modal-close').onclick = function() { overlay.remove(); };
         }
         (function(){
             const _origSP = window.switchPage;
