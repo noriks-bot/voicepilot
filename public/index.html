@@ -1555,6 +1555,9 @@
         .cc-cell { font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
         .cc-yes { color: #16a34a; }
         .cc-no { color: #dc2626; opacity: 0.55; }
+        .cc-link { cursor: pointer; transition: background 0.15s; }
+        .cc-link:hover { background: #DCFCE7 !important; color: #15803d; transform: scale(1.05); }
+        .cc-link[data-loading="1"] { opacity: 0.6; cursor: wait; }
         .cov-cell { text-align: left !important; padding-left: 12px !important; min-width: 130px; }
         .cov-bar { display: inline-block; width: 70px; height: 6px; background: #EDEBE8; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 8px; }
         .cov-fill { display: block; height: 100%; background: #0A59D2; border-radius: 3px; }
@@ -6757,6 +6760,11 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const present = countriesPresent(c);
                 const cells = CREATIVE_COUNTRIES.map(cc => {
                     const has = present.has(cc);
+                    const file = (c.filesByCountry || {})[cc];
+                    if (has && file && file.path) {
+                        const safePath = file.path.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                        return '<td class="cc-cell cc-yes cc-link" data-path="' + safePath + '" onclick="openDropboxLink(this)" title="' + (file.name || '') + '">+</td>';
+                    }
                     return '<td class="cc-cell ' + (has ? 'cc-yes' : 'cc-no') + '">' + (has ? '+' : '-') + '</td>';
                 }).join('');
                 const localCount = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && present.has(cc)).length;
@@ -6769,6 +6777,26 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     '<td class="cov-cell"><span class="cov-bar"><span class="cov-fill" style="width:' + Math.round(localCount/totalLocal*100) + '%"></span></span><span class="cov-num">' + localCount + '/' + totalLocal + '</span></td>' +
                     '</tr>';
             }).join('');
+        }
+
+        async function openDropboxLink(td) {
+            const path = td.getAttribute('data-path');
+            if (!path) return;
+            if (td.dataset.loading === '1') return;
+            const original = td.textContent;
+            td.dataset.loading = '1';
+            td.textContent = '...';
+            try {
+                const r = await fetch('/api/dropbox/share-link?path=' + encodeURIComponent(path));
+                const j = await r.json();
+                if (!r.ok || j.error) throw new Error(j.error || 'failed');
+                window.open(j.url, '_blank', 'noopener');
+            } catch (e) {
+                alert('Napaka pri odpiranju Dropbox linka: ' + e.message);
+            } finally {
+                td.textContent = original;
+                td.dataset.loading = '0';
+            }
         }
 
         function countriesPresent(c) {

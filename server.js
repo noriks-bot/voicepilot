@@ -228,6 +228,7 @@ function readCreativesFromDb() {
                 productType: r.product_type || 'other',
                 fileDate: r.file_date,
                 countries: new Set(),
+                filesByCountry: {},
                 fileCount: 0,
                 videoCount: 0,
                 imageCount: 0,
@@ -235,7 +236,20 @@ function readCreativesFromDb() {
             };
         }
         const g = groups[id];
+        const ccKey = r.country || 'EN';
         if (r.country) g.countries.add(r.country);
+        // Track first/latest file per country (prefer video, then by modified desc)
+        const prev = g.filesByCountry[ccKey];
+        const isBetter = !prev || (r.media_type === 'video' && prev.mediaType !== 'video') ||
+            (r.modified && prev.modified && r.modified > prev.modified && r.media_type === prev.media_type);
+        if (isBetter) {
+            g.filesByCountry[ccKey] = {
+                name: r.name,
+                path: r.path,
+                mediaType: r.media_type,
+                modified: r.modified,
+            };
+        }
         g.fileCount++;
         if (r.media_type === 'video') g.videoCount++;
         else g.imageCount++;
@@ -249,6 +263,7 @@ function readCreativesFromDb() {
         fileDate: g.fileDate,
         countries: [...g.countries].sort(),
         countryCount: g.countries.size,
+        filesByCountry: g.filesByCountry,
         fileCount: g.fileCount,
         videoCount: g.videoCount,
         imageCount: g.imageCount,
@@ -307,6 +322,77 @@ app.get('/api/creatives/:id/files', (req, res) => {
     }
 });
 
+// ===== Dropbox share link helper + endpoint =====
+const _shareLinkCache = new Map();
+
+async function dropboxGetSharedLink(filePath) {
+    if (!filePath) throw new Error('path required');
+    const cached = _shareLinkCache.get(filePath);
+    if (cached && cached.exp > Date.now()) return cached.url;
+    const token = await dropboxToken();
+    const headers = {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', 'root': DROPBOX_ROOT }),
+    };
+    // 1) Try to list existing shared links
+    let r = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+        method: 'POST', headers,
+        body: JSON.stringify({ path: filePath, direct_only: true }),
+    });
+    if (r.ok) {
+        const j = await r.json();
+        if (j.links && j.links.length > 0) {
+            const url = j.links[0].url;
+            _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
+            return url;
+        }
+    }
+    // 2) Create one
+    r = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+            path: filePath,
+            settings: { requested_visibility: 'public' },
+        }),
+    });
+    if (!r.ok) {
+        const txt = await r.text();
+        // If link already exists (409), fallback to list
+        if (txt.includes('shared_link_already_exists')) {
+            const r2 = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+                method: 'POST', headers,
+                body: JSON.stringify({ path: filePath, direct_only: true }),
+            });
+            const j2 = await r2.json();
+            if (j2.links && j2.links.length > 0) {
+                const url = j2.links[0].url;
+                _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
+                return url;
+            }
+        }
+        throw new Error('create_shared_link failed: ' + r.status + ' ' + txt.slice(0, 200));
+    }
+    const j = await r.json();
+    const url = j.url;
+    _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
+    return url;
+}
+
+app.get('/api/dropbox/share-link', async (req, res) => {
+    try {
+        const p = req.query.path;
+        if (!p) return res.status(400).json({ error: 'path required' });
+        const url = await dropboxGetSharedLink(String(p));
+        // Convert ?dl=0 to ?dl=0 (preview) or ?raw=1 for direct media
+        res.json({ url, previewUrl: url, rawUrl: url.replace(/\?dl=0$/, '?raw=1') });
+    } catch (e) {
+        console.error('[share-link] error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+// ===== END Dropbox share link =====
+
 function scheduleDailySync() {
     const now = new Date();
     const next = new Date(now);
@@ -316,10 +402,80 @@ function scheduleDailySync() {
     console.log('[creatives:sync] next daily sync at', next.toISOString());
     setTimeout(() => {
         syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] daily failed:', e));
-        scheduleDailySync();
+const _shareLinkCache = new Map();
+
+async function dropboxGetSharedLink(filePath) {
+    if (!filePath) throw new Error('path required');
+    const cached = _shareLinkCache.get(filePath);
+    if (cached && cached.exp > Date.now()) return cached.url;
+    const token = await dropboxToken();
+    const headers = {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', 'root': DROPBOX_ROOT }),
+    };
+    // 1) Try to list existing shared links
+    let r = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+        method: 'POST', headers,
+        body: JSON.stringify({ path: filePath, direct_only: true }),
+    });
+    if (r.ok) {
+        const j = await r.json();
+        if (j.links && j.links.length > 0) {
+            const url = j.links[0].url;
+            _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
+            return url;
+        }
+    }
+    // 2) Create one
+    r = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+        method: 'POST', headers,
+        body: JSON.stringify({
+            path: filePath,
+            settings: { requested_visibility: 'public' },
+        }),
+    });
+    if (!r.ok) {
+        const txt = await r.text();
+        // If link already exists (409), fallback to list
+        if (txt.includes('shared_link_already_exists')) {
+            const r2 = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+                method: 'POST', headers,
+                body: JSON.stringify({ path: filePath, direct_only: true }),
+            });
+            const j2 = await r2.json();
+            if (j2.links && j2.links.length > 0) {
+                const url = j2.links[0].url;
+                _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
+                return url;
+            }
+        }
+        throw new Error('create_shared_link failed: ' + r.status + ' ' + txt.slice(0, 200));
+    }
+    const j = await r.json();
+    const url = j.url;
+    _shareLinkCache.set(filePath, { url, exp: Date.now() + 24 * 3600 * 1000 });
+    return url;
+}
+
+app.get('/api/dropbox/share-link', async (req, res) => {
+    try {
+        const p = req.query.path;
+        if (!p) return res.status(400).json({ error: 'path required' });
+        const url = await dropboxGetSharedLink(String(p));
+        // Convert ?dl=0 to ?dl=0 (preview) or ?raw=1 for direct media
+        res.json({ url, previewUrl: url, rawUrl: url.replace(/\?dl=0$/, '?raw=1') });
+    } catch (e) {
+        console.error('[share-link] error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+scheduleDailySync();
     }, delay);
 }
 scheduleDailySync();
+
+
 
 setTimeout(() => {
     const count = creativesDb.prepare('SELECT COUNT(*) AS c FROM creative_files').get().c;
