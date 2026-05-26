@@ -608,89 +608,6 @@
             color: #666;
         }
         
-        /* Queue Panel */
-        .queue-panel {
-            background: #1a1a1a;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 30px;
-            border: 2px solid #333;
-        }
-        
-        .queue-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #333;
-        }
-        
-        .queue-header h3 {
-            font-size: 16px;
-            margin: 0;
-        }
-        
-        .queue-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        #queue-count {
-            color: #888;
-            font-size: 13px;
-        }
-        
-        .queue-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        
-        .queue-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #0f0f0f;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 8px;
-        }
-        
-        .queue-item-info {
-            flex: 1;
-        }
-        
-        .queue-item-name {
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-        
-        .queue-item-meta {
-            font-size: 12px;
-            color: #888;
-        }
-        
-        .queue-item-status {
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        
-        .queue-item-status.pending { background: #f59e0b20; color: #fbbf24; }
-        .queue-item-status.processing { background: #3b82f620; color: #60a5fa; }
-        .queue-item-status.done { background: #10b98120; color: #34d399; }
-        .queue-item-status.error { background: #ef444420; color: #f87171; }
-        
-        .queue-schedule {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #333;
-            font-size: 13px;
-            color: #888;
-        }
         
         .font-size-control {
             display: flex;
@@ -875,17 +792,6 @@
             <button onclick="toggleDownloads()" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">✕</button>
         </div>
         
-        <!-- Tabs -->
-        <div style="display:flex; gap:5px; margin-bottom:15px;">
-            <button id="tab-library" onclick="switchDownloadTab('library')" style="flex:1; padding:10px; background:#10b981; border:none; border-radius:6px 6px 0 0; color:#000; font-weight:600; cursor:pointer;">
-                📚 Knjižnica
-            </button>
-            <button id="tab-localize" onclick="switchDownloadTab('localize')" style="flex:1; padding:10px; background:#333; border:none; border-radius:6px 6px 0 0; color:#888; cursor:pointer;">
-                🔄 Lokaliziraj
-            </button>
-        </div>
-        
-        <input type="text" id="downloads-search" placeholder="🔍 Išči po ID..." style="width:100%; padding:10px; background:#0f0f0f; border:1px solid #333; border-radius:6px; color:#fff; margin-bottom:15px;" oninput="filterDownloads()">
         <div id="downloads-list">
             <div style="color:#666; text-align:center; padding:40px;">Nalagam...</div>
         </div>
@@ -1218,9 +1124,6 @@
                                     </div>
                                 </div>
                             </div>
-                            
-                            
-                            <button class="btn btn-secondary" onclick="queueAllCreatives()" id="btn-queue" disabled>🌙 Dodaj v vrsto</button>
                             <button class="btn btn-primary" onclick="generateAllCreatives()" id="btn-generate" disabled>🚀 Generiraj</button>
                         </div>
                     </div>
@@ -1877,8 +1780,6 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                                     </div>
                                 </div>
                             </div>
-                            
-                            <button class="btn btn-secondary" onclick="addAllToQueue()" id="btn-queue-all" disabled>🌙 Dodaj vse v vrsto</button>
                             <button class="btn btn-primary" onclick="generateAllPairs()" id="btn-generate-all" disabled>🚀 Generiraj vse</button>
                         </div>
                     </div>
@@ -1886,23 +1787,6 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             </div>
         </div>
         
-        <!-- Night Queue Panel -->
-        <div class="queue-panel" id="queue-panel">
-            <div class="queue-header">
-                <h3>🌙 Nočna čakalna vrsta</h3>
-                <div class="queue-actions">
-                    <span id="queue-count">0 v vrsti</span>
-                    <button class="btn btn-secondary btn-sm" onclick="refreshQueue()">🔄</button>
-                    <button class="btn btn-primary btn-sm" onclick="processQueueNow()" id="btn-process-now">▶️ Procesiraj zdaj</button>
-                </div>
-            </div>
-            <div class="queue-list" id="queue-list">
-                <div class="empty-state">Čakalna vrsta je prazna</div>
-            </div>
-            <div class="queue-schedule">
-                <span>⏰ Avtomatsko procesiranje: <strong>02:00</strong></span>
-            </div>
-        </div>
     </div>
     
     <script>
@@ -2837,106 +2721,6 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             renderCreativesList();
         };
         
-        // Queue all creatives for night processing (2 AM)
-        window.queueAllCreatives = async function() {
-            saveCurrentCreative();
-            
-            const readyCreatives = creatives.filter(c => {
-                const hasTexts = c.segments?.some(s => s.texts?.length > 0);
-                return hasTexts && c.namingParts?.id && c.namingParts?.author;
-            });
-            
-            if (readyCreatives.length === 0) {
-                alert('Nobena kreativa ni pripravljena! Dodaj besedila in izpolni ID + Avtor.');
-                return;
-            }
-            
-            let added = 0;
-            const MIN_DUR = 1.0;
-            for (const creative of readyCreatives) {
-                try {
-                    const texts = [];
-                    let lastTextEntry = null;
-                    const creativeUppercase = creative.uppercase || false;
-                    creative.segments.forEach(seg => {
-                        const segTexts = seg.texts || [];
-                        if (segTexts.length === 0) {
-                            if (lastTextEntry) lastTextEntry.end = seg.end;
-                            return;
-                        }
-                        
-                        if (seg.simultaneous && segTexts.length > 1) {
-                            // Simultaneous: stacked vertically with spacing
-                            let segEnd = seg.end;
-                            if (segEnd - seg.start < MIN_DUR) segEnd = seg.start + MIN_DUR;
-                            segTexts.forEach((t, i) => {
-                                const entry = { 
-                                    start: seg.start, 
-                                    end: segEnd, 
-                                    text: creativeUppercase ? t.text.toUpperCase() : t.text, 
-                                    role: t.role || 'solution_benefit',
-                                    position: i === 0 ? 'center-top' : 'center-bottom'
-                                };
-                                texts.push(entry);
-                                lastTextEntry = entry;
-                            });
-                        } else {
-                            // Sequential
-                            const duration = seg.end - seg.start;
-                            const perText = Math.max(duration / segTexts.length, MIN_DUR);
-                            segTexts.forEach((t, i) => {
-                                const entry = { start: seg.start + (i * perText), end: seg.start + ((i + 1) * perText), text: creativeUppercase ? t.text.toUpperCase() : t.text, role: t.role || 'solution_benefit' };
-                                texts.push(entry);
-                                lastTextEntry = entry;
-                            });
-                        }
-                    });
-                    
-                    if (texts.length === 0) continue;
-                    
-                    const { id, date, product, type, author } = creative.namingParts;
-                    const name = id + '_' + date + '_' + product + '_' + type + '_' + author;
-                    
-                    await window.postJSON('/api/queue/add', {
-                        mode: 'library',
-                        name: name,
-                        namingParts: creative.namingParts,
-                        videoClean: creative.filename,
-                        texts: texts,
-                        style: creative.style || 'white',
-                        fontSize: creative.fontSize || 105,
-                        hookStyle: creative.useHookStyle ? (creative.hookStyle || 'white') : null,
-                        ctaStyle: creative.useCtaStyle ? (creative.ctaStyle || 'white') : null
-                    });
-                    added++;
-                } catch (e) {
-                    console.error('Failed to queue:', creative.originalName, e);
-                }
-            }
-            
-            alert('✅ Dodano ' + added + ' kreativ v nočno vrsto!\n\nProcesirale se bodo ob 2:00.');
-            refreshQueue();
-            
-            // Clear queued creatives
-            creatives = creatives.filter(c => {
-                const hasTexts = c.segments?.some(s => s.texts?.length > 0);
-                return !(hasTexts && c.namingParts?.id && c.namingParts?.author);
-            });
-            
-            if (creatives.length > 0) {
-                loadCreative(0);
-            } else {
-                currentCreativeIndex = -1;
-                uploadedFilename = null;
-                segments = [];
-                document.getElementById('preview-section').style.display = 'none';
-                document.getElementById('upload-zone').innerHTML = '<div class="icon">📁</div><h4>Naloži čist video (brez teksta)</h4><p>Povleci sem ali klikni</p>';
-                document.getElementById('upload-zone').classList.remove('has-file');
-                document.getElementById('video-id').value = '';
-                renderTimeline();
-            }
-            renderCreativesList();
-        };
         
         // ============ END BULK CREATIVES ============
         
@@ -4375,7 +4159,6 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             
             document.getElementById('btn-preview').disabled = !previewReady;
             document.getElementById('btn-generate').disabled = !generateReady;
-            document.getElementById('btn-queue').disabled = !generateReady;
             
             // Save current creative state and update list
             saveCurrentCreative();
@@ -5182,56 +4965,6 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             updateBulkButtons();
         };
         
-        // Add all to queue
-        window.addAllToQueue = async function() {
-            savePairMetadata();
-            
-            const ready = videoPairs.filter(p => p.textFilename && p.cleanFilename && p.analyzed && p.texts.length > 0 && p.author);
-            if (ready.length === 0) {
-                alert('Ni pripravljenih kreativ!');
-                return;
-            }
-            
-            const selectedCountries = getSelectedCountries2();
-            if (selectedCountries.length === 0) {
-                alert('Izberi vsaj eno državo!');
-                return;
-            }
-            
-            const date = new Date().toLocaleDateString('sl-SI', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\. /g, '-').replace('.', '');
-            
-            let added = 0;
-            for (const pair of ready) {
-                try {
-                    const name = `${pair.id}_${date}_${pair.product}_${pair.type}_${pair.author}`;
-                    
-                    await window.postJSON('/api/queue/add', {
-                        mode: 'localize',
-                        name: name,
-                        namingParts: { id: pair.id, date, product: pair.product, type: pair.type, author: pair.author },
-                        videoClean: pair.cleanFilename,
-                        texts: pair.texts,
-                        style: pair.style,
-                        fontSize: pair.fontSize,
-                        countries: selectedCountries
-                    });
-                    added++;
-                } catch (e) {
-                    console.error('Queue add failed for', pair.id, e);
-                }
-            }
-            
-            alert(`✅ Dodano ${added} kreativ v vrsto`);
-            refreshQueue();
-            
-            // Clear queued pairs
-            videoPairs = videoPairs.filter(p => !ready.includes(p));
-            currentPairIndex = -1;
-            renderPairsList();
-            document.getElementById('pair-edit-panel').style.display = 'none';
-            document.getElementById('no-pair-selected').style.display = 'flex';
-            updateBulkButtons();
-        };
         
         // Clear all pairs
         window.clearAllPairs = function() {
@@ -5253,11 +4986,9 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             
             const analyzeAllBtn = document.getElementById('btn-analyze-all');
             const generateAllBtn = document.getElementById('btn-generate-all');
-            const queueAllBtn = document.getElementById('btn-queue-all');
             
             if (analyzeAllBtn) analyzeAllBtn.disabled = !hasUnanalyzed;
             if (generateAllBtn) generateAllBtn.disabled = !hasReady;
-            if (queueAllBtn) queueAllBtn.disabled = !hasReady;
         }
         
         // Mode 2 helper functions
@@ -5663,187 +5394,13 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         window.analyzeVideo = function() { console.log('Use analyzeSinglePair() for bulk mode'); };
         window.localizeVideo = function() { console.log('Use generateAllPairs() for bulk mode'); };
         
-        // ============ QUEUE FUNCTIONS ============
-        
-        // Add to queue - Mode 1 (library texts)
-        window.addToQueue = async function() {
-            const id = document.getElementById('video-id').value.trim();
-            const date = document.getElementById('video-date').value;
-            const product = document.getElementById('video-product').value;
-            const type = document.getElementById('video-type').value;
-            const author = document.getElementById('video-author').value.toUpperCase();
-            const namingParts = { id, date, product, type, author };
-            const name = `${id}_${date}_${product}_${type}_${author}`;
-            
-            const texts = flattenTexts();
-            
-            if (texts.length === 0) {
-                alert('Ni tekstov za dodati!');
-                return;
-            }
-            
-            // Get selected countries
-            const selectedCountries = getSelectedCountries();
-            if (selectedCountries.length === 0) {
-                alert('Izberi vsaj eno državo!');
-                return;
-            }
-            
-            try {
-                const data = await window.postJSON('/api/queue/add', {
-                    mode: 'library',
-                    name,
-                    namingParts,
-                    videoClean: uploadedFilename,
-                    texts,
-                    style: selectedStyle,
-                    fontSize,
-                    countries: selectedCountries
-                });
-                
-                if (data.error) throw new Error(data.error);
-                
-                alert(`✅ Dodano v vrsto: ${name} (${selectedCountries.length} držav)`);
-                refreshQueue();
-                clearAll();
-            } catch(e) {
-                alert('Napaka: ' + e.message);
-            }
-        };
-        
-        // Add to queue - Mode 2 (localize existing)
-        window.addToQueueMode2 = async function() {
-            const id = document.getElementById('video-id-2').value.trim();
-            const date = document.getElementById('video-date-2').value;
-            const product = document.getElementById('video-product-2').value;
-            const type = document.getElementById('video-type-2').value;
-            const author = document.getElementById('video-author-2').value.toUpperCase();
-            const namingParts = { id, date, product, type, author };
-            const name = `${id}_${date}_${product}_${type}_${author}`;
-            
-            const style2 = document.getElementById('style-select-2').value;
-            const fontSize2 = parseInt(document.getElementById('font-size-2').value);
-            
-            // Get selected countries for Mode 2
-            const selectedCountries2 = getSelectedCountries2();
-            if (selectedCountries2.length === 0) {
-                alert('Izberi vsaj eno državo!');
-                return;
-            }
-            
-            try {
-                const data = await window.postJSON('/api/queue/add', {
-                    mode: 'localize',
-                    name,
-                    namingParts,
-                    videoClean: uploadedCleanVideo,
-                    texts: detectedTexts.map(t => ({ 
-                        start: parseFloat(t.start) || t.timestamp || 0, 
-                        end: parseFloat(t.end) || (t.timestamp || 0) + (t.duration || 2), 
-                        text: t.text,
-                        position: t.position || 'center'
-                    })),
-                    style: style2,
-                    fontSize: fontSize2,
-                    countries: selectedCountries2
-                });
-                
-                if (data.error) throw new Error(data.error);
-                
-                alert(`✅ Dodano v vrsto: ${name} (${selectedCountries2.length} držav)`);
-                refreshQueue();
-                
-                // Reset Mode 2
-                uploadedTextVideo = null;
-                uploadedCleanVideo = null;
-                detectedTexts = [];
-                document.getElementById('upload-zone-text').innerHTML = '<div class="icon">📝</div><h4>Video Z besedilom</h4><p>Za analizo pozicij tekstov</p>';
-                document.getElementById('upload-zone-clean').innerHTML = '<div class="icon">🎬</div><h4>Video BREZ besedila</h4><p>Za končni render</p>';
-                document.getElementById('detected-texts').style.display = 'none';
-                document.getElementById('video-name-2').value = '';
-                checkReadyMode2();
-            } catch(e) {
-                alert('Napaka: ' + e.message);
-            }
-        };
-        
-        // Refresh queue list
-        window.refreshQueue = async function() {
-            try {
-                const data = await getJSON('/api/queue/list');
-                // Filter out completed jobs - they're visible in Downloads
-                const queue = (data.queue || []).filter(job => job.status !== 'done');
-                
-                document.getElementById('queue-count').textContent = `${queue.length} v vrsti`;
-                
-                if (queue.length === 0) {
-                    document.getElementById('queue-list').innerHTML = '<div class="empty-state">Čakalna vrsta je prazna</div>';
-                } else {
-                    document.getElementById('queue-list').innerHTML = queue.map(job => `
-                        <div class="queue-item">
-                            <div class="queue-item-info">
-                                <div class="queue-item-name">${job.name}</div>
-                                <div class="queue-item-meta">${job.texts?.length || 0} tekstov • ${job.mode === 'library' ? 'Knjižnica' : 'Lokalizacija'}</div>
-                            </div>
-                            <span class="queue-item-status ${job.status}">${
-                                job.status === 'pending' ? '⏳ Čaka' :
-                                job.status === 'processing' ? '🔄 V teku' :
-                                job.status === 'done' ? '✅ Končano' : '❌ Napaka'
-                            }</span>
-                            ${job.status === 'pending' ? `<button class="btn btn-secondary btn-sm" onclick="removeFromQueue('${job.id}')" style="margin-left:10px">🗑️</button>` : ''}
-                        </div>
-                    `).join('');
-                }
-            } catch(e) {
-                console.error('Queue refresh error:', e);
-            }
-        };
-        
-        // Remove from queue
-        window.removeFromQueue = async function(jobId) {
-            if (!confirm('Odstrani iz vrste?')) return;
-            try {
-                await window.postJSON('/api/queue/remove', { jobId });
-                refreshQueue();
-            } catch(e) {
-                alert('Napaka: ' + e.message);
-            }
-        };
-        
-        // Process queue now
-        window.processQueueNow = async function() {
-            if (!confirm('Začni procesiranje vseh v vrsti ZDAJ?')) return;
-            try {
-                const data = await window.postJSON('/api/queue/process', {});
-                alert(`🚀 Procesiranje začeto! ${data.count} job(s) v vrsti.`);
-                refreshQueue();
-            } catch(e) {
-                alert('Napaka: ' + e.message);
-            }
-        };
-        
-        // Load queue on page load
-        setTimeout(refreshQueue, 500);
-        
-        // ============ END QUEUE FUNCTIONS ============
         
         // ============ DOWNLOADS PANEL ============
         const FLAGS = { SI: '🇸🇮', HR: '🇭🇷', CZ: '🇨🇿', PL: '🇵🇱', GR: '🇬🇷', IT: '🇮🇹', HU: '🇭🇺', SK: '🇸🇰', DE: '🇩🇪', BG: '🇧🇬', RO: '🇷🇴' };
         const LANGS = ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
         let allDownloadJobs = [];
         let downloadedItems = {}; // Will be loaded per user
-        let currentDownloadTab = 'library'; // 'library' or 'localize'
         
-        window.switchDownloadTab = function(tab) {
-            currentDownloadTab = tab;
-            // Update tab styles
-            document.getElementById('tab-library').style.background = tab === 'library' ? '#10b981' : '#333';
-            document.getElementById('tab-library').style.color = tab === 'library' ? '#000' : '#888';
-            document.getElementById('tab-localize').style.background = tab === 'localize' ? '#10b981' : '#333';
-            document.getElementById('tab-localize').style.color = tab === 'localize' ? '#000' : '#888';
-            // Re-render with filter
-            filterDownloads();
-        };
         
         window.toggleDownloads = function() {
             const panel = document.getElementById('downloads-panel');
@@ -5866,17 +5423,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         }
         
         window.filterDownloads = function() {
-            const query = document.getElementById('downloads-search').value.toLowerCase();
-            // Filter by tab using source field
-            let filtered = allDownloadJobs.filter(j => {
-                const jobSource = j.source || 'library'; // Default to library for old jobs
-                return jobSource === currentDownloadTab;
-            });
-            // Apply search filter
-            if (query) {
-                filtered = filtered.filter(j => j.name?.toLowerCase().includes(query) || j.id?.toLowerCase().includes(query));
-            }
-            renderDownloads(filtered);
+            renderDownloadsList(allDownloadJobs);
         };
         
         function renderDownloads(jobs) {

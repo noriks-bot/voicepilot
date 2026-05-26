@@ -29,21 +29,6 @@ const upload = multer({
 const app = express();
 const PORT = process.env.PORT || 3006;
 const DATA_FILE = path.join(__dirname, 'data.json');
-const QUEUE_FILE = path.join(__dirname, 'queue.json');
-
-// Queue persistence
-function loadQueue() {
-    try {
-        if (fs.existsSync(QUEUE_FILE)) {
-            return JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8'));
-        }
-    } catch (e) { console.error('Queue load error:', e); }
-    return [];
-}
-
-function saveQueue(queue) {
-    fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
-}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -3395,131 +3380,15 @@ app.get('/api/localizer/generated-videos', (req, res) => {
 
 // ============ NIGHT QUEUE ENDPOINTS ============
 
-// Add job to queue
-app.post('/api/queue/add', (req, res) => {
-    const { mode, name, namingParts, videoClean, texts, style, fontSize, countries } = req.body;
-    if (!name || !videoClean || !texts?.length) {
-        return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    // Validate countries
-    const ALL_COUNTRIES = ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
-    const selectedCountries = (countries && Array.isArray(countries) && countries.length > 0) 
-        ? countries.filter(c => ALL_COUNTRIES.includes(c))
-        : ALL_COUNTRIES;
-    
-    const queue = loadQueue();
-    const job = {
-        id: `queue-${Date.now()}`,
-        mode,
-        name,
-        namingParts, // { id, date, product, type, author }
-        videoClean,
-        texts,
-        style: style || 'white',
-        fontSize: fontSize || 72,
-        countries: selectedCountries,
-        status: 'pending',
-        created: new Date().toISOString()
-    };
-    
-    queue.push(job);
-    saveQueue(queue);
-    
-    console.log(`[Queue] Added: ${name} (${texts.length} texts)`);
-    res.json({ success: true, jobId: job.id });
-});
-
-// List queue
-app.get('/api/queue/list', (req, res) => {
-    const queue = loadQueue();
-    res.json({ queue });
-});
-
-// Remove from queue
-app.post('/api/queue/remove', (req, res) => {
-    const { jobId } = req.body;
-    let queue = loadQueue();
-    queue = queue.filter(j => j.id !== jobId);
-    saveQueue(queue);
-    res.json({ success: true });
-});
-
-// Process queue now
-app.post('/api/queue/process', async (req, res) => {
-    const queue = loadQueue();
-    const pending = queue.filter(j => j.status === 'pending');
-    
-    if (pending.length === 0) {
-        return res.json({ message: 'Queue is empty', count: 0 });
-    }
-    
-    res.json({ message: 'Processing started', count: pending.length });
-    
-    // Process in background
-    processQueue();
-});
-
-// Background queue processor
-async function processQueue() {
-    const queue = loadQueue();
-    
-    for (const job of queue) {
-        if (job.status !== 'pending') continue;
-        
-        console.log(`[Queue] Processing: ${job.name}`);
-        job.status = 'processing';
-        saveQueue(queue);
-        
-        try {
-            const videoPath = path.join(__dirname, 'uploads', job.videoClean);
-            if (!fs.existsSync(videoPath)) {
-                throw new Error('Video not found');
-            }
-            
-            // Create a generation job and process it
-            const genJob = {
-                id: job.id,
-                name: job.name,
-                namingParts: job.namingParts, // { id, date, product, type, author }
-                videoClean: job.videoClean,
-                texts: job.texts,
-                style: job.style,
-                fontSize: job.fontSize || 72,
-                countries: job.countries, // Selected countries to generate
-                status: 'translating',
-                completed: 0,
-                outputs: {},
-                created: job.created
-            };
-            
-            localizerJobs.set(job.id, genJob);
-            await generateAllCountries(genJob, videoPath);
-            
-            job.status = 'done';
-            job.completedAt = new Date().toISOString();
-            console.log(`[Queue] Done: ${job.name}`);
-        } catch (e) {
-            console.error(`[Queue] Error processing ${job.name}:`, e);
-            job.status = 'error';
-            job.error = e.message;
-        }
-        
-        saveQueue(queue);
-    }
-    
-    console.log('[Queue] Processing complete');
-}
-
 // ============ END QUEUE ENDPOINTS ============
 
 // ============ FINANCE API ============
 
 const METAKOCKA_COMPANY_ID = 6371;
-const METAKOCKA_SECRET = 'ee759602-961d-4431-ac64-0725ae8d9665';
+const METAKOCKA_SECRET = process.env.METAKOCKA_SECRET || '';
 
 // Meta Ads API
-const META_ACCESS_TOKEN = 'EAAR1d7hDpEkBQs1YPhRZBgu4UZA8DLZBWzXXTItG3NL8LdpRmdhQ3nh1DHW0ZCfpOz25qT0n5Ca0PzrTcRtw1tHYZBATVMZCqn0rjrnUgZCYk6U57ZBisv0vpLLL9lIIn51bk7n5ISZBXdPTIDovAFHghGOsInJoqhvqQaWmey3qJByEiRTfcrWF3EsXYNZAm5yaRYL4y94n9H';
+const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || '';
 const META_AD_ACCOUNT = 'act_1922887421998222';
 
 // VAT rates by country code
