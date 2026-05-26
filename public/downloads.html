@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloads | Noriks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 30px; padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        h1 { font-size: 28px; }
+        .btn {
+            padding: 10px 20px; border-radius: 8px; border: none;
+            background: #6366f1; color: #fff; font-weight: 600;
+            cursor: pointer; text-decoration: none; display: inline-block;
+        }
+        .btn:hover { background: #4f46e5; }
+        .btn-success { background: #10b981; }
+        .btn-danger { background: #ef4444; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-warning { background: #f59e0b; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-sm { padding: 8px 16px; font-size: 13px; }
+        
+        /* In Progress Section */
+        .in-progress-section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            font-size: 16px;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Progress Card */
+        .progress-card {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 15px;
+        }
+        .progress-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px;
+        }
+        .progress-title { font-size: 18px; font-weight: 600; }
+        .progress-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .progress-status.translating { background: #3b82f6; }
+        .progress-status.generating { background: #10b981; }
+        .progress-bar-container {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #10b981, #3b82f6);
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        .progress-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: rgba(255,255,255,0.6);
+        }
+        .time-remaining {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+        
+        /* Job Cards */
+        .job-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .job-header {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            margin-bottom: 20px; padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .job-title { font-size: 18px; font-weight: 600; }
+        .job-meta { font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 5px; }
+        .job-date { 
+            font-size: 12px; color: rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.05); padding: 6px 12px;
+            border-radius: 6px;
+        }
+        
+        /* Video Grid */
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+        }
+        .video-item {
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .video-item:hover {
+            background: rgba(255,255,255,0.06);
+        }
+        .video-flag { font-size: 32px; }
+        .video-info { flex: 1; }
+        .video-name { font-weight: 600; font-size: 14px; }
+        .video-size { font-size: 12px; color: rgba(255,255,255,0.5); }
+        .video-item .btn { white-space: nowrap; }
+        
+        /* Download All */
+        .download-all {
+            display: flex; gap: 10px; flex-wrap: wrap;
+            margin-top: 15px; padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: rgba(255,255,255,0.5);
+        }
+        
+        /* Empty */
+        .empty {
+            text-align: center;
+            padding: 60px;
+            color: rgba(255,255,255,0.4);
+        }
+        .empty-icon { font-size: 48px; margin-bottom: 15px; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse { animation: pulse 2s infinite; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>📥 Video Downloads</h1>
+                <p style="color: rgba(255,255,255,0.5); margin-top: 5px;">Generirani videi za vse države</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div style="position: relative;">
+                    <input type="text" id="search-input" placeholder="🔍 Išči po imenu..." 
+                        oninput="filterJobs(this.value)"
+                        style="padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); 
+                        background: rgba(255,255,255,0.1); color: #fff; font-size: 14px; width: 220px;">
+                </div>
+                <a href="/" class="btn">← Nazaj</a>
+            </div>
+        </header>
+        
+        <!-- In Progress Jobs -->
+        <div id="in-progress-container"></div>
+        
+        <!-- Completed Jobs -->
+        <div id="jobs-container">
+            <div class="loading">Nalagam videe...</div>
+        </div>
+    </div>
+    
+    <script>
+        const FLAGS = {
+            HR: '🇭🇷', PL: '🇵🇱', CZ: '🇨🇿', SK: '🇸🇰',
+            HU: '🇭🇺', GR: '🇬🇷', IT: '🇮🇹', SI: '🇸🇮',
+            BG: '🇧🇬', RO: '🇷🇴'
+        };
+        
+        const COUNTRY_NAMES = {
+            HR: 'Hrvaška', PL: 'Poljska', CZ: 'Češka', SK: 'Slovaška',
+            HU: 'Madžarska', GR: 'Grčija', IT: 'Italija', SI: 'Slovenija'
+        };
+        
+        // Average time per country in seconds (based on typical generation time)
+        const AVG_TIME_PER_COUNTRY = 45; // ~45 seconds per country
+        const AVG_TRANSLATION_TIME = 15; // ~15 seconds for translation
+        
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
+        function formatDate(timestamp) {
+            let date;
+            // Handle different timestamp formats
+            if (typeof timestamp === 'number') {
+                date = new Date(timestamp);
+            } else if (typeof timestamp === 'string') {
+                // Try parsing as ISO string or number string
+                date = new Date(timestamp);
+                if (isNaN(date.getTime())) {
+                    // Try parsing as number
+                    date = new Date(parseInt(timestamp));
+                }
+            } else {
+                return 'Neznan datum';
+            }
+            
+            if (isNaN(date.getTime())) {
+                return 'Neznan datum';
+            }
+            
+            // Format: "25. feb. 2026, 17:45"
+            return date.toLocaleString('sl-SI', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function formatTimeRemaining(seconds) {
+            if (seconds < 60) return `~${Math.round(seconds)} sekund`;
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.round(seconds % 60);
+            if (mins < 2) return `~${mins} min ${secs} sek`;
+            return `~${mins} minut`;
+        }
+        
+        function renderInProgressJobs(jobs) {
+            const container = document.getElementById('in-progress-container');
+            const inProgressJobs = jobs.filter(j => 
+                (j.status === 'translating' || j.status === 'generating') && !j.cancelled
+            );
+            
+            if (inProgressJobs.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            
+            let html = `
+                <div class="in-progress-section">
+                    <div class="section-title">
+                        <span class="pulse">⏳</span> V obdelavi
+                    </div>
+            `;
+            
+            for (const job of inProgressJobs) {
+                const total = job.countries?.length || 7;
+                const completed = job.completed || 0;
+                const percent = job.status === 'translating' ? 5 : Math.round((completed / total) * 100);
+                
+                // Calculate time remaining
+                let timeRemaining = 0;
+                if (job.status === 'translating') {
+                    timeRemaining = AVG_TRANSLATION_TIME + (total * AVG_TIME_PER_COUNTRY);
+                } else {
+                    timeRemaining = (total - completed) * AVG_TIME_PER_COUNTRY;
+                }
+                
+                const statusText = job.status === 'translating' ? 'Prevajam...' : `Generiram ${job.currentLang || '...'}`;
+                const statusClass = job.status;
+                
+                // Get job name
+                let jobName = job.name || job.id;
+                if (job.namingParts) {
+                    const { id, date, product, type, author } = job.namingParts;
+                    jobName = `${id}_${date}_${product}_${type}_${author}`;
+                }
+                
+                html += `
+                    <div class="progress-card">
+                        <div class="progress-header">
+                            <div class="progress-title">${jobName}</div>
+                            <div class="progress-status ${statusClass}">${statusText}</div>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: ${percent}%"></div>
+                        </div>
+                        <div class="progress-details">
+                            <span>${completed}/${total} držav</span>
+                            <span class="time-remaining">⏱️ ${formatTimeRemaining(timeRemaining)}</span>
+                        </div>
+                        <div style="margin-top: 15px; display: flex; gap: 10px;">
+                            <button class="btn btn-danger btn-sm" onclick="cancelJob('${job.id}')">
+                                ❌ Prekini
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        async function loadJobs() {
+            try {
+                // Load in-progress jobs
+                const jobsResponse = await fetch('/api/localizer/jobs');
+                const jobsData = await jobsResponse.json();
+                renderInProgressJobs(jobsData.jobs || []);
+                
+                // Load completed videos
+                const response = await fetch('/api/localizer/generated-videos');
+                const data = await response.json();
+                
+                if (!data.jobs || data.jobs.length === 0) {
+                    document.getElementById('jobs-container').innerHTML = `
+                        <div class="empty">
+                            <div class="empty-icon">📭</div>
+                            <p>Ni še generiranih videov</p>
+                            <p style="margin-top: 10px;">
+                                <a href="/" class="btn btn-success">Ustvari nov video</a>
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = `
+                    <div class="section-title" style="margin-top: 20px;">
+                        ✅ Dokončani
+                    </div>
+                `;
+                
+                for (const job of data.jobs) {
+                    const videos = job.videos || [];
+                    const mp4s = videos.filter(v => v.name.endsWith('.mp4'));
+                    
+                    if (mp4s.length === 0) continue;
+                    
+                    const firstName = mp4s[0]?.name || '';
+                    const jobName = firstName.replace(/-[A-Z]{2}\.mp4$/, '').replace(/_[A-Z]{2}_/, '_') || job.id;
+                    
+                    html += `
+                        <div class="job-card">
+                            <div class="job-header">
+                                <div>
+                                    <div class="job-title">${jobName}</div>
+                                    <div class="job-meta">${mp4s.length} videov</div>
+                                </div>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <div class="job-date">${formatDate(job.timestamp)}</div>
+                                    <a href="/api/localizer/job/${job.id}/zip" class="btn btn-success btn-sm" title="Prenesi vse kot ZIP">
+                                        📦 Prenesi vse
+                                    </a>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteJob('${job.id}')" title="Zbriši vse videe">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="video-grid">
+                    `;
+                    
+                    for (const video of mp4s) {
+                        let country = '??';
+                        const parts = video.name.replace('.mp4', '').split('_');
+                        if (parts.length >= 3 && ['HR','CZ','PL','GR','IT','HU','SK','SI'].includes(parts[2])) {
+                            country = parts[2];
+                        } else {
+                            const match = video.name.match(/-([A-Z]{2})\.mp4$/);
+                            if (match) country = match[1];
+                        }
+                        const flag = FLAGS[country] || '🏳️';
+                        const countryName = COUNTRY_NAMES[country] || country;
+                        
+                        html += `
+                            <div class="video-item">
+                                <div class="video-flag">${flag}</div>
+                                <div class="video-info">
+                                    <div class="video-name">${countryName}</div>
+                                    <div class="video-size">${formatSize(video.size)}</div>
+                                </div>
+                                <a href="/uploads/generated/${job.id}/${video.name}" 
+                                   download="${video.name}" class="btn btn-sm btn-success">
+                                    ⬇️ Download
+                                </a>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `
+                            </div>
+                            <div class="download-all">
+                                <span style="color: rgba(255,255,255,0.5); font-size: 13px; line-height: 36px;">Vsi videi: </span>
+                    `;
+                    
+                    for (const video of mp4s) {
+                        let country = '??';
+                        const parts = video.name.replace('.mp4', '').split('_');
+                        if (parts.length >= 3 && ['HR','CZ','PL','GR','IT','HU','SK','SI'].includes(parts[2])) {
+                            country = parts[2];
+                        } else {
+                            const match = video.name.match(/-([A-Z]{2})\.mp4$/);
+                            if (match) country = match[1];
+                        }
+                        const flag = FLAGS[country] || '🏳️';
+                        
+                        html += `
+                            <a href="/uploads/generated/${job.id}/${video.name}" 
+                               download="${video.name}" class="btn btn-sm">
+                                ${flag}
+                            </a>
+                        `;
+                    }
+                    
+                    html += `
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('jobs-container').innerHTML = html;
+                
+            } catch (err) {
+                console.error('Failed to load:', err);
+                document.getElementById('jobs-container').innerHTML = `
+                    <div class="empty">
+                        <div class="empty-icon">❌</div>
+                        <p>Napaka pri nalaganju: ${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Search/filter functionality
+        let allJobsCache = [];
+        
+        function filterJobs(query) {
+            const searchTerm = query.toLowerCase().trim();
+            const jobCards = document.querySelectorAll('.job-card');
+            
+            jobCards.forEach(card => {
+                const title = card.querySelector('.job-title')?.textContent?.toLowerCase() || '';
+                if (searchTerm === '' || title.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+        
+        // Cancel a job in progress
+        async function cancelJob(jobId) {
+            if (!confirm('Res želiš prekiniti generiranje?')) return;
+            
+            try {
+                const response = await fetch(`/api/localizer/job/${jobId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadJobs(); // Refresh list
+                } else {
+                    alert('Napaka: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Napaka: ' + err.message);
+            }
+        }
+        
+        // Delete a completed job
+        async function deleteJob(jobId) {
+            if (!confirm('Res želiš zbrisati vse videe?')) return;
+            
+            try {
+                const response = await fetch(`/api/localizer/job/${jobId}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadJobs(); // Refresh list
+                } else {
+                    alert('Napaka: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Napaka: ' + err.message);
+            }
+        }
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadJobs);
+        
+        // Auto-refresh every 5 seconds to update progress
+        setInterval(loadJobs, 5000);
+    </script>
+</body>
+</html>
