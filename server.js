@@ -285,7 +285,7 @@ function readCreativesFromDb() {
         if ((!g.productType || g.productType === 'other') && r.product_type) g.productType = r.product_type;
         if (!g.fileDate && r.file_date) g.fileDate = r.file_date;
     }
-    const arr = Object.values(groups).map(g => ({
+    const arr = Object.values(groups).filter(g => g.videoCount > 0).map(g => ({
         creativeId: g.creativeId,
         productType: g.productType,
         fileDate: g.fileDate,
