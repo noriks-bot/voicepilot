@@ -3855,10 +3855,20 @@ app.get('/api/localizer/generated-videos', (req, res) => {
             const tsMatch = folder.match(/(\d+)/);
             const timestamp = tsMatch ? tsMatch[1] : Date.now();
             
+            // Look up mode (voiceover/subtitles/localizer)
+            const jobInfo = localizerJobs.get(folder);
+            let mode = jobInfo && jobInfo.mode ? jobInfo.mode : null;
+            if (!mode) {
+                const firstName = (videos[0] && videos[0].name) || '';
+                if (/_VO(_|\.|$)/i.test(firstName)) mode = 'voiceover';
+                else if (/_SRT(_|\.|$)/i.test(firstName)) mode = 'subtitles';
+                else mode = 'localizer';
+            }
             return {
                 id: folder,
                 timestamp,
-                videos
+                videos,
+                mode
             };
         });
         
