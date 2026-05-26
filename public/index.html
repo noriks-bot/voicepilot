@@ -2171,12 +2171,13 @@
                             <tr>
                                 <th>Ime</th>
                                 <th>Jeziki</th>
+                                <th>Status</th>
                                 <th>Cas</th>
                                 <th style="text-align:right;">Prenos</th>
                             </tr>
                         </thead>
                         <tbody id="downloads-tbody">
-                            <tr class="empty-row"><td colspan="4"><span class="spinner"></span>Nalagam ...</td></tr>
+                            <tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -7250,11 +7251,17 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const btn = document.getElementById('btn-refresh-downloads');
             if (!tbody) return;
             if (btn) btn.disabled = true;
-            tbody.innerHTML = '<tr class="empty-row"><td colspan="4"><span class="spinner"></span>Nalagam ...</td></tr>';
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>';
             try {
-                const res = await fetch('/api/localizer/generated-videos').then(r => r.json());
-                const jobs = (res.jobs || []).map(j => {
+                const [genRes, jobsRes] = await Promise.all([
+                    fetch('/api/localizer/generated-videos').then(r => r.json()),
+                    fetch('/api/localizer/jobs').then(r => r.json()).catch(() => ({ jobs: [] })),
+                ]);
+                const rows = [];
+                // completed (folders with files)
+                for (const j of (genRes.jobs || [])) {
                     const videos = (j.videos || []).filter(v => v.name && v.name.endsWith('.mp4'));
+                    if (videos.length === 0) continue;
                     const langs = new Set();
                     for (const v of videos) {
                         const m = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
@@ -7267,25 +7274,48 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         const idMatch = String(j.id).match(/(\d{10,})/);
                         if (idMatch) ts = Number(idMatch[1]);
                     }
-                    return { id: j.id, name, languages: [...langs], timestamp: ts, fileCount: videos.length };
-                });
-                jobs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                if (jobs.length === 0) {
-                    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Se ni generiranih videov.</td></tr>';
+                    rows.push({ kind: 'completed', id: j.id, name, languages: [...langs], timestamp: ts, fileCount: videos.length, status: 'done' });
+                }
+                // in-progress (jobs not done)
+                const completedIds = new Set(rows.map(r => r.id));
+                for (const j of (jobsRes.jobs || [])) {
+                    if (completedIds.has(j.id)) continue;
+                    const st = j.status || 'pending';
+                    if (['done', 'completed', 'complete'].includes(st)) continue;
+                    let ts = j.createdAt || j.startedAt || j.updatedAt || null;
+                    if (!ts && j.id) {
+                        const idMatch = String(j.id).match(/(\d{10,})/);
+                        if (idMatch) ts = Number(idMatch[1]);
+                    }
+                    const langs = j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []);
+                    rows.push({ kind: 'in_progress', id: j.id, name: j.filename || j.sourceFile || j.video || j.id, languages: langs, timestamp: ts, fileCount: j.outputs ? Object.keys(j.outputs).length : 0, status: st });
+                }
+                rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                if (rows.length === 0) {
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Se ni job-ov.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = jobs.map(r => {
+                tbody.innerHTML = rows.map(r => {
                     const langs = (r.languages || []).map(l => '<span class="lang-chip">' + l + '</span>').join('');
+                    let statusBg, statusFg, statusLbl;
+                    if (r.status === 'done') { statusBg = '#DCFCE7'; statusFg = '#15803d'; statusLbl = 'Koncano'; }
+                    else if (['failed', 'error'].includes(r.status)) { statusBg = '#FEE2E2'; statusFg = '#B91C1C'; statusLbl = 'Napaka'; }
+                    else { statusBg = '#FEF3C7'; statusFg = '#92400E'; statusLbl = 'V teku'; }
+                    const statusPill = '<span style="display:inline-block; padding:3px 10px; background:' + statusBg + '; color:' + statusFg + '; border-radius:12px; font-size:11px; font-weight:600;">' + statusLbl + '</span>';
+                    const action = r.kind === 'completed' ?
+                        '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi ZIP" style="font-weight:600;">Prenesi ZIP</a>' :
+                        '<span style="color:#9ca3af; font-size:11px;">-</span>';
                     return '<tr>' +
                         '<td><div class="activity-source">' + String(r.name) + '</div>' +
                         '<div style="color:#9ca3af; font-size:11px; margin-top:2px;">' + String(r.id) + ' &middot; ' + r.fileCount + ' datotek</div></td>' +
                         '<td><div class="activity-langs">' + (langs || '<span style="color:#9ca3af; font-size:11px;">-</span>') + '</div></td>' +
+                        '<td>' + statusPill + '</td>' +
                         '<td class="activity-time">' + _fmtDateDl(r.timestamp) + '</td>' +
-                        '<td style="text-align:right;"><a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi ZIP" style="font-weight:600;">Prenesi ZIP</a></td>' +
+                        '<td style="text-align:right;">' + action + '</td>' +
                         '</tr>';
                 }).join('');
             } catch (e) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Napaka: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Napaka: ' + e.message + '</td></tr>';
             } finally {
                 if (btn) btn.disabled = false;
             }
