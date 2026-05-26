@@ -48,6 +48,24 @@ const DROPBOX_FOLDERS = [
     '/NORIKS Team Folder/NORIKS_GP/TRANSLATED CREATIVES',
 ];
 
+// Helper: format today as DD-MM-YYYY for output filenames
+function todayDDMMYYYY() {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return dd + '-' + mm + '-' + d.getFullYear();
+}
+// Helper: build VO output filename per user spec: ID_DD-MM-YYYY_LANG_Product_Type_Author
+function buildVoFilename(np, lang) {
+    if (!np) return null;
+    const id = (np.id || '').toUpperCase();
+    const dateStr = todayDDMMYYYY();
+    const ucProduct = (np.product || '').toLowerCase().replace(/(^|_)([a-z])/g, (m,a,b)=>a+b.toUpperCase()); // Shirts, Boxers
+    const ucType = (np.type || 'New').toLowerCase().replace(/(^|_)([a-z])/g, (m,a,b)=>a+b.toUpperCase()); // New, Vo
+    const author = (np.author || '').toUpperCase();
+    return id + '_' + dateStr + '_' + (lang||'').toUpperCase() + '_' + ucProduct + '_' + ucType + (author ? '_' + author : '');
+}
+
 let _dbxToken = null;
 let _dbxTokenExp = 0;
 async function dropboxToken() {
@@ -3122,8 +3140,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         // Generate video with naming convention
         let videoName;
         if (job.namingParts) {
-            const { id, date, product, type, author } = job.namingParts;
-            videoName = `${id}_${date}_${lang}_${product}_${type}_${author}`;
+            // User-required format: ID980_26-05-2026_GR_Shirts_New_TK (today's date, DD-MM-YYYY)
+            videoName = buildVoFilename(job.namingParts, lang) || `${job.name}-${lang}`;
         } else {
             videoName = `${job.name}-${lang}`;
         }
@@ -3696,8 +3714,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         // Final: combine video + TTS audio + subtitles
         let videoName;
         if (job.namingParts) {
-            const { id, date, product, type, author } = job.namingParts;
-            videoName = `${id}_${date}_${lang}_${product}_${type}_${author}`;
+            // User-required format: ID980_26-05-2026_GR_Shirts_New_TK (today's date, DD-MM-YYYY)
+            videoName = buildVoFilename(job.namingParts, lang) || `${job.name}-${lang}`;
         } else {
             videoName = `${job.name}-${lang}`;
         }
