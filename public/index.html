@@ -6666,6 +6666,10 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const ml = document.getElementById('mode-localize');
                 if (ml) { ml.classList.add('active'); ml.style.cssText = 'display:block;'; }
             }
+            // Auto-load creatives table on first switch to creatives page
+            if (page === 'creatives' && typeof loadCreatives === 'function' && !window._creativesData) {
+                loadCreatives(false);
+            }
             try { localStorage.setItem('voicepilot_page', page); } catch(e) {}
         };
         document.addEventListener('DOMContentLoaded', function() {
@@ -6687,6 +6691,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         // ========== ALL CREATIVES ==========
         const CREATIVE_COUNTRIES = ["EN", "SI", "HR", "SK", "CZ", "HU", "PL", "RO", "GR", "IT", "DE", "BG", "AT"];
         let _creativesData = null;
+        window._creativesData = null;
 
         async function loadCreatives(forceRefresh) {
             const tbody = document.getElementById('creatives-tbody');
@@ -6697,7 +6702,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const r = await fetch('/api/creatives');
                 const data = await r.json();
                 if (data.error) throw new Error(data.error);
-                _creativesData = data;
+                _creativesData = data; window._creativesData = data;
                 if (meta) {
                     const ts = data.lastSyncAt ? new Date(data.lastSyncAt).toLocaleString('sl-SI') : 'nikoli';
                     meta.textContent = (data.total || 0) + ' ID, ' + (data.totalFiles || 0) + ' datotek, sync: ' + ts;
@@ -6718,7 +6723,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const r = await fetch('/api/creatives/sync', { method: 'POST' });
                 const data = await r.json();
                 if (data.error || data.ok === false) throw new Error(data.error || data.reason || 'sync failed');
-                _creativesData = data;
+                _creativesData = data; window._creativesData = data;
                 const meta = document.getElementById('creatives-meta');
                 if (meta) {
                     const ts = data.syncedAt ? new Date(data.syncedAt).toLocaleString('sl-SI') : '';
