@@ -2850,7 +2850,10 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         countries: countries, source: 'library', style: 'white', fontSize: 90
                     });
                     alert('✅ Voice-over generiranje startano! Poglej v Downloads.');
-                    saveVoState();
+                    // Reset form so user can upload new video immediately
+                    if (typeof window._voReset === 'function') window._voReset();
+                    // Close preview modal if open
+                    if (typeof closeVoModal === 'function') closeVoModal();
                 } catch(e) { alert('Napaka: ' + (e.message||e)); }
                 btn.textContent = '🚀 Generiraj vse z Voice-over'; btn.disabled = false;
             });
@@ -5144,7 +5147,9 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 });
                 
                 alert('✅ Voice-over generiranje startano! Poglej v Downloads.');
-                    saveVoState();
+                // Reset form so user can upload new video immediately
+                if (typeof window._voReset === 'function') window._voReset();
+                if (typeof closeVoModal === 'function') closeVoModal();
                 btn.textContent = '🚀 Generiraj vse z Voice-over';
                 btn.disabled = false;
             } catch (e) {
