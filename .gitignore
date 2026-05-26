@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.local
+*.log
+uploads/
+data/
+public/temp/
+*.mp4
+*.mp3
+*.wav
+.DS_Store
