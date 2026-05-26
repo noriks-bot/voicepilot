@@ -283,7 +283,11 @@ function readCreativesFromDb() {
         else g.imageCount++;
         if (r.modified && (!g.latestModified || r.modified > g.latestModified)) g.latestModified = r.modified;
         if ((!g.productType || g.productType === 'other') && r.product_type) g.productType = r.product_type;
-        if (!g.fileDate && r.file_date) g.fileDate = r.file_date;
+        if (r.file_date) {
+            // Ignore future-dated files (typos in filename like 2027 when current is 2026)
+            const futureCutoff = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
+            if (r.file_date <= futureCutoff && (!g.fileDate || r.file_date > g.fileDate)) g.fileDate = r.file_date;
+        }
     }
     const arr = Object.values(groups).filter(g => g.videoCount > 0).map(g => ({
         creativeId: g.creativeId,
@@ -300,6 +304,12 @@ function readCreativesFromDb() {
         authors: [...(g.authors||[])].sort(),
     }));
     arr.sort((a, b) => {
+        // Sort by fileDate (parsed from filename, YYYY-MM-DD) — newest first
+        // Fallback to latestModified, then to creativeId numeric desc
+        if (a.fileDate && b.fileDate) {
+            if (a.fileDate !== b.fileDate) return b.fileDate.localeCompare(a.fileDate);
+        } else if (a.fileDate) return -1;
+        else if (b.fileDate) return 1;
         if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);
         const an = parseInt((a.creativeId || '').replace(/\D/g, '')) || 0;
         const bn = parseInt((b.creativeId || '').replace(/\D/g, '')) || 0;

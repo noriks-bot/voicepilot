@@ -7617,6 +7617,17 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 });
             }
 
+            // Sort by newest date first (latestModified > fileDate fallback)
+            rows.sort((a, b) => {
+                const ta = a.latestModified ? new Date(a.latestModified).getTime() : (a.fileDate ? new Date(a.fileDate).getTime() : 0);
+                const tb = b.latestModified ? new Date(b.latestModified).getTime() : (b.fileDate ? new Date(b.fileDate).getTime() : 0);
+                if (tb !== ta) return tb - ta;
+                // Tie-break: numeric ID descending
+                const an = parseInt((a.creativeId||'').replace(/\D/g,''))||0;
+                const bn = parseInt((b.creativeId||'').replace(/\D/g,''))||0;
+                return bn - an;
+            });
+
             if (rows.length === 0) {
                 tbody.innerHTML = '<tr class="empty-row"><td colspan="' + colspan + '">Ni kreativ za prikaz</td></tr>';
                 return;
