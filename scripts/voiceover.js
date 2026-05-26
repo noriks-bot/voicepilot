@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || 'ff5070a28c04b3fd0122f71f068f1ea4937ddc194e5918152481b4ef4bd5fbab';
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_MODEL = 'eleven_multilingual_v2';
 const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel
 const FFMPEG = '/usr/local/bin/ffmpeg';
