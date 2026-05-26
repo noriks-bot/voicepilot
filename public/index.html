@@ -1553,43 +1553,49 @@
         .creatives-matrix tbody tr:hover td { background: #FAF9F7; }
         .creatives-matrix tbody tr:hover td.sticky-col { background: #FAF9F7; }
         .cc-cell {
-            font-weight: 700;
+            font-weight: 800;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
+            font-size: 18px;
             padding: 0 !important;
+            text-align: center;
+            transition: all 0.15s ease;
         }
         .cc-cell > .cc-mark {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            height: 38px;
-            border-radius: 6px;
-            margin: 3px;
-            font-size: 16px;
+            height: 100%;
+            min-height: 42px;
+            font-size: 20px;
             line-height: 1;
             transition: all 0.15s ease;
         }
+        .cc-yes {
+            background: #16a34a !important;
+        }
         .cc-yes > .cc-mark {
-            background: #DCFCE7;
-            color: #15803d;
-            border: 1px solid #BBF7D0;
+            color: #ffffff;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+        }
+        .cc-no {
+            background: #ef4444 !important;
         }
         .cc-no > .cc-mark {
-            background: #FEE2E2;
-            color: #B91C1C;
-            border: 1px solid #FECACA;
-            opacity: 0.75;
+            color: #ffffff;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
         }
         .cc-link { cursor: pointer; }
-        .cc-link:hover > .cc-mark {
-            background: #16a34a;
-            color: #fff;
-            border-color: #15803d;
-            transform: scale(1.06);
-            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.30);
+        .cc-link:hover {
+            background: #15803d !important;
+            transform: scale(1.04);
+            box-shadow: inset 0 0 0 2px #ffffff, 0 4px 14px rgba(22, 163, 74, 0.4);
         }
-        .cc-link[data-loading="1"] > .cc-mark { opacity: 0.6; cursor: wait; }
+        .cc-link:hover > .cc-mark {
+            transform: scale(1.1);
+        }
+        .cc-link[data-loading="1"] { opacity: 0.6; cursor: wait; }
+        .cc-link[data-loading="1"] > .cc-mark { cursor: wait; }
         .cov-cell { text-align: left !important; padding-left: 12px !important; min-width: 130px; }
         .cov-bar { display: inline-block; width: 70px; height: 6px; background: #EDEBE8; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 8px; }
         .cov-fill { display: block; height: 100%; background: #0A59D2; border-radius: 3px; }
