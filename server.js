@@ -3553,6 +3553,20 @@ Return ONLY valid JSON array:
             // No valid TTS - use silence
             fs.copyFileSync(fullSilencePath, combinedAudioPath);
         }
+
+        // Probe actual durations to ensure output is never shorter than expected
+        let probedVideoDur = videoDuration;
+        let probedAudioDur = videoDuration;
+        try {
+            const vProbe = await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${videoPath}"`);
+            const aProbe = await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${combinedAudioPath}"`);
+            probedVideoDur = parseFloat((vProbe.stdout || '').trim()) || videoDuration;
+            probedAudioDur = parseFloat((aProbe.stdout || '').trim()) || videoDuration;
+        } catch (e) {
+            console.error(`[${job.id}] [VO] probe failed for ${lang}:`, e.message);
+        }
+        const targetDur = Math.max(probedVideoDur, probedAudioDur, videoDuration);
+        console.log(`[${job.id}] [VO] ${lang} durations: video=${probedVideoDur.toFixed(2)}s, audio=${probedAudioDur.toFixed(2)}s, target=${targetDur.toFixed(2)}s`);
         
         // Create ASS subtitles (bottom-center, subtitle style)
         const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,5,30,30,200,1`;
@@ -3600,15 +3614,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${videoDuration} "${outVideo}" 2>&1`);
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             } else {
                 // No original audio - just voiceover
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outVideo}" 2>&1`);
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             }
         } catch (e) {
             // Fallback: no audio mix, just subtitles
             console.error(`[${job.id}] [VO] Audio mix error for ${lang}:`, e.message);
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outVideo}" 2>&1`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
         }
         
         job.outputs[lang] = outVideo;
