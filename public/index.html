@@ -6647,20 +6647,25 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             if (navItem) navItem.classList.add('active');
             // Set body class for page-based CSS visibility
             document.body.className = document.body.className.replace(/\bpage-\S+/g, '').trim() + ' page-' + page;
-            // Toggle mode-content active state
-            document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
+            // FORCE hide / show legacy .container + .mode-content (voiceover/localize live in legacy container)
+            const isLegacy = (page === 'voiceover' || page === 'localize');
+            document.querySelectorAll('.container').forEach(c => { c.style.display = isLegacy ? '' : 'none'; });
+            document.querySelectorAll('.mode-content').forEach(c => {
+                c.classList.remove('active');
+                c.style.display = 'none';
+            });
             if (page === 'voiceover') {
                 const mv = document.getElementById('mode-voiceover');
-                if (mv) { mv.classList.add('active'); mv.style.display = ''; }
+                if (mv) { mv.classList.add('active'); mv.style.display = 'block'; }
             } else if (page === 'localize') {
                 const ml = document.getElementById('mode-localize');
-                if (ml) { ml.classList.add('active'); ml.style.cssText = ''; }
+                if (ml) { ml.classList.add('active'); ml.style.cssText = 'display:block;'; }
             }
             try { localStorage.setItem('voicepilot_page', page); } catch(e) {}
         };
         document.addEventListener('DOMContentLoaded', function() {
-            let initial = 'voiceover';
-            try { initial = localStorage.getItem('voicepilot_page') || 'voiceover'; } catch(e) {}
+            let initial = 'home';
+            try { initial = localStorage.getItem('voicepilot_page') || 'home'; } catch(e) {}
             switchPage(initial);
             // Sync user info to sidebar
             try {
