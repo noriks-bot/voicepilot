@@ -44,7 +44,6 @@ const DROPBOX_FOLDERS = [
     '/NORIKS Team Folder/TEJA - KREATIVE/Extra',
     '/NORIKS Team Folder/Faraz',
     '/NORIKS Team Folder/Wasif',
-    '/NORIKS Team Folder/SERBIA - CONTENT/Final',
     '/NORIKS Team Folder/NORIKS_GP/TRANSLATED CREATIVES',
 ];
 
@@ -383,6 +382,7 @@ app.get('/api/dropbox/share-link', async (req, res) => {
     try {
         const p = req.query.path;
         if (!p) return res.status(400).json({ error: 'path required' });
+        if (!String(p).startsWith('/')) return res.status(400).json({ error: 'path must start with /' });
         const url = await dropboxGetSharedLink(String(p));
         // Convert ?dl=0 to ?dl=0 (preview) or ?raw=1 for direct media
         res.json({ url, previewUrl: url, rawUrl: url.replace(/\?dl=0$/, '?raw=1') });
