@@ -7651,11 +7651,23 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const authorCell = '<td class="author-cell">' + (authorList.length
                     ? authorList.map(function(a){return '<span class="author-pill author-' + a.toLowerCase() + '">' + a + '</span>';}).join(' ')
                     : '<span class="author-empty">-</span>') + '</td>';
-                const dateStr = c.fileDate ? (function(d){
-                    const parts = d.split('-'); // YYYY-MM-DD
-                    if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
-                    return d;
-                })(c.fileDate) : '-';
+                const dateStr = (function(){
+                    // Prefer latestModified (newest file timestamp) > fileDate (parsed from name)
+                    if (c.latestModified) {
+                        const d = new Date(c.latestModified);
+                        if (!isNaN(d)) {
+                            const dd = String(d.getDate()).padStart(2,'0');
+                            const mm = String(d.getMonth()+1).padStart(2,'0');
+                            return dd + '.' + mm + '.' + d.getFullYear();
+                        }
+                    }
+                    if (c.fileDate) {
+                        const parts = c.fileDate.split('-');
+                        if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
+                        return c.fileDate;
+                    }
+                    return '-';
+                })();
                 return '<tr>' +
                     '<td class="date-cell">' + dateStr + '</td>' +
                     '<td class="sticky-col"><span class="creative-id">' + c.creativeId + '</span></td>' +
