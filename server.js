@@ -3767,6 +3767,32 @@ app.get('/api/localizer/generated-videos', (req, res) => {
     }
 });
 
+// Download generated folder as ZIP (works for /uploads/generated/<id>/)
+app.get('/api/localizer/generated/:id/zip', (req, res) => {
+    try {
+        const folderId = req.params.id;
+        const dir = path.join(__dirname, 'uploads', 'generated', folderId);
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+            return res.status(404).json({ error: 'Folder not found' });
+        }
+        const files = fs.readdirSync(dir)
+            .filter(f => /\.(mp4|mov|webm|mkv|mp3|wav|srt|ass)$/i.test(f));
+        if (files.length === 0) return res.status(400).json({ error: 'No downloadable files' });
+
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${folderId}.zip"`);
+        const archive = archiver('zip', { zlib: { level: 5 } });
+        archive.pipe(res);
+        for (const f of files) {
+            archive.file(path.join(dir, f), { name: f });
+        }
+        archive.finalize();
+    } catch (e) {
+        console.error('[generated/zip]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ============ NIGHT QUEUE ENDPOINTS ============
 
 // ============ END QUEUE ENDPOINTS ============

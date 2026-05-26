@@ -7371,9 +7371,9 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const statusLbl = _statusLabel(r.status);
                 const sizeStr = r.totalSize ? ' (' + _fmtSize(r.totalSize) + ')' : '';
                 const actions = r.kind === 'completed' ?
-                    '<a class="btn-link" href="/api/localizer/job/' + r.id + '/zip" title="Prenesi ZIP">ZIP</a>' +
+                    '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi ZIP">ZIP</a>' +
                     ' <button class="btn-link" onclick="showDownloadFiles(&quot;' + r.id + '&quot;)" title="Pokazi datoteke">Datoteke</button>' :
-                    '<button class="btn-link" onclick="switchPage(&quot;voiceover&quot;)">Odpri</button>';
+                    '<span style="color:#9ca3af; font-size:11px;">-</span>';
                 return '<tr>' +
                     '<td><span class="activity-job">' + String(r.id).slice(0, 18) + '</span></td>' +
                     '<td><div class="activity-source" title="' + String(r.name).replace(/"/g, '&quot;') + '">' + String(r.name) + '</div></td>' +
