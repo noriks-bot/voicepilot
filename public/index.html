@@ -1572,27 +1572,27 @@
             transition: all 0.15s ease;
         }
         .cc-yes {
-            background: #16a34a !important;
+            background: #DCFCE7 !important;
         }
         .cc-yes > .cc-mark {
-            color: #ffffff;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+            color: #15803d;
         }
         .cc-no {
-            background: #ef4444 !important;
+            background: #FEE2E2 !important;
         }
         .cc-no > .cc-mark {
-            color: #ffffff;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+            color: #B91C1C;
+            opacity: 0.7;
         }
         .cc-link { cursor: pointer; }
         .cc-link:hover {
-            background: #15803d !important;
+            background: #BBF7D0 !important;
             transform: scale(1.04);
-            box-shadow: inset 0 0 0 2px #ffffff, 0 4px 14px rgba(22, 163, 74, 0.4);
+            box-shadow: inset 0 0 0 2px #86EFAC, 0 4px 14px rgba(22, 163, 74, 0.15);
         }
         .cc-link:hover > .cc-mark {
             transform: scale(1.1);
+            color: #14532D;
         }
         .cc-link[data-loading="1"] { opacity: 0.6; cursor: wait; }
         .cc-link[data-loading="1"] > .cc-mark { cursor: wait; }
@@ -2551,17 +2551,12 @@
                         </div>
                     </div>
                 </div>
-                
-                <!-- OR: Upload SRT -->
-                <div style="background:#0f0f0f; border:1px solid #444; border-radius:12px; padding:15px; margin-bottom:15px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="color:#fbbf24; font-weight:600;">📄 ALI naloži SRT datoteko</span>
-                        <div style="flex:1; padding:10px; border:1px dashed #444; border-radius:6px; text-align:center; cursor:pointer; color:#888; font-size:13px;" id="vo-srt-zone">
-                            Klikni za SRT
-                            <input type="file" accept=".srt,.vtt" id="vo-srt-input" style="position:absolute; opacity:0; width:0; height:0;">
-                        </div>
-                        <span id="vo-srt-status" style="color:#888; font-size:12px;"></span>
-                    </div>
+
+                <!-- Hidden SRT defaults (section removed - we use text only) -->
+                <div style="display:none;">
+                    <div id="vo-srt-zone">Klikni za SRT</div>
+                    <input type="file" accept=".srt,.vtt" id="vo-srt-input">
+                    <span id="vo-srt-status"></span>
                 </div>
 
                 <!-- Step 2: Besedila / poante -->
