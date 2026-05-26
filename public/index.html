@@ -3012,7 +3012,55 @@
                 <!-- Step 2: Besedila / poante -->
                 <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
                     <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Besedila / poante</h4>
-                    <p style="color:#78716c; font-size:13px; margin:0 0 14px 34px;">Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.</p>
+                    <p style="color:#78716c; font-size:13px; margin:0 0 10px 34px;" id="vo-step2-help">Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.</p>
+                    <div style="margin:0 0 12px; display:flex; gap:10px;">
+                        <label id="vo-mode-ai-lbl" style="flex:1; padding:10px 12px; border:2px solid #0A59D2; background:#EFF6FF; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="radio" name="vo-script-mode" value="ai" checked onchange="window._voUpdMode()">
+                            <div><div style="font-weight:600; font-size:13px; color:#0F172A;">🤖 AI sestavi script</div><div style="font-size:11px; color:#57534E;">vpiši poante, AI naredi zgodbo</div></div>
+                        </label>
+                        <label id="vo-mode-srt-lbl" style="flex:1; padding:10px 12px; border:2px solid #E7E5E4; background:#fff; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;">
+                            <input type="radio" name="vo-script-mode" value="srt" onchange="window._voUpdMode()">
+                            <div><div style="font-weight:600; font-size:13px; color:#0F172A;">📝 Že imam SRT</div><div style="font-size:11px; color:#57534E;">prilepi SRT, preskoči AI</div></div>
+                        </label>
+                    </div>
+                    <script>
+                    window._voUpdMode = function() {
+                        var ai = document.getElementById('vo-mode-ai-lbl');
+                        var srt = document.getElementById('vo-mode-srt-lbl');
+                        var help = document.getElementById('vo-step2-help');
+                        var ta = document.getElementById('vo-points');
+                        var val = (document.querySelector('input[name="vo-script-mode"]:checked')||{}).value || 'ai';
+                        if (val === 'ai') {
+                            ai.style.border='2px solid #0A59D2'; ai.style.background='#EFF6FF';
+                            srt.style.border='2px solid #E7E5E4'; srt.style.background='#fff';
+                            help.textContent = 'Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.';
+                            ta.placeholder = '4+2 brezplačno 🔥\nNajboljša majica, kar jih boste kdaj nosili\nUdobnejša zgoraj, bolj sproščena v predelu trupa';
+                        } else {
+                            srt.style.border='2px solid #0A59D2'; srt.style.background='#EFF6FF';
+                            ai.style.border='2px solid #E7E5E4'; ai.style.background='#fff';
+                            help.textContent = 'Prilepi že pripravljen SRT. Sistem ga bo direktno uporabil, brez AI generacije.';
+                            ta.placeholder = '1\n00:00:00,000 --> 00:00:02,000\nVisible belly?\n\n2\n00:00:02,300 --> 00:00:04,300\nIt\'s not your fault.\n\n...';
+                        }
+                    };
+                    window._voGetScriptMode = function() { return (document.querySelector('input[name="vo-script-mode"]:checked')||{}).value || 'ai'; };
+                    window._voParseSRT = function(text) {
+                        var blocks = text.replace(/\r/g,'').split(/\n\n+/);
+                        var segs = [];
+                        var toSec = function(ts){ var m = ts.match(/(\d+):(\d+):(\d+)[,.](\d+)/); if(!m) return 0; return (+m[1])*3600 + (+m[2])*60 + (+m[3]) + (+m[4])/1000; };
+                        blocks.forEach(function(b){
+                            var lines = b.trim().split('\n');
+                            if (lines.length < 2) return;
+                            var idx = lines[0].match(/^\d+$/) ? 1 : 0;
+                            var tline = lines[idx]||'';
+                            var tm = tline.match(/(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/);
+                            if (!tm) return;
+                            var txt = lines.slice(idx+1).join(' ').trim();
+                            if (!txt) return;
+                            segs.push({ start: toSec(tm[1]), end: toSec(tm[2]), text: txt });
+                        });
+                        return segs;
+                    };
+                    </script>
                     <textarea id="vo-points" style="width:100%; min-height:160px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:14px; resize:vertical; line-height:1.8; font-family:'JetBrains Mono', monospace;" placeholder="4+2 brezplačno 🔥
 Najboljša majica, kar jih boste kdaj nosili
 Udobnejša zgoraj, bolj sproščena v predelu trupa
@@ -3071,7 +3119,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         <div id="vo-script-items"></div>
                         <button id="btn-vo-regen" style="width:100%; padding:10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; margin:10px 0; transition:all 0.15s ease;" onmouseover="this.style.background='#EFF6FF';" onmouseout="this.style.background='#fff';">🔄 Regeneriraj besedilo</button>
                         <div id="vo-preview-video-container" style="display:none; margin:15px 0;">
-                            <video id="vo-preview-video" style="width:100%; border-radius:8px;" controls></video>
+                            <video id="vo-preview-video" style="width:30%; max-width:360px; border-radius:8px; display:block; margin:0 auto;" controls></video>
                         </div>
                         <div style="display:flex; flex-wrap:wrap; gap:8px; margin:15px 0;">
                             <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="SI" checked> 🇸🇮</label>
@@ -3203,13 +3251,25 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 var btn = this;
                 btn.disabled = true;
                 try {
-                    if (!voSrtLoaded && (!voScript.length || btn.textContent.includes('Regeneriraj'))) {
-                        var points = document.getElementById('vo-points').value.trim();
-                        if (!points) { alert('Vpiši besedila/poante!'); btn.disabled = false; return; }
+                    var _voMode = (window._voGetScriptMode && window._voGetScriptMode()) || 'ai';
+                    var _voPointsTxt = document.getElementById('vo-points').value.trim();
+                    if (!_voPointsTxt) { alert('Vpiši besedila/poante!'); btn.disabled = false; return; }
+                    // Auto-detect SRT format
+                    var _looksLikeSRT = /\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->/.test(_voPointsTxt);
+                    if (_voMode === 'srt' || _looksLikeSRT) {
+                        if (!voSrtLoaded || btn.textContent.includes('Regeneriraj')) {
+                            var _parsed = (window._voParseSRT && window._voParseSRT(_voPointsTxt)) || parseSRT(_voPointsTxt);
+                            if (!_parsed || !_parsed.length) { alert('SRT ni veljaven. Preveri format.'); btn.disabled = false; return; }
+                            voScript = _parsed;
+                            voSrtLoaded = true;
+                            renderScriptEditor();
+                            document.getElementById('vo-script-editor').style.display = 'block';
+                        }
+                    } else if (!voSrtLoaded && (!voScript.length || btn.textContent.includes('Regeneriraj'))) {
                         var prompt = document.getElementById('vo-prompt').value.trim();
                         btn.textContent = '⏳ Generiram besedilo...';
                         var scriptData = await window.postJSON('/api/localizer/voiceover-script', {
-                            texts: [{ text: points }],
+                            texts: [{ text: _voPointsTxt }],
                             videoDuration: voVideoDuration || 30,
                             product: document.getElementById('vo-name-product')?.value || 'tshirt',
                             userPrompt: prompt,
