@@ -56,14 +56,34 @@ function todayDDMMYYYY() {
     return dd + '-' + mm + '-' + d.getFullYear();
 }
 // Helper: build VO output filename per user spec: ID_DD-MM-YYYY_LANG_Product_Type_Author
-function buildVoFilename(np, lang) {
-    if (!np) return null;
-    const id = (np.id || '').toUpperCase();
+function buildVoFilename(np, lang, origName) {
+    // Build VO output filename from original video name + today's date + target language.
+    // Pattern: ID###_DD-MM-YYYY_LANG_<rest from original>
+    // Example: original "ID980_26-05-2026_EN_Shirts_New_TK.mp4" + lang GR
+    //       => "ID980_<today>_GR_Shirts_New_TK"
     const dateStr = todayDDMMYYYY();
-    const ucProduct = (np.product || '').toLowerCase().replace(/(^|_)([a-z])/g, (m,a,b)=>a+b.toUpperCase()); // Shirts, Boxers
-    const ucType = (np.type || 'New').toLowerCase().replace(/(^|_)([a-z])/g, (m,a,b)=>a+b.toUpperCase()); // New, Vo
-    const author = (np.author || '').toUpperCase();
-    return id + '_' + dateStr + '_' + (lang||'').toUpperCase() + '_' + ucProduct + '_' + ucType + (author ? '_' + author : '');
+    const langU = (lang || '').toUpperCase();
+    const COUNTRY_CODES = ['EN','SI','HR','SK','CZ','HU','PL','RO','GR','IT','DE','BG','AT'];
+    // Strip extension, split by underscore
+    const base = String(origName || '').replace(/\.[a-z0-9]+$/i, '');
+    const parts = base.split('_').filter(Boolean);
+    if (parts.length === 0) {
+        // Fallback to namingParts if no original name
+        if (!np) return null;
+        const id = (np.id || 'ID000').toUpperCase();
+        return id + '_' + dateStr + '_' + langU;
+    }
+    // First part = ID (must start with ID or ID###<suffix>)
+    const idPart = parts[0].toUpperCase();
+    let restStart = 1;
+    // Skip date if present
+    if (parts[1] && /^\d{2}-\d{2}-\d{2,4}$/.test(parts[1])) restStart = 2;
+    // Skip country code if present at next position
+    if (parts[restStart] && COUNTRY_CODES.includes(parts[restStart].toUpperCase())) restStart++;
+    const rest = parts.slice(restStart).join('_');
+    return rest
+        ? idPart + '_' + dateStr + '_' + langU + '_' + rest
+        : idPart + '_' + dateStr + '_' + langU;
 }
 
 let _dbxToken = null;
@@ -3141,7 +3161,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let videoName;
         if (job.namingParts) {
             // User-required format: ID980_26-05-2026_GR_Shirts_New_TK (today's date, DD-MM-YYYY)
-            videoName = buildVoFilename(job.namingParts, lang) || `${job.name}-${lang}`;
+            videoName = buildVoFilename(job.namingParts, lang, job.name) || `${job.name}-${lang}`;
         } else {
             videoName = `${job.name}-${lang}`;
         }
@@ -3715,7 +3735,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         let videoName;
         if (job.namingParts) {
             // User-required format: ID980_26-05-2026_GR_Shirts_New_TK (today's date, DD-MM-YYYY)
-            videoName = buildVoFilename(job.namingParts, lang) || `${job.name}-${lang}`;
+            videoName = buildVoFilename(job.namingParts, lang, job.name) || `${job.name}-${lang}`;
         } else {
             videoName = `${job.name}-${lang}`;
         }
