@@ -7068,9 +7068,17 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
 
             tbody.innerHTML = rows.map(c => {
                 const present = countriesPresent(c);
+                // fallback file = first available file across countries (for EN or cells without per-country mapping)
+                const fbcMap = c.filesByCountry || {};
+                const fallbackFile = (function(){
+                    const keys = Object.keys(fbcMap);
+                    for (const k of keys) { if (fbcMap[k] && fbcMap[k].path) return fbcMap[k]; }
+                    return null;
+                })();
                 const cells = CREATIVE_COUNTRIES.map(cc => {
                     const has = present.has(cc);
-                    const file = (c.filesByCountry || {})[cc];
+                    let file = fbcMap[cc];
+                    if (has && (!file || !file.path) && fallbackFile) file = fallbackFile;
                     if (has && file && file.path) {
                         const safePath = file.path.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                         return '<td class="cc-cell cc-yes cc-link" data-path="' + safePath + '" onclick="openDropboxLink(this)" title="Klikni za odpiranje na Dropbox: ' + (file.name || '') + '"><span class="cc-mark">+</span></td>';
