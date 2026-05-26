@@ -1901,6 +1901,10 @@
             </a>
 
             <div class="sidebar-section-label">Account</div>
+            <a class="nav-item" data-page="downloads" onclick="switchPage('downloads')">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+                <span class="nav-label">Downloads</span>
+            </a>
             <a class="nav-item" data-page="settings" onclick="switchPage('settings')">
                 <span class="icon">⚙️</span><span class="label">Settings</span>
             </a>
@@ -1959,7 +1963,7 @@
                         </div>
                         <div class="quick-arrow">&rarr;</div>
                     </a>
-                    <a class="quick-card" href="downloads.html">
+                    <a class="quick-card" href="javascript:void(0)" onclick="switchPage('downloads')">
                         <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
                         <div class="quick-body">
                             <div class="quick-title">Downloads</div>
@@ -2031,7 +2035,7 @@
                         <p>Podnapisi + AI govor iz tekstov knjižnice.</p>
                     </div>
                     <div class="page-actions">
-                        <a href="downloads.html" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
+                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
                     </div>
                 </div>
                 <!-- INSERT_CONTAINER_HERE -->
@@ -2046,7 +2050,7 @@
                         <p>Naloži video pare (text + clean), zaznaj teksti, lokaliziraj v vse trge.</p>
                     </div>
                     <div class="page-actions">
-                        <a href="downloads.html" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
+                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
                     </div>
                 </div>
                 <!-- Actual UI lives in #mode-localize inside .container, made visible via body.page-localize CSS -->
@@ -2111,6 +2115,49 @@
                 </div>
             </section>
 
+            <!-- DOWNLOADS page -->
+            <section class="page-content" id="page-downloads" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>Downloads</h1>
+                        <p>Vsi generirani videoposnetki in datoteke.</p>
+                    </div>
+                    <div class="page-actions">
+                        <button class="btn-refresh" onclick="loadDownloads()" id="btn-refresh-downloads">Osvezi</button>
+                    </div>
+                </div>
+
+                <div class="creatives-toolbar">
+                    <input class="search" id="downloads-search" placeholder="Isci po imenu, ID ..." oninput="renderDownloads()">
+                    <select id="downloads-status" onchange="renderDownloads()">
+                        <option value="">Vsi statusi</option>
+                        <option value="done">Koncani</option>
+                        <option value="running">V teku</option>
+                        <option value="failed">Napaka</option>
+                    </select>
+                    <div class="meta" id="downloads-meta">-</div>
+                </div>
+
+                <div class="activity-wrap">
+                    <table class="activity-table downloads-table">
+                        <thead>
+                            <tr>
+                                <th>Job</th>
+                                <th>Ime / Source</th>
+                                <th>Jeziki</th>
+                                <th>Datoteke</th>
+                                <th>Status</th>
+                                <th>Cas</th>
+                                <th>Akcije</th>
+                            </tr>
+                        </thead>
+                        <tbody id="downloads-tbody">
+                            <tr class="empty-row"><td colspan="7"><span class="spinner"></span>Nalagam downloads ...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- SETTINGS page -->
             <section class="page-content" id="page-settings" style="display:none;">
                 <div class="page-header">
@@ -2149,7 +2196,7 @@
                     <span id="user-name">User</span>
                     <button class="logout-btn" onclick="logout()">Odjava</button>
                 </div>
-                <a href="downloads.html" class="btn" style="background: #10b981; text-decoration: none; display: inline-block;" onclick="if(typeof savePairMetadata==='function')savePairMetadata();if(typeof saveVideoPairsToStorage==='function')saveVideoPairsToStorage();">📥 Downloads</a>
+                <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background: #10b981; text-decoration: none; display: inline-block;" onclick="if(typeof savePairMetadata==='function')savePairMetadata();if(typeof saveVideoPairsToStorage==='function')saveVideoPairsToStorage();">📥 Downloads</a>
             </div>
         </header>
         
@@ -3121,7 +3168,8 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         const VALID_USERS = {
             'david': 'david',
             'grega': 'grega',
-            'teja': 'teja'
+            'teja': 'teja',
+            'noriks': 'noriks'
         };
         
         let currentUser = window.currentUser = null;
