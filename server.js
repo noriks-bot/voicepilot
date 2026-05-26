@@ -232,7 +232,13 @@ function readCreativesFromDb() {
                 videoCount: 0,
                 imageCount: 0,
                 latestModified: null,
+                hasWT: false,
             };
+        }
+        // Detect WITHOUT TEXT variant from filename
+        const nameUpper = (r.name || '').toUpperCase();
+        if (/WITHOUT[\s_]*TEXT/.test(nameUpper) || /WITH[\s_]+OUT[\s_]*TEXT/.test(nameUpper) || /_WT_/.test(nameUpper) || /_WT\./.test(nameUpper)) {
+            groups[id].hasWT = true;
         }
         const g = groups[id];
         const ccKey = r.country || 'EN';
@@ -267,6 +273,7 @@ function readCreativesFromDb() {
         videoCount: g.videoCount,
         imageCount: g.imageCount,
         latestModified: g.latestModified,
+        hasWT: !!g.hasWT,
     }));
     arr.sort((a, b) => {
         if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);

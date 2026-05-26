@@ -1543,6 +1543,7 @@
             min-width: 110px;
         }
         .creatives-matrix thead th.country-col { min-width: 52px; }
+        .creatives-matrix th.wt-col, .creatives-matrix td.wt-cell { background: #FFF7ED; border-left: 2px solid #FED7AA; border-right: 2px solid #FED7AA; }
         .creatives-matrix thead th.count-col { min-width: 120px; }
         .creatives-matrix tbody td {
             padding: 10px 6px;
@@ -2571,6 +2572,7 @@
                         <tr>
                             <th class="sticky-col">ID</th>
                             <th class="prod-col">Produkt</th>
+                            <th class="country-col wt-col" data-cc="WT" title="Without Text variant na voljo">WT</th>
                             <th class="country-col" data-cc="EN">EN</th>
                             <th class="country-col" data-cc="SI">SI</th>
                             <th class="country-col" data-cc="HR">HR</th>
@@ -2588,7 +2590,7 @@
                         </tr>
                     </thead>
                     <tbody id="creatives-tbody">
-                        <tr class="loading-row"><td colspan="16"><span class="spinner"></span>Nalagam kreative ...</td></tr>
+                        <tr class="loading-row"><td colspan="17"><span class="spinner"></span>Nalagam kreative ...</td></tr>
                     </tbody>
                 </table>
                 </div>
@@ -7545,7 +7547,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         async function loadCreatives(forceRefresh) {
             const tbody = document.getElementById('creatives-tbody');
             const meta = document.getElementById('creatives-meta');
-            const colspan = CREATIVE_COUNTRIES.length + 3;
+            const colspan = CREATIVE_COUNTRIES.length + 4; // +ID +Produkt +WT +Pokritost
             if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Nalagam kreative ...</td></tr>';
             try {
                 const r = await fetch('/api/creatives');
@@ -7566,7 +7568,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const btn = document.getElementById('btn-refresh-creatives');
             if (btn) { btn.disabled = true; btn.textContent = 'Sinhronizacija ...'; }
             const tbody = document.getElementById('creatives-tbody');
-            const colspan = CREATIVE_COUNTRIES.length + 3;
+            const colspan = CREATIVE_COUNTRIES.length + 4; // +ID +Produkt +WT +Pokritost
             if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Sinhroniziram z Dropboxom ...</td></tr>';
             try {
                 const r = await fetch('/api/creatives/sync', { method: 'POST' });
@@ -7592,7 +7594,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const q = (document.getElementById('creatives-search').value || '').toLowerCase().trim();
             const productFilter = document.getElementById('creatives-product').value;
             const statusFilter = document.getElementById('creatives-status').value;
-            const colspan = CREATIVE_COUNTRIES.length + 3;
+            const colspan = CREATIVE_COUNTRIES.length + 4; // +ID +Produkt +WT +Pokritost
 
             let rows = _creativesData.creatives || [];
             if (q) rows = rows.filter(c => (c.creativeId || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q));
@@ -7632,9 +7634,13 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const localCount = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && present.has(cc)).length;
                 const totalLocal = CREATIVE_COUNTRIES.length - 1;
                 const product = c.productType || 'other';
+                const wtCell = c.hasWT
+                    ? '<td class="cc-cell cc-yes wt-cell" title="Without Text varianta na voljo"><span class="cc-mark">+</span></td>'
+                    : '<td class="cc-cell cc-no wt-cell"><span class="cc-mark">-</span></td>';
                 return '<tr>' +
                     '<td class="sticky-col"><span class="creative-id">' + c.creativeId + '</span></td>' +
                     '<td><span class="product-pill ' + product + '">' + product + '</span></td>' +
+                    wtCell +
                     cells +
                     '<td class="cov-cell"><span class="cov-bar"><span class="cov-fill" style="width:' + Math.round(localCount/totalLocal*100) + '%"></span></span><span class="cov-num">' + localCount + '/' + totalLocal + '</span></td>' +
                     '</tr>';
