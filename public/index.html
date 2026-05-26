@@ -2574,11 +2574,11 @@ Udobnejša zgoraj, bolj sproščena v predelu trupa
 Iz super mehkega materiala
 Čas je, da si nadenete majico NORIKS"></textarea>
                 </div>
+                </div>
 
-                <!-- Step 3: Prompt -->
-                <div style="background:#0f0f0f; border:1px solid #333; border-radius:12px; padding:20px; margin-bottom:15px;">
-                    <h4 style="margin:0 0 10px;">3️⃣ Prompt za AI 🎯</h4>
-                    <textarea id="vo-prompt" style="width:100%; min-height:120px; background:#1a1a1a; border:1px solid #333; border-radius:8px; color:#fff; padding:12px; font-size:13px; resize:vertical; line-height:1.6;">Role: Act as an expert Direct-Response Copywriter and Scriptwriter for short-form video ads (TikTok, Reels, Shorts).
+                <!-- Hidden defaults for removed sections (Prompt + Naming) -->
+                <div style="display:none;">
+                    <textarea id="vo-prompt">Role: Act as an expert Direct-Response Copywriter and Scriptwriter for short-form video ads (TikTok, Reels, Shorts).
 
 Task: Create a Story: Transform these points into a cohesive, high-converting storytelling script in Slovenian.
 Structure:
@@ -2587,37 +2587,10 @@ Structure:
 * Offer & CTA: End with urgency and the specific offer from the text.
 
 Style: Authentic, confident, persuasive — a narrative that makes the viewer feel the comfort, not just a list of features.</textarea>
-                </div>
-                
-                <!-- Step 4: Naming -->
-                <div style="background:#0f0f0f; border:1px solid #333; border-radius:12px; padding:20px; margin-bottom:15px;">
-                    <h4 style="margin:0 0 10px;">4️⃣ Poimenovanje</h4>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; gap:8px;">
-                        <div>
-                            <label style="color:#888; font-size:11px;">ID</label>
-                            <input type="text" id="vo-name-id" placeholder="ID333" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #333; border-radius:6px; color:#fff; font-size:13px;">
-                        </div>
-                        <div>
-                            <label style="color:#888; font-size:11px;">Datum</label>
-                            <input type="text" id="vo-name-date" readonly style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #333; border-radius:6px; color:#fff; font-size:13px;">
-                        </div>
-                        <div>
-                            <label style="color:#888; font-size:11px;">Produkt</label>
-                            <select id="vo-name-product" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #333; border-radius:6px; color:#fff; font-size:13px;">
-                                <option value="tshirt">tshirt</option>
-                                <option value="boxers">boxers</option>
-                                <option value="set">set</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="color:#888; font-size:11px;">Tip</label>
-                            <input type="text" value="VO" readonly style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #333; border-radius:6px; color:#8b5cf6; font-size:13px; font-weight:600;">
-                        </div>
-                        <div>
-                            <label style="color:#888; font-size:11px;">Avtor</label>
-                            <input type="text" id="vo-author" placeholder="DD" maxlength="4" style="width:100%; padding:8px; background:#1a1a1a; border:1px solid #333; border-radius:6px; color:#fff; font-size:13px; text-transform:uppercase;">
-                        </div>
-                    </div>
+                    <input type="text" id="vo-name-id" value="">
+                    <input type="text" id="vo-name-date" readonly value="">
+                    <select id="vo-name-product"><option value="tshirt" selected>tshirt</option><option value="boxers">boxers</option><option value="set">set</option></select>
+                    <input type="text" id="vo-author" value="VO">
                 </div>
 
                 <!-- Step 5: Preview & Generate -->
