@@ -7255,6 +7255,12 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const completed = (vidRes.jobs || []);
                 const rows = [];
                 for (const j of inProgress) {
+                    // Extract timestamp from job ID (gen-1779800971352 -> 1779800971352 ms)
+                    let ts = j.createdAt || j.created_at || j.startedAt || j.updatedAt || null;
+                    if (!ts && j.id) {
+                        const idMatch = String(j.id).match(/(\d{10,})/);
+                        if (idMatch) ts = Number(idMatch[1]);
+                    }
                     rows.push({
                         kind: 'in_progress',
                         id: j.id,
@@ -7262,7 +7268,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         languages: j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []),
                         fileCount: j.outputs ? Object.keys(j.outputs).length : 0,
                         status: j.status || 'pending',
-                        timestamp: j.createdAt || j.created_at || j.startedAt || null,
+                        timestamp: ts,
                     });
                 }
                 for (const j of completed) {
@@ -7272,6 +7278,11 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     for (const v of mp4s) { const c = _detectCountryDl(v.name); if (c) allLangs.add(c); }
                     let displayName = j.id;
                     if (mp4s[0]) displayName = mp4s[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
+                    let ts = j.timestamp;
+                    if (!ts && j.id) {
+                        const idMatch = String(j.id).match(/(\d{10,})/);
+                        if (idMatch) ts = Number(idMatch[1]);
+                    }
                     rows.push({
                         kind: 'completed',
                         id: j.id,
@@ -7280,7 +7291,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         fileCount: videos.length,
                         videos: videos,
                         status: 'done',
-                        timestamp: j.timestamp,
+                        timestamp: ts,
                         totalSize: videos.reduce((a,v) => a + (v.size||0), 0),
                     });
                 }
