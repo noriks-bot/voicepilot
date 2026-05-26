@@ -445,19 +445,17 @@ app.get('/api/dropbox/share-link', async (req, res) => {
 });
 // ===== END Dropbox share link =====
 
-function scheduleDailySync() {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(3, 0, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    const delay = next.getTime() - now.getTime();
-    console.log('[creatives:sync] next daily sync at', next.toISOString());
-    setTimeout(() => {
-        syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] daily failed:', e));
-        scheduleDailySync();
-    }, delay);
+function scheduleSync() {
+    // Sync every 3 hours
+    const THREE_HOURS = 3 * 60 * 60 * 1000;
+    const nextRun = new Date(Date.now() + THREE_HOURS);
+    console.log('[creatives:sync] next sync at', nextRun.toISOString(), '(every 3h)');
+    setInterval(() => {
+        console.log('[creatives:sync] running scheduled sync (3h interval)...');
+        syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] scheduled failed:', e));
+    }, THREE_HOURS);
 }
-scheduleDailySync();
+scheduleSync();
 
 
 
@@ -3556,6 +3554,9 @@ Return ONLY valid JSON array:
                 });
             } catch (e) {
                 console.error(`[${job.id}] [VO] TTS error for ${lang} segment ${i}:`, e.message);
+                job.ttsErrors = job.ttsErrors || {};
+                job.ttsErrors[lang] = (job.ttsErrors[lang] || 0) + 1;
+                if (/quota_exceeded/i.test(e.message||'')) job.ttsQuotaExceeded = true;
                 // Skip this segment if TTS fails
                 ttsSegments.push({
                     text: segment.translatedText,
@@ -3689,11 +3690,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         console.log(`[${job.id}] [VO] ${lang} done (${job.completed}/${LANGUAGES.length})`);
     }
     
-    job.status = 'done';
+    // Determine final status based on TTS errors
+    const errCounts = job.ttsErrors || {};
+    const totalErrs = Object.values(errCounts).reduce((s,n)=>s+n, 0);
+    const totalSegs = (job.voiceoverScript||[]).length * LANGUAGES.length;
+    if (totalErrs > 0 && totalErrs >= totalSegs * 0.5) {
+        job.status = 'failed_tts';
+        job.statusReason = job.ttsQuotaExceeded ? 'ElevenLabs quota exceeded' : 'TTS errors';
+    } else if (totalErrs > 0) {
+        job.status = 'partial';
+        job.statusReason = `TTS failed for ${totalErrs} segments (${job.ttsQuotaExceeded ? 'quota exceeded' : 'errors'})`;
+    } else {
+        job.status = 'done';
+    }
     job.currentLang = '';
     job.completedAt = new Date().toISOString();
     persistJobs();
-    console.log(`[${job.id}] [VO] All done!`);
+    console.log(`[${job.id}] [VO] All done! status=${job.status} ttsErrors=${totalErrs}`);
 }
 // === END VOICEOVER ===
 // List all jobs
@@ -3991,11 +4004,42 @@ app.get('/api/localizer/generated-videos', (req, res) => {
                 else if (/_SRT(_|\.|$)/i.test(firstName)) mode = 'subtitles';
                 else mode = 'localizer';
             }
+            // Include real status from job tracker
+            let status = 'done', statusReason = null, ttsErrors = null;
+            if (jobInfo) {
+                status = jobInfo.status || 'done';
+                statusReason = jobInfo.statusReason || null;
+                ttsErrors = jobInfo.ttsErrors || null;
+                // Detect stale jobs (translating/generating without recent update)
+                const isStale = ['translating','generating','analyzing'].includes(status);
+                if (isStale) {
+                    const lastTs = new Date(jobInfo.completedAt || jobInfo.startedAt || jobInfo.createdAt || 0).getTime();
+                    const folderTs = parseInt((folder.match(/\d+/)||['0'])[0]);
+                    const refTs = lastTs || folderTs;
+                    if (refTs && (Date.now() - refTs) > 10*60*1000) {
+                        status = 'failed_stale';
+                        statusReason = 'Job se je obtičal v fazi: ' + (jobInfo.status||'?');
+                    }
+                }
+                // Validate: if status=done but expected videos missing, mark partial
+                const expectedLangs = (jobInfo.countries||[]).length || 0;
+                if (status === 'done' && expectedLangs > 0) {
+                    const mp4Count = videos.filter(v => v.name && v.name.toLowerCase().endsWith('.mp4')).length;
+                    if (mp4Count < expectedLangs) {
+                        status = 'partial';
+                        statusReason = `Manjkajo videji: ${mp4Count}/${expectedLangs}`;
+                    }
+                }
+            }
             return {
                 id: folder,
                 timestamp,
                 videos,
-                mode
+                mode,
+                status,
+                statusReason,
+                ttsErrors,
+                dropboxUploaded: (jobInfo && jobInfo.dropboxUploaded) || null
             };
         });
         

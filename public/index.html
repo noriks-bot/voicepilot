@@ -2193,13 +2193,6 @@
                         <p>Pregled aktivnosti in hitri dostop.</p>
                     </div>
                 </div>
-                <div class="stat-grid">
-                    <div class="stat-card"><div class="label">Aktivni job-i</div><div class="value" id="stat-active">0</div><div class="trend">v teku</div></div>
-                    <div class="stat-card"><div class="label">Končani danes</div><div class="value" id="stat-done">0</div><div class="trend">↑ produktivno</div></div>
-                    <div class="stat-card"><div class="label">Skupaj kreativ</div><div class="value" id="stat-total">—</div><div class="trend">arhiv</div></div>
-                    <div class="stat-card"><div class="label">Status API</div><div class="value" style="font-size:18px; color:var(--success);">● Online</div><div class="trend">ElevenLabs + OpenAI</div></div>
-                </div>
-
                 <div class="section-heading">Hitri start</div>
                 <div class="quick-grid">
                     <a class="quick-card quick-primary" onclick="switchPage('voiceover')">
@@ -3283,11 +3276,20 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         var ta = document.getElementById('vo-edit-' + i);
                         return { text: ta ? ta.value : item.text, start: item.start, end: item.end };
                     });
+                    // Force-show editor so countries + Generate button visible
+                    document.getElementById('vo-script-editor').style.display = 'block';
                     btn.textContent = '⏳ Generiram SLO preview...';
-                    var previewResp = await window.postJSON('/api/localizer/vo-preview', {
-                        videoClean: voVideoFile, script: currentScript, videoDuration: voVideoDuration || 30, textPosition: window._voGetTextPosition && window._voGetTextPosition()
-                    });
-                    if (previewResp.previewUrl) {
+                    var previewResp;
+                    try {
+                        previewResp = await window.postJSON('/api/localizer/vo-preview', {
+                            videoClean: voVideoFile, script: currentScript, videoDuration: voVideoDuration || 30, textPosition: window._voGetTextPosition && window._voGetTextPosition()
+                        });
+                    } catch(prevErr) {
+                        console.error('vo-preview failed:', prevErr);
+                        alert('Preview ni uspel: ' + (prevErr.message||prevErr) + '\n\nVerjetno je ElevenLabs quota počena. Lahko vseeno greš v produkcijo (gumb spodaj).');
+                        previewResp = {};
+                    }
+                    if (previewResp && previewResp.previewUrl) {
                         document.getElementById('vo-preview-video').src = previewResp.previewUrl + '?t=' + Date.now();
                         document.getElementById('vo-preview-video-container').style.display = 'block';
                     }
@@ -7397,6 +7399,13 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             }).join('');
         }
         
+        window.regenJob = function(jobId) {
+            if (!confirm('Regeneriraj job ' + jobId + '?\n\nTo bo odprlo Voiceover Maker s preteklim scriptom.')) return;
+            // Open voicemaker page; user can re-run with original script
+            const link = document.querySelector('[data-page="voicemaker"]') || document.querySelector('[onclick*="voicemaker"]');
+            if (link && link.click) link.click();
+            else location.hash = '#voicemaker';
+        };
         window.markDownloaded = function(key) {
             downloadedItems[key] = true;
             localStorage.setItem('downloadedItems', JSON.stringify(downloadedItems));
@@ -7783,6 +7792,8 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
         function _statusBadge(status) {
             let bg, fg, lbl, dot = '';
             if (status === 'done' || status === 'completed') { bg = '#DCFCE7'; fg = '#15803d'; lbl = 'Koncano'; }
+            else if (status === 'partial') { bg = '#FEF3C7'; fg = '#92400E'; lbl = '⚠️ Delno (TTS napaka)'; }
+            else if (status === 'failed_tts') { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = '❌ TTS quota'; }
             else if (['failed', 'error'].includes(status)) { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = 'Napaka'; }
             else if (status === 'translating') { bg = '#DBEAFE'; fg = '#1E40AF'; lbl = 'Prevajam'; dot = '<span class="pulse-dot"></span>'; }
             else if (status === 'rendering' || status === 'generating') { bg = '#FEF3C7'; fg = '#92400E'; lbl = 'Renderiram'; dot = '<span class="pulse-dot"></span>'; }
@@ -7857,7 +7868,11 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     rows.push({
                         kind: 'completed', id: j.id, name: displayName, creativeId,
                         languages: Object.keys(filesByLang), filesByLang, timestamp: ts,
-                        fileCount: videos.length, status: 'done', mode: detectedMode
+                        fileCount: videos.length,
+                        status: j.status || 'done',
+                        statusReason: j.statusReason || null,
+                        ttsErrors: j.ttsErrors || null,
+                        mode: detectedMode
                     });
                 }
                 // 2) In-progress jobs (not done)
@@ -7891,13 +7906,14 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     // Languages chips with status indicator
                     let langsHtml;
                     if (r.kind === 'completed') {
+                        const _ok = (r.status === 'done' || r.status === 'completed');
                         langsHtml = (r.languages || []).map(l => {
                             const file = r.filesByLang && r.filesByLang[l];
-                            if (file) {
+                            if (file && _ok) {
                                 const url = '/uploads/generated/' + r.id + '/' + encodeURIComponent(file);
                                 return '<a href="' + url + '" download class="lang-chip" style="background:#DCFCE7; color:#15803d; text-decoration:none; cursor:pointer;" title="Prenesi ' + l + '">' + l + ' &darr;</a>';
                             }
-                            return '<span class="lang-chip">' + l + '</span>';
+                            return '<span class="lang-chip" style="background:#FEE2E2; color:#9CA3AF; cursor:not-allowed; pointer-events:none; opacity:0.65; text-decoration:line-through;" title="Ni mogoče prenesti — status: ' + (r.status||'?') + '">' + l + ' &times;</span>';
                         }).join('');
                     } else {
                         const done = new Set(r.completedLangs || []);
@@ -7911,9 +7927,15 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     const progress = r.kind === 'in_progress' && r.totalCount ?
                         ' &middot; ' + (r.completedLangs ? r.completedLangs.length : 0) + '/' + r.totalCount :
                         (r.kind === 'completed' ? ' &middot; ' + r.fileCount + ' datotek' : '');
-                    const action = r.kind === 'completed' ?
-                        '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none;">ZIP &darr;</a>' :
-                        '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
+                    let action;
+                    if (r.kind === 'completed' && (r.status === 'done' || r.status === 'completed')) {
+                        action = '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none;">ZIP &darr;</a>';
+                    } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error'].includes(r.status)) {
+                        const tip = r.statusReason ? r.statusReason.replace(/"/g,'') : 'Job ni dokončan';
+                        action = '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + '" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
+                    } else {
+                        action = '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
+                    }
                     // Job type pill
                     let typeBg, typeFg, typeLbl;
                     const m = (r.mode || '').toLowerCase();
@@ -7959,5 +7981,21 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             </section>
         </main>
     </div>
+
+<script>
+window._regenJob = async function(jobId) {
+    if (!confirm('Regeneriraj video ' + jobId + '? Originalni job bo izbrisan.')) return;
+    try {
+        const r = await fetch('/api/localizer/job/' + jobId, { method: 'DELETE' });
+        if (r.ok) {
+            alert('Job izbrisan. Pojdi v Voiceover Maker in zaženi novo generacijo.');
+            if (typeof loadDownloadsPage === 'function') loadDownloadsPage();
+        } else {
+            const t = await r.text();
+            alert('Brisanje ni uspelo: ' + t);
+        }
+    } catch (e) { alert('Napaka: ' + e.message); }
+};
+</script>
 </body>
 </html>
