@@ -7635,16 +7635,37 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 for (const j of (genRes.jobs || [])) {
                     const videos = (j.videos || []).filter(v => v.name && v.name.endsWith('.mp4'));
                     if (videos.length === 0) continue;
+                    const KNOWN_COUNTRIES = ['SI','HR','HU','PL','SK','CZ','RO','GR','BG','IT','DE','AT','US','EN','FR','ES','NL','SE','NO','DK','FI','BA','RS','ME','MK'];
                     const filesByLang = {};
                     for (const v of videos) {
-                        const cm = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
-                        if (cm) filesByLang[cm[1]] = v.name;
+                        let cc = null;
+                        const mid = v.name.match(/_\d{2}-\d{2}-\d{2}_([A-Z]{2})_/);
+                        if (mid && KNOWN_COUNTRIES.includes(mid[1])) cc = mid[1];
+                        if (!cc) {
+                            const end = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
+                            if (end && KNOWN_COUNTRIES.includes(end[1])) cc = end[1];
+                        }
+                        if (!cc) {
+                            const any = v.name.match(/_([A-Z]{2})_/g);
+                            if (any) {
+                                for (const tok of any) {
+                                    const code = tok.replace(/_/g, '');
+                                    if (KNOWN_COUNTRIES.includes(code)) { cc = code; break; }
+                                }
+                            }
+                        }
+                        if (cc) filesByLang[cc] = v.name;
                     }
                     let displayName = j.id;
                     let creativeId = '';
                     let detectedMode = j.mode || '';
                     if (videos[0]) {
-                        const baseName = videos[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
+                        let baseName = videos[0].name.replace(/\.mp4$/, '');
+                        for (const cc of Object.keys(filesByLang)) {
+                            baseName = baseName.replace(new RegExp('_' + cc + '_', 'g'), '_');
+                            baseName = baseName.replace(new RegExp('_' + cc + '$'), '');
+                        }
+                        baseName = baseName.replace(/_(VO|SRT)(_VO|_SRT)?$/, '');
                         displayName = baseName;
                         creativeId = _creativeIdFromName(baseName);
                         if (!detectedMode) {
