@@ -2546,16 +2546,16 @@
 
         <!-- MODE 3: Voice-over -->
         <div class="mode-content active" id="mode-voiceover">
-            <div style="padding:20px; max-width:900px; margin:0 auto;">
+            <div style="padding:0;">
                 
                 <!-- Step 1: Upload video -->
-                <div style="background:#0f0f0f; border:1px solid #333; border-radius:12px; padding:20px; margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <h4 style="margin:0;">1️⃣ Naloži video</h4>
-                        <button onclick="window._voReset()" style="background:#7f1d1d; border:1px solid #ef4444; color:#fff; padding:4px 12px; border-radius:6px; cursor:pointer; font-size:12px;">🗑️ Počisti vse</button>
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h4 style="margin:0; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">1</span> Naloži video</h4>
+                        <button onclick="window._voReset()" style="background:#fff; border:1px solid #E7E5E4; color:#57534e; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.15s ease;" onmouseover="this.style.background='#FEE2E2';this.style.borderColor='#FECACA';this.style.color='#B91C1C';" onmouseout="this.style.background='#fff';this.style.borderColor='#E7E5E4';this.style.color='#57534e';">Počisti vse</button>
                     </div>
-                    <div style="display:flex; gap:15px; align-items:center;">
-                        <div style="flex:1; padding:30px; border:2px dashed #333; border-radius:8px; text-align:center; cursor:pointer; color:#888;" id="vo-upload-zone">
+                    <div style="display:flex; gap:16px; align-items:center;">
+                        <div style="flex:1; padding:32px 20px; border:2px dashed #D6D3D1; border-radius:10px; text-align:center; cursor:pointer; color:#78716c; background:#FAFAF9; transition:all 0.15s ease;" id="vo-upload-zone" onmouseover="this.style.borderColor='#0A59D2';this.style.background='#F0F6FF';this.style.color='#0A59D2';" onmouseout="this.style.borderColor='#D6D3D1';this.style.background='#FAFAF9';this.style.color='#78716c';">
                             📁 Klikni ali povleci video sem
                             <input type="file" accept="video/*" id="vo-file-input" style="position:absolute; opacity:0; width:0; height:0;">
                         </div>
@@ -2574,10 +2574,10 @@
                 </div>
 
                 <!-- Step 2: Besedila / poante -->
-                <div style="background:#0f0f0f; border:1px solid #333; border-radius:12px; padding:20px; margin-bottom:15px;">
-                    <h4 style="margin:0 0 10px;">2️⃣ Besedila / poante</h4>
-                    <p style="color:#888; font-size:12px; margin:0 0 10px;">Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.</p>
-                    <textarea id="vo-points" style="width:100%; min-height:160px; background:#1a1a1a; border:1px solid #333; border-radius:8px; color:#fff; padding:12px; font-size:14px; resize:vertical; line-height:1.8; font-family:monospace;" placeholder="4+2 brezplačno 🔥
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Besedila / poante</h4>
+                    <p style="color:#78716c; font-size:13px; margin:0 0 14px 34px;">Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.</p>
+                    <textarea id="vo-points" style="width:100%; min-height:160px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:14px; resize:vertical; line-height:1.8; font-family:'JetBrains Mono', monospace;" placeholder="4+2 brezplačno 🔥
 Najboljša majica, kar jih boste kdaj nosili
 Udobnejša zgoraj, bolj sproščena v predelu trupa
 Iz super mehkega materiala
@@ -2602,15 +2602,15 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     <input type="text" id="vo-author" value="VO">
                 </div>
 
-                <!-- Step 5: Preview & Generate -->
-                <div style="background:#0f0f0f; border:1px solid #8b5cf6; border-radius:12px; padding:20px;">
-                    <h4 style="margin:0 0 15px; color:#8b5cf6;">5️⃣ Predogled & Generiranje</h4>
-                    <button id="btn-vo-preview" style="width:100%; padding:14px; background:#8b5cf6; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:15px; font-weight:600; margin-bottom:15px;">🇸🇮 SLO Preview</button>
+                <!-- Step 3: Preview & Generate -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 16px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">3</span> Predogled & Generiranje</h4>
+                    <button id="btn-vo-preview" style="width:100%; padding:14px; background:#0A59D2; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; margin-bottom:16px; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(10,89,210,0.2);" onmouseover="this.style.background='#0847A8';" onmouseout="this.style.background='#0A59D2';">🇸🇮 Generiraj SLO predogled</button>
                     
                     <div id="vo-script-editor" style="display:none;">
-                        <h5 style="color:#8b5cf6; margin:0 0 10px;">Generirano besedilo:</h5>
+                        <h5 style="color:#0A59D2; margin:0 0 10px; font-size:13px; font-weight:600;">Generirano besedilo:</h5>
                         <div id="vo-script-items"></div>
-                        <button id="btn-vo-regen" style="width:100%; padding:10px; background:#333; color:#8b5cf6; border:1px solid #8b5cf6; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; margin:10px 0;">🔄 Regeneriraj besedilo</button>
+                        <button id="btn-vo-regen" style="width:100%; padding:10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; margin:10px 0; transition:all 0.15s ease;" onmouseover="this.style.background='#EFF6FF';" onmouseout="this.style.background='#fff';">🔄 Regeneriraj besedilo</button>
                         <div id="vo-preview-video-container" style="display:none; margin:15px 0;">
                             <video id="vo-preview-video" style="width:100%; border-radius:8px;" controls></video>
                         </div>
@@ -2627,7 +2627,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                             <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="RO" checked> 🇷🇴</label>
                             <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="DE" checked> 🇩🇪</label>
                         </div>
-                        <button id="btn-vo-generate" style="width:100%; padding:14px; background:#10b981; color:#000; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:700;">🚀 Generiraj vse z Voice-over</button>
+                        <button id="btn-vo-generate" style="width:100%; padding:14px; background:#10b981; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:15px; font-weight:600; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(16,185,129,0.2);" onmouseover="this.style.background='#059669';" onmouseout="this.style.background='#10b981';">🚀 Generiraj vse z Voice-over</button>
                     </div>
                 </div>
             </div>
