@@ -2276,19 +2276,152 @@
                 </div>
             </section>
 
-            <!-- SRT MAKER page (placeholder) -->
+            <!-- SRT MAKER page -->
             <section class="page-content" id="page-srtmaker" style="display:none;">
                 <div class="page-header">
                     <div class="page-title">
-                        <h1>SRT Maker</h1>
-                        <p>Generiraj .srt subtitle datoteke iz tekstov.</p>
+                        <h1>📝 SRT Maker</h1>
+                        <p>Iz teksta (ena vrstica = en kader) zgeneriraj časovno SRT skripto.</p>
                     </div>
                 </div>
-                <div class="card" style="text-align:center; padding:60px 24px;">
-                    <div style="font-size:48px; margin-bottom:12px;">🚧</div>
-                    <div style="font-size:18px; font-weight:600; margin-bottom:6px;">V pripravi</div>
-                    <div style="color:var(--text-dim);">SRT generator bo na voljo kmalu.</div>
+
+                <!-- Step 1: Script input -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">1</span> Skript</h4>
+                    <p style="color:#78716c; font-size:13px; margin:0 0 14px 34px;">Vsaka vrstica = en kader / segment.</p>
+                    <textarea id="srt-input" style="width:100%; min-height:240px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:14px; resize:vertical; line-height:1.7; font-family:'JetBrains Mono', monospace; box-sizing:border-box;" placeholder="Stop buying t-shirts that make you look worse.&#10;Every time you pull your shirt down... that's a sign.&#10;NORIKS — the t-shirt that fixes everything.&#10;Slim at the top. Loose at the bottom.&#10;Hides the belly. Highlights the chest.&#10;Join 100,000+ happy customers.&#10;4 + 2 FREE — this week only. 🔥"></textarea>
                 </div>
+
+                <!-- Step 2: Duration mode -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Trajanje</h4>
+                    <div style="display:flex; gap:12px; margin-left:34px;">
+                        <label id="srt-mode-auto-lbl" style="flex:1; display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="auto" checked onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">⚡ Avtomatsko</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Predlagamo trajanje glede na tekst</div>
+                            </div>
+                        </label>
+                        <label id="srt-mode-fixed-lbl" style="flex:1; display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="fixed" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">🎯 Fiksno trajanje</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">AI prilagodi tekst, da paše v točno X sekund</div>
+                            </div>
+                        </label>
+                    </div>
+                    <div id="srt-fixed-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
+                        <div style="display:flex; align-items:center; gap:14px;">
+                            <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Trajanje:</span>
+                            <input type="range" id="srt-duration" min="10" max="120" step="1" value="30" oninput="document.getElementById('srt-duration-val').textContent = this.value + 's';" style="flex:1; accent-color:#0A59D2;">
+                            <span id="srt-duration-val" style="min-width:50px; font-weight:700; color:#0A59D2; font-size:14px;">30s</span>
+                        </div>
+                        <div style="color:#78716c; font-size:11px; margin-top:8px;">10–120 sekund. AI bo (po potrebi) skrajšal/združil vrstice.</div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Generate -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">3</span> Generiraj SRT</h4>
+                    <button id="btn-srt-generate" onclick="window._srtGenerate()" style="width:100%; padding:14px; background:#0A59D2; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(10,89,210,0.2);" onmouseover="this.style.background='#0847A8';" onmouseout="this.style.background='#0A59D2';">✨ Generiraj SRT</button>
+                    <div id="srt-status" style="margin-top:12px; font-size:13px; color:#78716c; display:none;"></div>
+                </div>
+
+                <!-- Step 4: Output -->
+                <div id="srt-output-card" style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04); display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                        <h4 style="margin:0; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#10b981; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">✓</span> SRT izhod <span id="srt-meta" style="color:#78716c; font-size:12px; font-weight:400; margin-left:8px;"></span></h4>
+                        <div style="display:flex; gap:8px;">
+                            <button onclick="window._srtCopy()" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; transition:all 0.15s ease;" onmouseover="this.style.background='#F0F6FF';" onmouseout="this.style.background='#fff';">📋 Kopiraj</button>
+                            <button onclick="window._srtDownload()" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; transition:all 0.15s ease;" onmouseover="this.style.background='#F0F6FF';" onmouseout="this.style.background='#fff';">⬇️ .srt</button>
+                        </div>
+                    </div>
+                    <textarea id="srt-output" readonly style="width:100%; min-height:280px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:13px; resize:vertical; line-height:1.6; font-family:'JetBrains Mono', monospace; box-sizing:border-box;"></textarea>
+                </div>
+
+                <script>
+                window._srtUpdMode = function() {
+                    const mode = document.querySelector('input[name="srt-mode"]:checked').value;
+                    const auto = document.getElementById('srt-mode-auto-lbl');
+                    const fixed = document.getElementById('srt-mode-fixed-lbl');
+                    const ctrls = document.getElementById('srt-fixed-controls');
+                    if (mode === 'auto') {
+                        auto.style.background = '#F0F6FF'; auto.style.borderColor = '#0A59D2';
+                        fixed.style.background = '#fff'; fixed.style.borderColor = '#E7E5E4';
+                        ctrls.style.display = 'none';
+                    } else {
+                        auto.style.background = '#fff'; auto.style.borderColor = '#E7E5E4';
+                        fixed.style.background = '#F0F6FF'; fixed.style.borderColor = '#0A59D2';
+                        ctrls.style.display = 'block';
+                    }
+                };
+                window._srtGenerate = async function() {
+                    const text = document.getElementById('srt-input').value.trim();
+                    const mode = document.querySelector('input[name="srt-mode"]:checked').value;
+                    const duration = Number(document.getElementById('srt-duration').value);
+                    const btn = document.getElementById('btn-srt-generate');
+                    const status = document.getElementById('srt-status');
+                    const outCard = document.getElementById('srt-output-card');
+                    const out = document.getElementById('srt-output');
+                    const meta = document.getElementById('srt-meta');
+                    if (!text) {
+                        status.style.display = 'block';
+                        status.style.color = '#B91C1C';
+                        status.textContent = '⚠️ Vpiši vsaj eno vrstico.';
+                        return;
+                    }
+                    btn.disabled = true;
+                    btn.textContent = mode === 'fixed' ? '⏳ AI razporeja čas...' : '⏳ Računam timing...';
+                    status.style.display = 'block';
+                    status.style.color = '#78716c';
+                    status.textContent = 'Generiram SRT...';
+                    try {
+                        const r = await fetch('/api/srt/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text, mode, duration })
+                        });
+                        const data = await r.json();
+                        if (!r.ok) throw new Error(data.error || 'Napaka');
+                        out.value = data.srt;
+                        const segCount = (data.segments || []).length;
+                        meta.textContent = `· ${segCount} segmentov · ${data.videoDuration}s · ${data.mode === 'fixed' ? 'fiksno' : 'avto'}`;
+                        outCard.style.display = 'block';
+                        outCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        status.style.color = '#15803d';
+                        status.textContent = `✓ Generirano: ${segCount} segmentov, skupaj ${data.videoDuration}s`;
+                    } catch (e) {
+                        status.style.color = '#B91C1C';
+                        status.textContent = '✗ Napaka: ' + e.message;
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = '✨ Generiraj SRT';
+                    }
+                };
+                window._srtCopy = function() {
+                    const out = document.getElementById('srt-output');
+                    out.select();
+                    document.execCommand('copy');
+                    const status = document.getElementById('srt-status');
+                    status.style.display = 'block';
+                    status.style.color = '#15803d';
+                    status.textContent = '📋 Kopirano v odložišče!';
+                    setTimeout(() => { if (status.textContent.startsWith('📋')) status.style.display = 'none'; }, 2000);
+                };
+                window._srtDownload = function() {
+                    const srt = document.getElementById('srt-output').value;
+                    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'subtitle-' + Date.now() + '.srt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                };
+                </script>
             </section>
 
             <!-- VOICEOVER page wraps existing .container -->

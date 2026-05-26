@@ -3215,6 +3215,109 @@ JSON: [{"text": "stavek", "start": 0, "end": 2.5}, ...]
     }
 });
 
+// ========== SRT MAKER ==========
+// POST /api/srt/generate
+// body: { text: "line1\nline2\n...", mode: "auto" | "fixed", duration: 30 (only if fixed) }
+// returns: { srt: "1\n00:00:00,000 --> 00:00:03,500\nLine 1\n\n2\n..." , videoDuration, segments }
+app.post('/api/srt/generate', async (req, res) => {
+    const { text, mode, duration } = req.body || {};
+    if (!text || typeof text !== 'string' || !text.trim()) {
+        return res.status(400).json({ error: 'Missing text' });
+    }
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) return res.status(400).json({ error: 'No lines after trim' });
+
+    const isFixed = mode === 'fixed' && Number.isFinite(Number(duration));
+    const fixedDur = isFixed ? Math.max(10, Math.min(120, Number(duration))) : null;
+
+    // Helper: format seconds → "HH:MM:SS,mmm"
+    function fmtTs(sec) {
+        if (sec < 0) sec = 0;
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+        const ms = Math.round((sec - Math.floor(sec)) * 1000);
+        const pad = (n, w=2) => String(n).padStart(w, '0');
+        return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms,3)}`;
+    }
+
+    // Helper: build SRT string from segments [{text,start,end},...]
+    function toSrt(segs) {
+        return segs.map((s, i) =>
+            `${i+1}\n${fmtTs(s.start)} --> ${fmtTs(s.end)}\n${s.text}`
+        ).join('\n\n') + '\n';
+    }
+
+    try {
+        let segments;
+
+        if (isFixed) {
+            // FIXED mode: ask AI to rewrite/adjust the lines to fit exactly fixedDur seconds.
+            // Use OpenAI to redistribute timing AND optionally trim/rephrase lines so all fit.
+            const prompt = `Imam scenarij za reklamno video (en stavek na vrstico). Video traja TOČNO ${fixedDur} sekund.
+
+Razdeli ČAS med vrstice tako, da skupaj zapolnijo ${fixedDur}s. Če je vrstic preveč ali pretežke za branje, jih prilagodi (skrajšaj / združi / prerazporedi) — ampak SAMO če je nujno. Branje naj bo naravno (povprečno 3 besede/sekundo, min 1.2s na segment, max 6s).
+
+Vrne JSON: [{"text": "vrstica", "start": 0.0, "end": 2.5}, ...]
+- start vedno > prejšnji end (lahko +0.1 do +0.4s premor)
+- zadnji end MORA biti = ${fixedDur}
+- SAMO JSON, brez razlage
+
+Vrstice:
+${lines.map((l, i) => `${i+1}. ${l}`).join('\n')}`;
+
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+                body: JSON.stringify({
+                    model: 'gpt-4o',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 4000
+                })
+            });
+            const data = await r.json();
+            const content = data.choices?.[0]?.message?.content || '[]';
+            const match = content.match(/\[[\s\S]*\]/);
+            segments = match ? JSON.parse(match[0]) : [];
+            if (!Array.isArray(segments) || segments.length === 0) {
+                throw new Error('AI did not return valid segments');
+            }
+        } else {
+            // AUTO mode: timing per line based on word count.
+            // ~3.0 words per second reading rate, min 1.2s, max 5.5s, +0.3s gap.
+            const WPS = 3.0;
+            const MIN = 1.2;
+            const MAX = 5.5;
+            const GAP = 0.3;
+            segments = [];
+            let cursor = 0;
+            for (const line of lines) {
+                const wc = line.split(/\s+/).filter(Boolean).length;
+                let dur = wc / WPS;
+                if (dur < MIN) dur = MIN;
+                if (dur > MAX) dur = MAX;
+                segments.push({ text: line, start: +cursor.toFixed(2), end: +(cursor + dur).toFixed(2) });
+                cursor += dur + GAP;
+            }
+        }
+
+        // Sanitize: ensure monotonic, end > start
+        for (let i = 0; i < segments.length; i++) {
+            if (typeof segments[i].start !== 'number') segments[i].start = i === 0 ? 0 : segments[i-1].end + 0.3;
+            if (typeof segments[i].end !== 'number' || segments[i].end <= segments[i].start) segments[i].end = segments[i].start + 2.0;
+        }
+
+        const srt = toSrt(segments);
+        const totalDuration = segments[segments.length - 1].end;
+        res.json({ srt, segments, videoDuration: +totalDuration.toFixed(2), mode: isFixed ? 'fixed' : 'auto', requested: isFixed ? fixedDur : null });
+    } catch (e) {
+        console.error('[srt/generate] error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+// ========== END SRT MAKER ==========
+
+
 // Generate voiceover video for all countries
 async function generateVoiceoverCountries(job, videoPath) {
     const LANGUAGES = job.countries || ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
