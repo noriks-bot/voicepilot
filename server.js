@@ -234,8 +234,22 @@ function readCreativesFromDb() {
                 imageCount: 0,
                 latestModified: null,
                 hasWT: false,
+                authors: new Set(),
             };
         }
+        // Detect AVTOR from filename / path
+        const nUp = (r.name || '').toUpperCase();
+        const pUp = (r.path || '').toUpperCase();
+        // ID###FA_ prefix => FA (Faraz)
+        if (/ID\d+FA_/.test(nUp) || /\/FARAZ\//.test(pUp)) groups[id].authors.add('FA');
+        // ID###WR_ prefix => WR (Wasif)
+        if (/ID\d+WR_/.test(nUp) || /\/WASIF\//.test(pUp)) groups[id].authors.add('WR');
+        // _TK suffix variants
+        if (/_TK[._\-]/.test(nUp) || /_TK$/.test(nUp.replace(/\.[A-Z0-9]+$/,''))) groups[id].authors.add('TK');
+        // _GP suffix or NORIKS_GP folder
+        if (/_GP[._\-]/.test(nUp) || /_GP$/.test(nUp.replace(/\.[A-Z0-9]+$/,'')) || /NORIKS_GP/.test(pUp)) groups[id].authors.add('GP');
+        // _SRB suffix or Srbija folder
+        if (/_SRB[._\-]/.test(nUp) || /_SRB$/.test(nUp.replace(/\.[A-Z0-9]+$/,'')) || /SRBIJA|SERBIA/.test(pUp)) groups[id].authors.add('SRB');
         // Detect WITHOUT TEXT variant from filename
         const nameUpper = (r.name || '').toUpperCase();
         if (/WITHOUT[\s_]*TEXT/.test(nameUpper) || /WITH[\s_]+OUT[\s_]*TEXT/.test(nameUpper) || /_WT_/.test(nameUpper) || /_WT\./.test(nameUpper)) {
@@ -275,6 +289,7 @@ function readCreativesFromDb() {
         imageCount: g.imageCount,
         latestModified: g.latestModified,
         hasWT: !!g.hasWT,
+        authors: [...(g.authors||[])].sort(),
     }));
     arr.sort((a, b) => {
         if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);
