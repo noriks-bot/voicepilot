@@ -3219,16 +3219,71 @@ JSON: [{"text": "stavek", "start": 0, "end": 2.5}, ...]
 // POST /api/srt/generate
 // body: { text: "line1\nline2\n...", mode: "auto" | "fixed", duration: 30 (only if fixed) }
 // returns: { srt: "1\n00:00:00,000 --> 00:00:03,500\nLine 1\n\n2\n..." , videoDuration, segments }
+// Helper: ffprobe video duration (sec)
+function _ffprobeDuration(filePath) {
+    return new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        const ff = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath]);
+        let out = '', err = '';
+        ff.stdout.on('data', d => out += d.toString());
+        ff.stderr.on('data', d => err += d.toString());
+        ff.on('close', code => {
+            if (code !== 0) return reject(new Error('ffprobe failed: ' + err));
+            const dur = parseFloat(out.trim());
+            if (!Number.isFinite(dur) || dur <= 0) return reject(new Error('Invalid duration: ' + out));
+            resolve(dur);
+        });
+        ff.on('error', reject);
+    });
+}
+
+// GET duration of a creative video file (downloads from Dropbox, runs ffprobe)
+app.get('/api/srt/creative-duration', async (req, res) => {
+    try {
+        const id = String(req.query.id || '').toUpperCase();
+        if (!id) return res.status(400).json({ error: 'Missing id' });
+        const rows = creativesDb.prepare("SELECT name, path, media_type FROM creative_files WHERE creative_id = ? AND (media_type = 'video' OR name LIKE '%.mp4' OR name LIKE '%.mov' OR name LIKE '%.MP4' OR name LIKE '%.MOV') ORDER BY modified DESC LIMIT 1").all(id);
+        if (!rows || rows.length === 0) return res.status(404).json({ error: 'No video for ' + id });
+        const file = rows[0];
+        const tmpDir = path.join(__dirname, 'uploads', 'tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        const tmpPath = path.join(tmpDir, 'srt-probe-' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_'));
+        try {
+            const dlRes = await fetch('https://content.dropboxapi.com/2/files/download', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + (process.env.DROPBOX_ACCESS_TOKEN || ''),
+                    'Dropbox-API-Arg': JSON.stringify({ path: file.path })
+                }
+            });
+            if (!dlRes.ok) {
+                const txt = await dlRes.text();
+                throw new Error('Dropbox download failed: ' + dlRes.status + ' ' + txt.substring(0, 200));
+            }
+            const buf = Buffer.from(await dlRes.arrayBuffer());
+            fs.writeFileSync(tmpPath, buf);
+            const dur = await _ffprobeDuration(tmpPath);
+            res.json({ id, fileName: file.name, duration: dur });
+        } finally {
+            try { fs.unlinkSync(tmpPath); } catch(e) {}
+        }
+    } catch (e) {
+        console.error('[srt/creative-duration] error:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/srt/generate', async (req, res) => {
-    const { text, mode, duration } = req.body || {};
+    const { text, mode, duration, creativeId } = req.body || {};
     if (!text || typeof text !== 'string' || !text.trim()) {
         return res.status(400).json({ error: 'Missing text' });
     }
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length === 0) return res.status(400).json({ error: 'No lines after trim' });
 
-    const isFixed = mode === 'fixed' && Number.isFinite(Number(duration));
-    const fixedDur = isFixed ? Math.max(10, Math.min(120, Number(duration))) : null;
+    const isFixed = (mode === 'fixed' || mode === 'from-creative') && Number.isFinite(Number(duration));
+    // from-creative: trust actual video duration (no 120s cap, only min 1s)
+    const fixedDur = isFixed ? (mode === 'from-creative' ? Math.max(1, Number(duration)) : Math.max(10, Math.min(120, Number(duration)))) : null;
 
     // Helper: format seconds → "HH:MM:SS,mmm"
     function fmtTs(sec) {

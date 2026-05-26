@@ -2294,29 +2294,51 @@
                 <!-- Step 2: Duration mode -->
                 <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
                     <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Trajanje</h4>
-                    <div style="display:flex; gap:12px; margin-left:34px;">
-                        <label id="srt-mode-auto-lbl" style="flex:1; display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-left:34px;">
+                        <label id="srt-mode-auto-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
                             <input type="radio" name="srt-mode" value="auto" checked onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
                             <div>
-                                <div style="font-weight:600; color:#0F172A; font-size:14px;">⚡ Avtomatsko</div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#9889; Avtomatsko</div>
                                 <div style="color:#78716c; font-size:12px; margin-top:2px;">Predlagamo trajanje glede na tekst</div>
                             </div>
                         </label>
-                        <label id="srt-mode-fixed-lbl" style="flex:1; display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                        <label id="srt-mode-fixed-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
                             <input type="radio" name="srt-mode" value="fixed" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
                             <div>
-                                <div style="font-weight:600; color:#0F172A; font-size:14px;">🎯 Fiksno trajanje</div>
-                                <div style="color:#78716c; font-size:12px; margin-top:2px;">AI prilagodi tekst, da paše v točno X sekund</div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127919; Fiksno trajanje</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Vpi&scaron;i sekunde ali izberi z drsnikom</div>
+                            </div>
+                        </label>
+                        <label id="srt-mode-creative-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="from-creative" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127916; Iz creative</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Preberi dol&zcaron;ino izbranega videa</div>
                             </div>
                         </label>
                     </div>
                     <div id="srt-fixed-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
                         <div style="display:flex; align-items:center; gap:14px;">
                             <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Trajanje:</span>
-                            <input type="range" id="srt-duration" min="10" max="120" step="1" value="30" oninput="document.getElementById('srt-duration-val').textContent = this.value + 's';" style="flex:1; accent-color:#0A59D2;">
-                            <span id="srt-duration-val" style="min-width:50px; font-weight:700; color:#0A59D2; font-size:14px;">30s</span>
+                            <input type="range" id="srt-duration" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'range\');" style="flex:1; accent-color:#0A59D2;">
+                            <input type="number" id="srt-duration-num" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'num\');" style="width:80px; padding:8px 10px; border:1px solid #E7E5E4; border-radius:8px; font-size:14px; font-weight:700; color:#0A59D2; text-align:center;">
+                            <span style="color:#57534e; font-size:13px; font-weight:600;">s</span>
                         </div>
-                        <div style="color:#78716c; font-size:11px; margin-top:8px;">10–120 sekund. AI bo (po potrebi) skrajšal/združil vrstice.</div>
+                        <div style="color:#78716c; font-size:11px; margin-top:8px;">10&ndash;120 sekund. AI bo (po potrebi) skraj&scaron;al/zdru&zcaron;il vrstice.</div>
+                    </div>
+                    <div id="srt-creative-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
+                        <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
+                            <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Creative:</span>
+                            <input type="text" id="srt-creative-search" placeholder="Vpi&scaron;i ID ali ime... (npr. ID210FA)" oninput="window._srtFilterCreatives()" style="flex:1; padding:10px 12px; border:1px solid #E7E5E4; border-radius:8px; font-size:13px; font-family:JetBrains Mono,monospace;">
+                        </div>
+                        <div id="srt-creative-list" style="max-height:200px; overflow-y:auto; border:1px solid #E7E5E4; border-radius:8px; background:#fff; display:none;"></div>
+                        <div id="srt-creative-selected" style="display:none; margin-top:10px; padding:10px 12px; background:#F0F6FF; border:1px solid #0A59D2; border-radius:8px; font-size:13px;">
+                            <span style="color:#57534e;">Izbrano: </span>
+                            <span id="srt-creative-name" style="font-weight:600; color:#0F172A; font-family:JetBrains Mono,monospace;"></span>
+                            <span id="srt-creative-dur" style="color:#0A59D2; font-weight:700; margin-left:8px;"></span>
+                            <button onclick="window._srtClearCreative()" style="float:right; background:none; border:none; color:#B91C1C; cursor:pointer; font-size:12px;">&times;</button>
+                        </div>
+                        <div style="color:#78716c; font-size:11px; margin-top:8px;">Preberemo trajanje izbranega videa in ga uporabimo kot fiksno.</div>
                     </div>
                 </div>
 
@@ -2340,25 +2362,93 @@
                 </div>
 
                 <script>
+                window._srtSyncDur = function(src) {
+                    const range = document.getElementById('srt-duration');
+                    const num = document.getElementById('srt-duration-num');
+                    if (src === 'range') { num.value = Math.max(10, Math.min(120, Number(range.value) || 30)); }
+                    else { range.value = Math.max(10, Math.min(120, Number(num.value) || 30)); }
+                };
+                window._srtCreativesCache = null;
+                window._srtSelectedCreative = null;
+                window._srtLoadCreatives = async function() {
+                    if (window._srtCreativesCache) return;
+                    try {
+                        const r = await fetch('/api/creatives');
+                        const d = await r.json();
+                        const items = d.creatives || d.items || [];
+                        window._srtCreativesCache = items;
+                    } catch (e) { window._srtCreativesCache = []; }
+                };
+                window._srtFilterCreatives = function() {
+                    const q = (document.getElementById('srt-creative-search').value || '').toLowerCase().trim();
+                    const list = document.getElementById('srt-creative-list');
+                    if (!q || q.length < 2) { list.style.display = 'none'; return; }
+                    const items = (window._srtCreativesCache || []).filter(c => (c.id || '').toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q)).slice(0, 30);
+                    if (items.length === 0) { list.innerHTML = '<div style="padding:12px; color:#9ca3af; font-size:13px;">Ni zadetkov za "' + q + '".</div>'; list.style.display = 'block'; return; }
+                    list.innerHTML = items.map(c => '<div onclick="window._srtPickCreative(\'' + (c.id||'') + '\')" style="padding:10px 12px; border-bottom:1px solid #f3f4f6; cursor:pointer; font-size:13px;" onmouseover="this.style.background=\'#F0F6FF\'" onmouseout="this.style.background=\'#fff\'"><span style="font-family:JetBrains Mono,monospace; font-weight:600; color:#0A59D2;">' + (c.id || '?') + '</span><span style="color:#57534e; margin-left:8px;">' + ((c.productType || c.name || '').substring(0, 40)) + '</span><span style="color:#9ca3af; margin-left:8px; font-size:11px;">' + (c.videoCount || 0) + ' video</span></div>').join('');
+                    list.style.display = 'block';
+                };
+                window._srtPickCreative = async function(id) {
+                    document.getElementById('srt-creative-list').style.display = 'none';
+                    document.getElementById('srt-creative-search').value = id;
+                    document.getElementById('srt-creative-name').textContent = 'Berem dol\u017eino...';
+                    document.getElementById('srt-creative-dur').textContent = '';
+                    document.getElementById('srt-creative-selected').style.display = 'block';
+                    try {
+                        const r = await fetch('/api/srt/creative-duration?id=' + encodeURIComponent(id));
+                        const d = await r.json();
+                        if (!r.ok) throw new Error(d.error || 'Napaka');
+                        window._srtSelectedCreative = { id, duration: d.duration, fileName: d.fileName };
+                        document.getElementById('srt-creative-name').textContent = d.fileName || id;
+                        document.getElementById('srt-creative-dur').textContent = '\u2192 ' + d.duration.toFixed(1) + 's';
+                    } catch (e) {
+                        document.getElementById('srt-creative-name').textContent = 'Napaka: ' + e.message;
+                        document.getElementById('srt-creative-dur').textContent = '';
+                        window._srtSelectedCreative = null;
+                    }
+                };
+                window._srtClearCreative = function() {
+                    window._srtSelectedCreative = null;
+                    document.getElementById('srt-creative-selected').style.display = 'none';
+                    document.getElementById('srt-creative-search').value = '';
+                    document.getElementById('srt-creative-list').style.display = 'none';
+                };
                 window._srtUpdMode = function() {
                     const mode = document.querySelector('input[name="srt-mode"]:checked').value;
                     const auto = document.getElementById('srt-mode-auto-lbl');
                     const fixed = document.getElementById('srt-mode-fixed-lbl');
-                    const ctrls = document.getElementById('srt-fixed-controls');
+                    const creat = document.getElementById('srt-mode-creative-lbl');
+                    const ctrlsFixed = document.getElementById('srt-fixed-controls');
+                    const ctrlsCreat = document.getElementById('srt-creative-controls');
+                    [auto, fixed, creat].forEach(el => { if (el) { el.style.background = '#fff'; el.style.borderColor = '#E7E5E4'; }});
+                    if (ctrlsFixed) ctrlsFixed.style.display = 'none';
+                    if (ctrlsCreat) ctrlsCreat.style.display = 'none';
                     if (mode === 'auto') {
-                        auto.style.background = '#F0F6FF'; auto.style.borderColor = '#0A59D2';
-                        fixed.style.background = '#fff'; fixed.style.borderColor = '#E7E5E4';
-                        ctrls.style.display = 'none';
-                    } else {
-                        auto.style.background = '#fff'; auto.style.borderColor = '#E7E5E4';
-                        fixed.style.background = '#F0F6FF'; fixed.style.borderColor = '#0A59D2';
-                        ctrls.style.display = 'block';
+                        if (auto) { auto.style.background = '#F0F6FF'; auto.style.borderColor = '#0A59D2'; }
+                    } else if (mode === 'fixed') {
+                        if (fixed) { fixed.style.background = '#F0F6FF'; fixed.style.borderColor = '#0A59D2'; }
+                        if (ctrlsFixed) ctrlsFixed.style.display = 'block';
+                    } else if (mode === 'from-creative') {
+                        if (creat) { creat.style.background = '#F0F6FF'; creat.style.borderColor = '#0A59D2'; }
+                        if (ctrlsCreat) ctrlsCreat.style.display = 'block';
+                        window._srtLoadCreatives();
                     }
                 };
                 window._srtGenerate = async function() {
                     const text = document.getElementById('srt-input').value.trim();
                     const mode = document.querySelector('input[name="srt-mode"]:checked').value;
-                    const duration = Number(document.getElementById('srt-duration').value);
+                    let duration = Number((document.getElementById('srt-duration-num') || document.getElementById('srt-duration')).value);
+                    let creativeId = null;
+                    if (mode === 'from-creative') {
+                        if (!window._srtSelectedCreative) {
+                            const s = document.getElementById('srt-status');
+                            s.style.display = 'block'; s.style.color = '#B91C1C';
+                            s.textContent = '\u26a0\ufe0f Izberi kreativo iz seznama.';
+                            return;
+                        }
+                        duration = window._srtSelectedCreative.duration;
+                        creativeId = window._srtSelectedCreative.id;
+                    }
                     const btn = document.getElementById('btn-srt-generate');
                     const status = document.getElementById('srt-status');
                     const outCard = document.getElementById('srt-output-card');
@@ -2379,7 +2469,7 @@
                         const r = await fetch('/api/srt/generate', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text, mode, duration })
+                            body: JSON.stringify({ text, mode, duration, creativeId })
                         });
                         const data = await r.json();
                         if (!r.ok) throw new Error(data.error || 'Napaka');
@@ -7633,7 +7723,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 const rows = [];
                 // 1) Completed jobs from generated folder
                 for (const j of (genRes.jobs || [])) {
-                    const videos = (j.videos || []).filter(v => v.name && v.name.endsWith('.mp4'));
+                    const videos = (j.videos || []).filter(v => v.name && v.name.toLowerCase().endsWith('.mp4') && !v.name.startsWith('tts-') && !v.name.startsWith('vo-subs-'));
                     if (videos.length === 0) continue;
                     const KNOWN_COUNTRIES = ['SI','HR','HU','PL','SK','CZ','RO','GR','BG','IT','DE','AT','US','EN','FR','ES','NL','SE','NO','DK','FI','BA','RS','ME','MK'];
                     const filesByLang = {};
