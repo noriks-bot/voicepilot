@@ -2528,6 +2528,7 @@
                     <table class="activity-table downloads-table">
                         <thead>
                             <tr>
+                                <th>Tip</th>
                                 <th>Ime</th>
                                 <th>Jeziki</th>
                                 <th>Status</th>
@@ -2536,7 +2537,7 @@
                             </tr>
                         </thead>
                         <tbody id="downloads-tbody">
-                            <tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>
+                            <tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam ...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -7619,12 +7620,34 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             const m = String(name).match(/(ID[A-Z0-9]+|[A-Z]{2,4}[0-9]{2,6})/i);
             return m ? m[1] : '';
         }
+        // Known country codes for video output (whitelist, NOT VO/SRT suffix)
+        const _KNOWN_COUNTRIES = ['SI','HR','HU','PL','SK','CZ','RO','GR','BG','IT','DE','US','EN','AT','BA','RS','FR','ES','PT','NL','SE','NO','DK','FI'];
+        function _countryFromFilename(name) {
+            if (!name) return null;
+            const tokens = String(name).replace(/\.mp4$/i, '').split(/[_\-]/);
+            for (const t of tokens) {
+                if (_KNOWN_COUNTRIES.includes(t.toUpperCase())) return t.toUpperCase();
+            }
+            return null;
+        }
+        function _jobTypeFromFilename(name) {
+            if (!name) return 'lokalizator';
+            // _VO_VO.mp4 or _VO.mp4 => voiceover; _SRT.mp4 or contains SRT => srt; else lokalizator
+            if (/_VO(_VO)?\.mp4$/i.test(name)) return 'voiceover';
+            if (/_SRT(_VO)?\.mp4$/i.test(name)) return 'srt';
+            return 'lokalizator';
+        }
+        function _jobTypeBadge(type) {
+            if (type === 'voiceover') return '<span style="display:inline-block; padding:3px 8px; background:#EFF6FF; color:#0A59D2; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:0.4px;">VO</span>';
+            if (type === 'srt') return '<span style="display:inline-block; padding:3px 8px; background:#FEF3C7; color:#92400E; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:0.4px;">SRT</span>';
+            return '<span style="display:inline-block; padding:3px 8px; background:#F3F4F6; color:#374151; border-radius:6px; font-size:10px; font-weight:700; letter-spacing:0.4px;">LOK</span>';
+        }
         async function loadDownloadsPage() {
             const tbody = document.getElementById('downloads-tbody');
             const btn = document.getElementById('btn-refresh-downloads');
             if (!tbody) return;
             if (btn) btn.disabled = true;
-            tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>';
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam ...</td></tr>';
             try {
                 const [genRes, jobsRes] = await Promise.all([
                     fetch('/api/localizer/generated-videos').then(r => r.json()),
@@ -7637,13 +7660,21 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     if (videos.length === 0) continue;
                     const filesByLang = {};
                     for (const v of videos) {
-                        const cm = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
-                        if (cm) filesByLang[cm[1]] = v.name;
+                        const country = _countryFromFilename(v.name);
+                        if (country) filesByLang[country] = v.name;
                     }
                     let displayName = j.id;
                     let creativeId = '';
+                    let jobType = 'lokalizator';
                     if (videos[0]) {
-                        const baseName = videos[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
+                        jobType = _jobTypeFromFilename(videos[0].name);
+                        // Strip country, date, and suffix tokens for clean display name
+                        let baseName = videos[0].name.replace(/\.mp4$/i, '');
+                        // Remove _XX_ country segment (only known countries)
+                        for (const c of _KNOWN_COUNTRIES) {
+                            baseName = baseName.replace(new RegExp('[_-]' + c + '(?=[_-]|$)', 'i'), '');
+                        }
+                        baseName = baseName.replace(/_VO(_VO)?$/i, '').replace(/_SRT(_VO)?$/i, '');
                         displayName = baseName;
                         creativeId = _creativeIdFromName(baseName);
                     }
@@ -7653,7 +7684,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         if (idMatch) ts = Number(idMatch[1]);
                     }
                     rows.push({
-                        kind: 'completed', id: j.id, name: displayName, creativeId,
+                        kind: 'completed', id: j.id, name: displayName, creativeId, jobType,
                         languages: Object.keys(filesByLang), filesByLang, timestamp: ts,
                         fileCount: videos.length, status: 'done'
                     });
@@ -7673,15 +7704,16 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     const langs = j.countries || j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []);
                     const completedLangs = j.outputs ? Object.keys(j.outputs) : [];
                     const creativeId = (j.namingParts && j.namingParts.id) || _creativeIdFromName(j.name) || '';
+                    const jobType = (j.mode === 'voiceover' || j.mode === 'srt') ? j.mode : 'lokalizator';
                     rows.push({
-                        kind: 'in_progress', id: j.id, name: j.name || j.filename || j.id, creativeId,
+                        kind: 'in_progress', id: j.id, name: j.name || j.filename || j.id, creativeId, jobType,
                         languages: langs, completedLangs, timestamp: ts, fileCount: completedLangs.length,
                         status: st, totalCount: langs.length, currentLang: j.currentLang || ''
                     });
                 }
                 rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                 if (rows.length === 0) {
-                    tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
                     return;
                 }
                 tbody.innerHTML = rows.map(r => {
@@ -7712,6 +7744,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none;">ZIP &darr;</a>' :
                         '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
                     return '<tr>' +
+                        '<td>' + _jobTypeBadge(r.jobType) + '</td>' +
                         '<td>' + creativeIdHtml + '<span class="activity-source" style="font-weight:600;">' + String(r.name) + '</span>' +
                         '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div></td>' +
                         '<td><div class="activity-langs" style="display:flex; flex-wrap:wrap; gap:4px;">' + (langsHtml || '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>') + '</div></td>' +
@@ -7721,7 +7754,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         '</tr>';
                 }).join('');
             } catch (e) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Napaka: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Napaka: ' + e.message + '</td></tr>';
             } finally {
                 if (btn) btn.disabled = false;
             }
