@@ -3415,10 +3415,8 @@ app.post('/api/srt/generate', async (req, res) => {
     if (lines.length === 0) return res.status(400).json({ error: 'No lines after trim' });
 
     const isFixed = (mode === 'fixed' || mode === 'from-creative') && Number.isFinite(Number(duration));
-    // from-creative: trust actual video duration (no 120s cap, only min 1s)
     const fixedDur = isFixed ? (mode === 'from-creative' ? Math.max(1, Number(duration)) : Math.max(10, Math.min(120, Number(duration)))) : null;
 
-    // Helper: format seconds → "HH:MM:SS,mmm"
     function fmtTs(sec) {
         if (sec < 0) sec = 0;
         const h = Math.floor(sec / 3600);
@@ -3429,7 +3427,6 @@ app.post('/api/srt/generate', async (req, res) => {
         return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms,3)}`;
     }
 
-    // Helper: build SRT string from segments [{text,start,end},...]
     function toSrt(segs) {
         return segs.map((s, i) =>
             `${i+1}\n${fmtTs(s.start)} --> ${fmtTs(s.end)}\n${s.text}`
@@ -3437,30 +3434,30 @@ app.post('/api/srt/generate', async (req, res) => {
     }
 
     try {
-        let segments;
-
-        // NARRATIVE MODE: AI builds flowing voiceover from input text
-        // Breaks by natural phrases (commas/clauses), short pauses, may slightly rephrase for fluency
         const inputText = lines.join(' ');
-        const durConstraint = isFixed
-            ? `Video traja TOČNO ${fixedDur} sekund. Skupna dolžina vseh segmentov + pavz MORA biti = ${fixedDur}s. Zadnji "end" MORA biti = ${fixedDur}.`
-            : `Skupno trajanje naj bo naravno glede na količino teksta (~2.8-3.2 besed/sekundo). Določi sam.`;
 
-        const prompt = `Imam tekst za reklamni voiceover. Naredi ENOTEN NARRATIVE GOVOR, kot da profesionalni govorec pripoveduje zgodbo.
+        // SINGLE-SEGMENT NARRATIVE MODE
+        // AI builds ONE flowing voiceover paragraph. Pauses/breaths happen naturally at punctuation.
+        // No segment splitting - ElevenLabs handles natural pauses via commas/periods/!/?
+        const durConstraint = isFixed
+            ? `Video traja TOČNO ${fixedDur} sekund. Tekst mora biti TAKO DOLG, da ga govorec naravno prebere v ${fixedDur} sekundah (~2.8-3.2 besed/sek). Če je input prekratek, ga rahlo razširi z vezniki/dopolnili. Če je predolg, ga skrči.`
+            : `Naravna dolžina glede na input (~2.8-3.2 besed/sek). Ne dodajaj besed po nepotrebnem.`;
+
+        const prompt = `Imam tekst za reklamni voiceover. Predelaj ga v EN POVEZAN GOVOR — kot da profesionalni govorec pripoveduje zgodbo v eni sapi.
 
 ${durConstraint}
 
 PRAVILA:
-1. NE ohrani 1:1 vrstic iz inputa — prelomi tekst po NARAVNIH frazah (vejice, dvopičja, smiselne pomenske enote, kratki stavki)
-2. Vsak segment naj traja 2.5-4.2 sekund (max 4.5s, min 2.0s)
-3. Med segmenti naredi KRATKE NARAVNE PAVZE 0.2-0.4s (kot dihanje med frazami) — rajši krajše pavze, da govor teče tekoče in naravno
-4. Tempo branja: ~2.8-3.2 besed/sekundo (naravna pripoved)
-5. Tekst lahko RAHLO PREFORMULIRAŠ za boljšo tekočost — dodaš veznik (in, ampak, zato), preložiš stavek, dodaš vezno frazo. NE spreminjaj sporočila ali izpustiš ključne informacije
-6. Pavza med segmenti: end[i] + pavza = start[i+1]. Pavze naj bodo majhne (rajši 0.2-0.3s kot 0.5s)
-7. Prvi segment začni z start = 0.0
+1. Vrni EN SAM segment (en blok teksta), brez razbijanja na vrstice
+2. Tekst mora biti GLADEK, KOT GOVOR — uporabljaj ločila (vejice, pike, klicaji, vprašaji) kjer naj govorec naravno naredi pavzo ali vdihne
+3. Združi vse input vrstice v tekoč narrative — odstrani nepotrebne prelome, dodaj veznike (in, ampak, zato, pa, ali) kjer izboljša tekočost
+4. Lahko RAHLO PREFORMULIRAŠ za boljšo tekočost, ampak NE spreminjaj sporočila in NE izpusti ključnih informacij (NORIKS, ponudb, številk, %, garancij)
+5. Brez markdown, brez "Segment 1:", brez oznak — samo gol tekst voiceoverja
+6. Emojiji iz inputa naj OSTANEJO v outputu (governor jih bo prebral kot pavzo/poudarek)
+7. Tekst naj zveni naravno za TTS govorca (ElevenLabs eleven_multilingual_v2)
 
-Vrni SAMO JSON array (brez razlage, brez markdown):
-[{"text": "fraza", "start": 0.0, "end": 3.2}, ...]
+Vrni SAMO JSON v tej obliki (brez razlage, brez markdown ograj):
+{"text": "celoten govor v enem kosu, z ločili za naravne pavze."}
 
 INPUT TEKST:
 ${inputText}`;
@@ -3471,32 +3468,47 @@ ${inputText}`;
             body: JSON.stringify({
                 model: 'gpt-4o',
                 messages: [{ role: 'user', content: prompt }],
-                max_tokens: 4000,
+                max_tokens: 2000,
                 temperature: 0.7
             })
         });
         const data = await r.json();
-        const content = data.choices?.[0]?.message?.content || '[]';
-        const match = content.match(/\[[\s\S]*\]/);
-        segments = match ? JSON.parse(match[0]) : [];
-        if (!Array.isArray(segments) || segments.length === 0) {
-            throw new Error('AI did not return valid segments');
+        let content = data.choices?.[0]?.message?.content || '';
+        content = content.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim();
+        const match = content.match(/\{[\s\S]*\}/);
+        let narrativeText = inputText;
+        if (match) {
+            try {
+                const parsed = JSON.parse(match[0]);
+                if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
+                    narrativeText = parsed.text.trim();
+                }
+            } catch (e) {
+                console.warn('[srt/generate] JSON parse failed, using raw input:', e.message);
+            }
         }
 
-        // Sanitize: ensure monotonic, end > start
-        for (let i = 0; i < segments.length; i++) {
-            if (typeof segments[i].start !== 'number') segments[i].start = i === 0 ? 0 : segments[i-1].end + 0.3;
-            if (typeof segments[i].end !== 'number' || segments[i].end <= segments[i].start) segments[i].end = segments[i].start + 2.0;
+        // Compute duration
+        let totalDuration;
+        if (isFixed) {
+            totalDuration = fixedDur;
+        } else {
+            const wordCount = narrativeText.split(/\s+/).filter(w => w.length > 0).length;
+            totalDuration = Math.max(3, wordCount / 3.0); // ~3 words/sec
         }
 
+        const segments = [{ text: narrativeText, start: 0, end: totalDuration }];
         const srt = toSrt(segments);
-        const totalDuration = segments[segments.length - 1].end;
+
         res.json({ srt, segments, videoDuration: +totalDuration.toFixed(2), mode: isFixed ? 'fixed' : 'auto', requested: isFixed ? fixedDur : null });
     } catch (e) {
         console.error('[srt/generate] error:', e);
         res.status(500).json({ error: e.message });
     }
 });
+
+
+
 // ========== END SRT MAKER ==========
 
 
