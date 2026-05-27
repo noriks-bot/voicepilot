@@ -3221,6 +3221,7 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 // Voice IDs for each language - native male voice actors (ElevenLabs Voice Library)
 // Selected: professional narrator / storytelling voices, middle-aged male, native accent
 const VOICE_MAP = {
+    SI: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Slovenian - uses Croatian voice (closest native accent)
     HR: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Croatian male, 30s, news/narration
     CZ: { voice_id: 'KIDKfqJyZ6ASuyzsKfh5', name: 'Jan - Kind Educator' },// Czech 35yo, audiobooks/narration
     PL: { voice_id: 'gFl0NeqphJUaoBLtWrqM', name: 'Piotr' },              // Polish mature, warm/pleasant
@@ -3235,7 +3236,7 @@ const VOICE_MAP = {
 
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
-    HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
+    SI: 'hr', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
 };
 
 // Generate TTS audio with ElevenLabs
