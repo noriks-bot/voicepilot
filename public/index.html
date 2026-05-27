@@ -7865,6 +7865,36 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
             if (isNaN(d.getTime())) return '-';
             return d.toLocaleString('sl-SI', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
+        // Only the time part - used when row date is shown in section header
+        function _fmtTimeDl(iso) {
+            if (!iso) return '-';
+            const d = new Date(typeof iso === 'string' && /^\d+$/.test(iso) ? Number(iso) : iso);
+            if (isNaN(d.getTime())) return '-';
+            return d.toLocaleString('sl-SI', { hour: '2-digit', minute: '2-digit' });
+        }
+        // Day key (YYYY-MM-DD) for grouping
+        function _dayKey(iso) {
+            if (!iso) return 'unknown';
+            const d = new Date(typeof iso === 'string' && /^\d+$/.test(iso) ? Number(iso) : iso);
+            if (isNaN(d.getTime())) return 'unknown';
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
+        // Day label: "Danes", "Vceraj", or full date in Slovenian
+        function _dayLabel(iso) {
+            if (!iso) return 'Brez datuma';
+            const d = new Date(typeof iso === 'string' && /^\d+$/.test(iso) ? Number(iso) : iso);
+            if (isNaN(d.getTime())) return 'Brez datuma';
+            const today = new Date(); today.setHours(0,0,0,0);
+            const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+            const that = new Date(d); that.setHours(0,0,0,0);
+            const dayNames = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
+            const monthNames = ['januar','februar','marec','april','maj','junij','julij','avgust','september','oktober','november','december'];
+            const dn = dayNames[d.getDay()];
+            const fullDate = d.getDate() + '. ' + monthNames[d.getMonth()] + ' ' + d.getFullYear();
+            if (that.getTime() === today.getTime()) return 'Danes &middot; ' + dn + ', ' + fullDate;
+            if (that.getTime() === yest.getTime()) return 'Vceraj &middot; ' + dn + ', ' + fullDate;
+            return dn + ', ' + fullDate;
+        }
         function _detectCountryDl(name) {
             if (!name) return null;
             const m1 = name.match(/-([A-Z]{2})\.mp4$/);
@@ -8020,7 +8050,16 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
                     return;
                 }
+                // Group rows by day for chronological section headers
+                let lastDayKey = null;
                 tbody.innerHTML = rows.map(r => {
+                    const dk = _dayKey(r.timestamp);
+                    let sectionHtml = '';
+                    if (dk !== lastDayKey) {
+                        lastDayKey = dk;
+                        sectionHtml = '<tr class="day-section"><td colspan="6" style="background:#F8FAFC; padding:14px 16px 8px 16px; font-size:12px; font-weight:700; color:#0F172A; letter-spacing:0.3px; text-transform:uppercase; border-top:2px solid #E2E8F0;">' + _dayLabel(r.timestamp) + '</td></tr>';
+                    }
+                    const rowHtml = (() => {
                     // Languages chips with status indicator
                     let langsHtml;
                     if (r.kind === 'completed') {
@@ -8086,9 +8125,11 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         '<td>' + typePill + '</td>' +
                         '<td><div class="activity-langs" style="display:flex; flex-wrap:wrap; gap:4px;">' + (langsHtml || '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>') + '</div></td>' +
                         '<td>' + _statusBadge(r.status) + '</td>' +
-                        '<td class="activity-time">' + _fmtDateDl(r.timestamp) + '</td>' +
+                        '<td class="activity-time">' + _fmtTimeDl(r.timestamp) + '</td>' +
                         '<td style="text-align:right;">' + action + '</td>' +
                         '</tr>';
+                    })();
+                    return sectionHtml + rowHtml;
                 }).join('');
             } catch (e) {
                 tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Napaka: ' + e.message + '</td></tr>';
