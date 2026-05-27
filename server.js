@@ -3257,7 +3257,7 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 // Voice IDs for each language - native male voice actors (ElevenLabs Voice Library)
 // Selected: professional narrator / storytelling voices, middle-aged male, native accent
 const VOICE_MAP = {
-    SI: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Slovenian - uses Croatian voice (closest native accent)
+    SI: { voice_id: 'T4CPtAHlrClEH8iCFo2h', name: 'Richard Vavrena' },              // Slovenian - uses Slovak voice (Richard Vavrena)
     HR: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Croatian male, 30s, news/narration
     CZ: { voice_id: 'KIDKfqJyZ6ASuyzsKfh5', name: 'Jan - Kind Educator' },// Czech 35yo, audiobooks/narration
     PL: { voice_id: 'gFl0NeqphJUaoBLtWrqM', name: 'Piotr' },              // Polish mature, warm/pleasant
@@ -3272,7 +3272,7 @@ const VOICE_MAP = {
 
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
-    SI: 'hr', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
+    SI: 'sk', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
 };
 
 // Generate TTS audio with ElevenLabs
@@ -3753,8 +3753,8 @@ Return ONLY valid JSON array:
         // Create ASS subtitles with configurable position (middle vs bottom 25%)
         // ASS Alignment: 5=middle-center, 2=bottom-center
         // For 1080x1920 vertical: middle = Align 5 + MarginV 200; bottom 25% = Align 2 + MarginV 480 (25% of 1920)
-        const _vpos = (job.textPosition === 'bottom') ? { align: 2, marginV: 480 } : { align: 5, marginV: 200 };
-        const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,${_vpos.align},30,30,${_vpos.marginV},1`;
+        const _vpos = (job.textPosition === 'bottom') ? { align: 2, marginV: 200 } : { align: 5, marginV: 200 };
+        const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,3,8,0,${_vpos.align},30,30,${_vpos.marginV},1`;
         
         let ass = `[Script Info]
 Title: ${job.name} ${lang} VO
@@ -3865,8 +3865,8 @@ app.post('/api/localizer/vo-preview', async (req, res) => {
     fs.mkdirSync(ttsDir, { recursive: true });
     
     // Create ASS subtitle file
-    const _pp = (textPosition === 'bottom') ? { align: 2, marginV: 480 } : { align: 5, marginV: 200 };
-    const subsStyle = `Style: Default,Noto Sans,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,${_pp.align},30,30,${_pp.marginV},1`;
+    const _pp = (textPosition === 'bottom') ? { align: 2, marginV: 200 } : { align: 5, marginV: 200 };
+    const subsStyle = `Style: Default,Noto Sans,90,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,3,8,0,${_pp.align},30,30,${_pp.marginV},1`;
     
     let ass = `[Script Info]
 Title: VO Preview SLO
