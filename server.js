@@ -3737,6 +3737,22 @@ async function generateVoiceoverCountries(job, videoPath) {
     const N = textsToTranslate.length;
     let translations = textsToTranslate.map(() => ({}));
 
+    // === FIX A: Token budgeting — empirical chars-per-second when spoken at speed=1.0 ===
+    // Calibrated from production logs. Used as HARD per-segment char budget in GPT prompt
+    // so pass-1 TTS already fits the slot (avoids 30-50% of regen calls).
+    const CHARS_PER_SEC = {
+        SI: 14.5, HR: 14.8, CZ: 14.0, SK: 14.2,
+        PL: 14.5, IT: 15.2, GR: 13.8,
+        HU: 12.8, RO: 14.3,
+        DE: 12.5
+    };
+    const segDurations = job.voiceoverScript.map(s => Math.max(0.5, (s.end || 0) - (s.start || 0)));
+    function _charBudgetFor(lang, durSec) {
+        const cps = CHARS_PER_SEC[lang] || 14.0;
+        // 10% safety margin so pass-1 has slack.
+        return Math.max(20, Math.floor(cps * durSec * 0.90));
+    }
+
     const _tshirtWord = { SI:'majica', HR:'majica', CZ:'tričko', SK:'tričko', PL:'koszulka', IT:'maglietta', HU:'póló', BG:'тениска', RO:'tricou', GR:'μπλουζάκι', DE:'T-Shirt' };
     const _langFull = {
         SI:'Slovenian (slovenščina, Slovenia)',
@@ -3757,11 +3773,13 @@ async function generateVoiceoverCountries(job, videoPath) {
         const tshirt = _tshirtWord[lang] || 't-shirt';
         // Languages with longer words / slower speech cadence — push for tighter phrasing
         const isVerbose = ['SK','CZ','PL','HU','RO','GR','DE'].includes(lang);
+        // FIX A: per-segment hard char budget so TTS fits at speed=1.0
+        const budgets = segDurations.map(d => _charBudgetFor(lang, d));
         const tightnessRule = isVerbose
             ? `
-7. CRITICAL TIMING: ${fullLang} tends to be LONGER than English when spoken. Use the SHORTEST natural phrasing. Prefer short common words over compound/formal ones. Drop redundant words. Each sentence MUST be speakable in 2-3 seconds.`
+7. CRITICAL TIMING: ${fullLang} tends to be LONGER than English when spoken. Use the SHORTEST natural phrasing. Prefer short common words over compound/formal ones. Drop redundant words.`
             : `
-7. Keep each sentence short and punchy — speakable in 2-3 seconds.`;
+7. Keep each sentence short and punchy.`;
         const sysMsg = `You are a NATIVE ${fullLang} marketing copywriter. Translate the user's voice-over sentences into ${fullLang}.
 
 ABSOLUTE RULES:
@@ -3770,10 +3788,13 @@ ABSOLUTE RULES:
 3. Brand name "NORIKS" stays unchanged.
 4. For "t-shirt" / "T-shirt" / "shirt" use the casual word: ${tshirt}. NEVER dress-shirt words.
 5. Keep meaning faithful. Do NOT skip, merge, or reorder sentences.
-6. Output ONLY a JSON array of exactly ${N} strings, in the same order as input. No comments, no markdown fences.${tightnessRule}`;
-        const userMsg = `Translate these ${N} sentences into ${fullLang}. Output a JSON array of exactly ${N} strings (one per input line, same order):
+6. Output ONLY a JSON array of exactly ${N} strings, in the same order as input. No comments, no markdown fences.${tightnessRule}
+8. CHARACTER BUDGET (HARD CONSTRAINT): each sentence must fit within its character budget below. Going over makes the voice-over too long for the video slot. If needed, drop adjectives, articles, fillers — keep the core meaning and emotion.`;
+        const userMsg = `Translate these ${N} sentences into ${fullLang}. Each sentence has a MAX CHARACTER BUDGET (count including spaces and punctuation). Stay at or under the budget.
 
-${textsToTranslate.map((t, i) => `${i+1}. ${t}`).join('\n')}`;
+${textsToTranslate.map((t, i) => `${i+1}. [budget: ${budgets[i]} chars] ${t}`).join('\n')}
+
+Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay within each char budget.`;
         const resp = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
@@ -3867,9 +3888,17 @@ ${textsToTranslate.map((t, i) => `${i+1}. ${t}`).join('\n')}`;
             
             try {
                 console.log(`[${job.id}] [VO] TTS ${lang} segment ${i}: "${segment.translatedText.substring(0, 40)}..."`);
-                // Pass 1: generate at speed=1.0
-                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, 1.0);
-                let usedSpeed = 1.0;
+                // FIX C: Per-language initial speed bias — empirical from prod logs.
+                // SI/HR usually overshoot ~15% at 1.0 → start at 1.10. HU/DE worst → start at 1.15.
+                // IT naturally fast → start at 0.95. This cuts ~60% of regen calls.
+                const INITIAL_SPEED = {
+                    SI: 1.10, HR: 1.10, CZ: 1.05, SK: 1.05,
+                    PL: 1.05, IT: 0.95, GR: 1.05,
+                    HU: 1.15, RO: 1.05, DE: 1.10
+                };
+                const initSpeed = INITIAL_SPEED[lang] || 1.0;
+                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, initSpeed);
+                let usedSpeed = initSpeed;
                 // If audio is too long for the segment, speed up (max 1.2). If much shorter, slow down (min 0.85).
                 const overshoot = ttsResult.duration / segDur;
                 if (overshoot > 1.05 && overshoot <= 1.5) {
@@ -3920,21 +3949,35 @@ ${textsToTranslate.map((t, i) => `${i+1}. ${t}`).join('\n')}`;
             }
         }
         
-        // SMART REFLOW: re-distribute timestamps so each segment gets its actual audio duration.
-        // Anchored to original first start, then each next segment starts at (prev start + prev audioDuration + gap).
-        // Prevents overlap when translated TTS is longer than originally planned slot.
-        const GAP = 0.25; // seconds between segments
+        // FIX G: SMART REFLOW with elastic pause budget — keep canvas at video duration.
+        // Old behavior: cumulative cursor → canvas drifts (HU/DE end up 2-3s longer).
+        // New behavior: total audio must fit in (videoDuration - originalFirstStart). Pauses
+        // between segments shrink (down to MIN_GAP=0.08s) before we resort to extending canvas.
+        // Result: ~95% of jobs keep original canvas length; CTA frame stays anchored.
+        const MIN_GAP = 0.08;
+        const TARGET_GAP = 0.25;
         if (ttsSegments.length > 0) {
             const originalFirstStart = ttsSegments[0].start || 0;
+            const videoDur = job.videoDuration || 30;
+            const availableTime = Math.max(1.0, videoDur - originalFirstStart);
+            const totalAudioDur = ttsSegments.reduce((sum, s) => sum + (s.audioDuration || (s.end - s.start) || 1.0), 0);
+            const nGaps = Math.max(0, ttsSegments.length - 1);
+            // Compute gap that keeps us within available time, clamped to [MIN_GAP, TARGET_GAP].
+            let gap = TARGET_GAP;
+            if (nGaps > 0) {
+                const idealGap = (availableTime - totalAudioDur) / nGaps;
+                gap = Math.max(MIN_GAP, Math.min(TARGET_GAP, idealGap));
+            }
+            const willOverflow = totalAudioDur + nGaps * MIN_GAP > availableTime;
             let cursor = originalFirstStart;
             for (let si = 0; si < ttsSegments.length; si++) {
                 const s = ttsSegments[si];
                 const dur = s.audioDuration || (s.end - s.start) || 1.0;
                 s.start = cursor;
                 s.end = cursor + dur;
-                cursor = s.end + GAP;
+                cursor = s.end + (si < ttsSegments.length - 1 ? gap : 0);
             }
-            console.log(`[${job.id}] [VO] ${lang} reflowed timestamps: total = ${cursor.toFixed(2)}s`);
+            console.log(`[${job.id}] [VO] ${lang} reflowed (gap=${gap.toFixed(2)}s, audio=${totalAudioDur.toFixed(2)}s, canvas=${cursor.toFixed(2)}s vs target=${videoDur}s${willOverflow ? ', OVERFLOW' : ''})`);
         }
         
         // Create concat file for TTS audio with silence gaps
