@@ -2303,18 +2303,18 @@
                 <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
                     <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Trajanje</h4>
                     <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-left:34px;">
-                        <label id="srt-mode-auto-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
-                            <input type="radio" name="srt-mode" value="auto" checked onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
-                            <div>
-                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#9889; Avtomatsko</div>
-                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Predlagamo trajanje glede na tekst</div>
-                            </div>
-                        </label>
-                        <label id="srt-mode-fixed-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
-                            <input type="radio" name="srt-mode" value="fixed" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                        <label id="srt-mode-fixed-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="fixed" checked onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
                             <div>
                                 <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127919; Fiksno trajanje</div>
                                 <div style="color:#78716c; font-size:12px; margin-top:2px;">Vpi&scaron;i sekunde ali izberi z drsnikom</div>
+                            </div>
+                        </label>
+                        <label id="srt-mode-auto-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
+                            <input type="radio" name="srt-mode" value="auto" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
+                            <div>
+                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#9889; Avtomatsko</div>
+                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Predlagamo trajanje glede na tekst</div>
                             </div>
                         </label>
                         <label id="srt-mode-creative-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
@@ -2325,7 +2325,7 @@
                             </div>
                         </label>
                     </div>
-                    <div id="srt-fixed-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
+                    <div id="srt-fixed-controls" style="display:block; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
                         <div style="display:flex; align-items:center; gap:14px;">
                             <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Trajanje:</span>
                             <input type="range" id="srt-duration" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'range\');" style="flex:1; accent-color:#0A59D2;">
