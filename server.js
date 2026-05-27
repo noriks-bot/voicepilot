@@ -1722,6 +1722,42 @@ function formatAssTime(seconds) {
     return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`;
 }
 
+// Split a long text into short subtitle chunks (3-5 words each)
+// with proportional timing based on word count, so chunks appear in sync with speech.
+function splitTextIntoSubtitleChunks(text, startSec, endSec, opts) {
+    opts = opts || {};
+    const wordsPerChunk = opts.wordsPerChunk || 4; // ~3-5 words
+    const totalDur = Math.max(0.5, endSec - startSec);
+    // Split on whitespace but keep punctuation attached to previous word
+    const words = String(text || '').split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return [];
+    // Build chunks. Prefer breaking on punctuation boundaries when possible.
+    const chunks = [];
+    let cur = [];
+    for (let i = 0; i < words.length; i++) {
+        cur.push(words[i]);
+        const endsPunct = /[.,!?:;\u2014\-]$/.test(words[i]);
+        const reachedMax = cur.length >= (wordsPerChunk + 1);
+        const reachedSoft = cur.length >= wordsPerChunk;
+        if (reachedMax || (reachedSoft && endsPunct)) {
+            chunks.push(cur.join(' '));
+            cur = [];
+        }
+    }
+    if (cur.length) chunks.push(cur.join(' '));
+    // Assign timestamps proportionally to word count of each chunk
+    const totalWords = words.length;
+    let acc = 0;
+    return chunks.map(chunk => {
+        const w = chunk.split(/\s+/).length;
+        const dur = (w / totalWords) * totalDur;
+        const s = startSec + acc;
+        acc += dur;
+        const e = startSec + acc;
+        return { text: chunk, start: s, end: e };
+    });
+}
+
 // ============================================
 // VIDEO LOCALIZER V2 API
 // ============================================
@@ -3732,9 +3768,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
         
         ttsSegments.forEach(seg => {
-            const start = formatAssTime(seg.start);
-            const end = formatAssTime(Math.min(seg.start + seg.audioDuration, seg.end + 0.5));
-            ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(200,200)}${seg.text}\n`;
+            // Use the actual TTS audio duration (or planned duration) as the visible window
+            const segEnd = Math.min(seg.start + (seg.audioDuration || (seg.end - seg.start)), seg.end + 0.5);
+            // Split into 3-5 word chunks so subtitles appear in sync with speech
+            const chunks = splitTextIntoSubtitleChunks(seg.text, seg.start, segEnd, { wordsPerChunk: 4 });
+            chunks.forEach(ch => {
+                const start = formatAssTime(ch.start);
+                const end = formatAssTime(ch.end);
+                ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(120,120)}${ch.text}\n`;
+            });
         });
         
         const assPath = path.join(outputDir, `vo-subs-${lang}.ass`);
@@ -3838,9 +3880,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
     
     script.forEach(seg => {
-        const start = formatAssTime(seg.start);
-        const end = formatAssTime(seg.end);
-        ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(200,200)}${seg.text}\n`;
+        // Split long segments into 3-5 word chunks for sync-with-speech subtitles
+        const chunks = splitTextIntoSubtitleChunks(seg.text, seg.start, seg.end, { wordsPerChunk: 4 });
+        chunks.forEach(ch => {
+            const start = formatAssTime(ch.start);
+            const end = formatAssTime(ch.end);
+            ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(120,120)}${ch.text}\n`;
+        });
     });
     
     const assPath = path.join(previewDir, `${previewId}.ass`);
