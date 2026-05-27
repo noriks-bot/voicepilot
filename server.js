@@ -4064,32 +4064,47 @@ app.get('/api/localizer/job/:id/zip', (req, res) => {
 
 // Delete a job (only if author matches)
 app.delete('/api/localizer/job/:id', (req, res) => {
-    const { author } = req.body; // Username of the person trying to delete
-    const job = localizerJobs.get(req.params.id);
-    
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-    
-    // Check if author matches (case insensitive)
-    const jobAuthor = job.namingParts?.author?.toUpperCase() || '';
-    const requestAuthor = (author || '').toUpperCase();
-    
-    if (jobAuthor && requestAuthor && jobAuthor !== requestAuthor) {
-        return res.status(403).json({ error: 'Lahko brišeš samo svoje kreative' });
+    const { author } = req.body || {};
+    const jobId = req.params.id;
+    const job = localizerJobs.get(jobId);
+
+    // Permission check (only if we have a job with an author)
+    if (job) {
+        const jobAuthor = job.namingParts?.author?.toUpperCase() || '';
+        const requestAuthor = (author || '').toUpperCase();
+        if (jobAuthor && requestAuthor && jobAuthor !== requestAuthor) {
+            return res.status(403).json({ error: 'Lahko brišeš samo svoje kreative' });
+        }
+        // Mark cancelled so any running pipeline stops asap
+        job.cancelled = true;
     }
-    
-    // Delete video files
-    const outputDir = path.join(__dirname, 'uploads', 'generated', job.id);
+
+    // Delete generated folder if it exists (works even if job is not in memory)
+    const outputDir = path.join(__dirname, 'uploads', 'generated', jobId);
+    let removedFiles = false;
     if (fs.existsSync(outputDir)) {
-        fs.rmSync(outputDir, { recursive: true, force: true });
-        console.log(`Deleted video folder: ${outputDir}`);
+        try {
+            fs.rmSync(outputDir, { recursive: true, force: true });
+            removedFiles = true;
+            console.log(`Deleted video folder: ${outputDir}`);
+        } catch (e) {
+            console.error(`Failed to remove ${outputDir}:`, e.message);
+        }
     }
-    
-    // Remove from map and persist
-    localizerJobs.delete(req.params.id);
-    persistJobs();
-    
-    console.log(`Job ${req.params.id} deleted by ${author}`);
-    res.json({ success: true });
+
+    // Remove from map & persist (only if it was there)
+    const removedFromMap = localizerJobs.has(jobId);
+    if (removedFromMap) {
+        localizerJobs.delete(jobId);
+        persistJobs();
+    }
+
+    if (!removedFromMap && !removedFiles) {
+        return res.status(404).json({ error: 'Job not found' });
+    }
+
+    console.log(`Job ${jobId} deleted by ${author || 'unknown'} (map=${removedFromMap}, files=${removedFiles})`);
+    res.json({ success: true, removedFromMap, removedFiles });
 });
 
 // Cancel a generating job

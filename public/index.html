@@ -8023,6 +8023,8 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     } else {
                         action = '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
                     }
+                    // Always add a delete button at the end (works for all rows)
+                    action += '<button onclick="window.deleteJobRow(\'' + r.id + '\')" title="Izbriši job" style="margin-left:6px; font-weight:600; padding:6px 9px; background:#fff; color:#B91C1C; border:1px solid #FECACA; border-radius:6px; cursor:pointer; font-size:12px;" onmouseover="this.style.background=\'#FEE2E2\';" onmouseout="this.style.background=\'#fff\';">✕</button>';
                     // Job type pill
                     let typeBg, typeFg, typeLbl;
                     const m = (r.mode || '').toLowerCase();
@@ -8057,6 +8059,26 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 if (btn) btn.disabled = false;
             }
         }
+        // Delete a job (works for completed + in-progress)
+        window.deleteJobRow = async function(jobId) {
+            if (!confirm('Izbrišem job ' + jobId + '?\n\nVideo + audio + script datoteke bodo trajno izbrisani.')) return;
+            try {
+                const r = await fetch('/api/localizer/job/' + encodeURIComponent(jobId), {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ author: (window.currentUser || '') })
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    alert(data.error || ('Napaka: ' + r.status));
+                    return;
+                }
+                // Reload table
+                if (typeof loadDownloadsPage === 'function') loadDownloadsPage();
+            } catch(e) {
+                alert('Napaka pri brisanju: ' + (e.message || e));
+            }
+        };
         // auto-refresh every 5s if downloads page is visible AND any in-progress
         setInterval(function() {
             const page = document.getElementById('page-downloads');
