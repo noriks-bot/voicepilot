@@ -4090,17 +4090,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         // Mix original audio (if exists) with voiceover, or just use voiceover
         // Lower original audio volume, add voiceover on top
+        // PER-LANG GAIN: some voices (HU Gabor, RO Andrei — audiobook narrators) are naturally
+        // quieter than dramatic news voices (DE/IT). Boost them BEFORE loudnorm so the
+        // normalizer has headroom to bring them up to -14 LUFS without distortion.
+        const PRE_GAIN_DB = { HU: 3.5, RO: 3.5, GR: 1.5, BG: 2.0 };
+        const _gainDb = PRE_GAIN_DB[lang] || 0;
+        const _voGainFilter = _gainDb > 0 ? `volume=${_gainDb}dB,` : '';
         try {
             // Check if video has audio
             const probeResult = await execPromise(`${FFMPEG} -i "${videoPath}" 2>&1 | grep "Audio:"`);
             const hasAudio = probeResult.stdout.trim().length > 0;
-            
+
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             } else {
-                // No original audio - just voiceover
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                // No original audio - apply gain + loudnorm to voiceover-only path too
+                const _voOnlyFilter = `[1:a]${_voGainFilter}loudnorm=I=-14:TP=-1.5:LRA=11,apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]`;
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];${_voOnlyFilter}" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             }
         } catch (e) {
             // Fallback: no audio mix, just subtitles
