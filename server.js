@@ -3324,7 +3324,7 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 // Voice IDs for each language - native male voice actors (ElevenLabs Voice Library)
 // Selected: professional narrator / storytelling voices, middle-aged male, native accent
 const VOICE_MAP = {
-    SI: { voice_id: 'T4CPtAHlrClEH8iCFo2h', name: 'Richard Vavrena' },              // Slovenian - uses Slovak voice (Richard Vavrena)
+    SI: { voice_id: 'aJsqu0q7bXgzYrPDRSFx', name: 'Uros Novak', model: 'eleven_v3' }, // Slovenian native (v3 model)
     HR: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Croatian male, 30s, news/narration
     CZ: { voice_id: 'KIDKfqJyZ6ASuyzsKfh5', name: 'Jan - Kind Educator' },// Czech 35yo, audiobooks/narration
     PL: { voice_id: 'gFl0NeqphJUaoBLtWrqM', name: 'Piotr' },              // Polish mature, warm/pleasant
@@ -3339,7 +3339,7 @@ const VOICE_MAP = {
 
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
-    SI: 'sk', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
+    SI: 'sl', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
 };
 
 // Generate TTS audio with ElevenLabs (with model fallback + language_code retry)
@@ -3351,13 +3351,22 @@ async function generateTTS(text, langCode, outputPath, speed) {
     let _speed = (typeof speed === 'number' && isFinite(speed)) ? speed : 1.0;
     if (_speed < 0.7) _speed = 0.7;
     if (_speed > 1.2) _speed = 1.2;
-    // Try: 1) multilingual_v2 WITH lang code, 2) multilingual_v2 WITHOUT lang code (auto-detect),
-    //      3) turbo_v2_5 WITH lang code (supports more langs incl. hu)
-    const ATTEMPTS = [
-        { model_id: 'eleven_multilingual_v2', language_code: elevenLang },
-        { model_id: 'eleven_multilingual_v2' },
-        { model_id: 'eleven_turbo_v2_5', language_code: elevenLang }
-    ];
+    // Per-voice model override: some voices (e.g. SI Uros Novak) are v3-only.
+    // For overridden voices, try v3 first, then fall back to v2 attempts in case of API issue.
+    // For non-overridden voices, use existing v2 → v2-noLang → turbo_v2_5 chain.
+    const overrideModel = voiceConfig.model;
+    const ATTEMPTS = overrideModel
+        ? [
+            { model_id: overrideModel, language_code: elevenLang },
+            { model_id: overrideModel },
+            { model_id: 'eleven_multilingual_v2', language_code: elevenLang },
+            { model_id: 'eleven_multilingual_v2' }
+        ]
+        : [
+            { model_id: 'eleven_multilingual_v2', language_code: elevenLang },
+            { model_id: 'eleven_multilingual_v2' },
+            { model_id: 'eleven_turbo_v2_5', language_code: elevenLang }
+        ];
 
     let response = null;
     let lastErr = '';
