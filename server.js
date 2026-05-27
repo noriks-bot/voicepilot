@@ -3536,7 +3536,11 @@ ${inputText}`;
         const segments = [{ text: narrativeText, start: 0, end: totalDuration }];
         const srt = toSrt(segments);
 
-        res.json({ srt, segments, videoDuration: +totalDuration.toFixed(2), mode: isFixed ? 'fixed' : 'auto', requested: isFixed ? fixedDur : null });
+        // Also produce a split version (~4 words per chunk) for on-screen subtitles
+        const segmentsSplit = splitTextIntoSubtitleChunks(narrativeText, 0, totalDuration, { wordsPerChunk: 4 });
+        const srtSplit = toSrt(segmentsSplit);
+
+        res.json({ srt, segments, srtSplit, segmentsSplit, videoDuration: +totalDuration.toFixed(2), mode: isFixed ? 'fixed' : 'auto', requested: isFixed ? fixedDur : null });
     } catch (e) {
         console.error('[srt/generate] error:', e);
         res.status(500).json({ error: e.message });
