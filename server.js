@@ -3489,7 +3489,7 @@ PRAVILA:
 3. Združi vse input vrstice v tekoč narrative — odstrani nepotrebne prelome, dodaj veznike (in, ampak, zato, pa, ali) kjer izboljša tekočost
 4. Lahko RAHLO PREFORMULIRAŠ za boljšo tekočost, ampak NE spreminjaj sporočila in NE izpusti ključnih informacij (NORIKS, ponudb, številk, %, garancij)
 5. Brez markdown, brez "Segment 1:", brez oznak — samo gol tekst voiceoverja
-6. Emojiji iz inputa naj OSTANEJO v outputu (governor jih bo prebral kot pavzo/poudarek)
+6. NE dodaj nobenih emojijev. Če so v inputu emojiji, jih ODSTRANI iz outputa. Output mora biti SAMO čisti tekst (črke, številke, ločila), brez ikon, emoji simbolov, ali decorativnih znakov.
 7. Tekst naj zveni naravno za TTS govorca (ElevenLabs eleven_multilingual_v2)
 
 Vrni SAMO JSON v tej obliki (brez razlage, brez markdown ograj):
@@ -3523,6 +3523,19 @@ ${inputText}`;
                 console.warn('[srt/generate] JSON parse failed, using raw input:', e.message);
             }
         }
+
+        // Strip emojis & pictographic symbols from narrative (TTS reads them awkwardly, subtitles look noisy)
+        narrativeText = narrativeText
+            .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')      // misc symbols & pictographs, emoticons, transport, etc.
+            .replace(/[\u{2600}-\u{27BF}]/gu, '')        // misc symbols & dingbats (incl. arrows, stars)
+            .replace(/[\u{1F000}-\u{1F02F}]/gu, '')      // mahjong/dominoes
+            .replace(/[\u{1F0A0}-\u{1F0FF}]/gu, '')      // playing cards
+            .replace(/[\u{1F100}-\u{1F1FF}]/gu, '')      // enclosed alphanumerics
+            .replace(/[\u{1F200}-\u{1F2FF}]/gu, '')      // enclosed ideographic
+            .replace(/[\uFE00-\uFE0F]/g, '')            // variation selectors
+            .replace(/[\u200D]/g, '')                    // ZWJ
+            .replace(/\s+/g, ' ')
+            .trim();
 
         // Compute duration
         let totalDuration;
