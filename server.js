@@ -3218,17 +3218,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // === VOICEOVER: ElevenLabs TTS + Subtitle generation ===
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 
-// Voice IDs for each language - natural male voices
+// Voice IDs for each language - native male voice actors (ElevenLabs Voice Library)
+// Selected: professional narrator / storytelling voices, middle-aged male, native accent
 const VOICE_MAP = {
-    HR: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },  // Male
-    CZ: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    PL: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    GR: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    IT: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    HU: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    SK: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    BG: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-    RO: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }
+    HR: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Croatian male, 30s, news/narration
+    CZ: { voice_id: 'KIDKfqJyZ6ASuyzsKfh5', name: 'Jan - Kind Educator' },// Czech 35yo, audiobooks/narration
+    PL: { voice_id: 'gFl0NeqphJUaoBLtWrqM', name: 'Piotr' },              // Polish mature, warm/pleasant
+    GR: { voice_id: '9xjHNaV3YwyHqzzgRuXl', name: 'KonstantinosN' },      // Greek mid-40s, anchorman delivery
+    IT: { voice_id: 'W71zT1VwIFFx3mMGH2uZ', name: 'MarcoTrox' },          // Italian pro voice actor, narration
+    HU: { voice_id: '7B7mSWflzRSaO1yGeJH6', name: 'Gabor' },              // Hungarian warm/confident, narration
+    SK: { voice_id: 'T4CPtAHlrClEH8iCFo2h', name: 'Richard Vavrena' },    // Slovak middle-aged male
+    BG: { voice_id: '31jwlwrRwpOA5yGuVAby', name: 'Georgi' },             // Bulgarian studio quality, soft
+    RO: { voice_id: 't4BC7dZYcd5rQUJlgolT', name: 'Andrei (Audiobook)' }, // Romanian audiobook narrator
+    EN: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }              // English fallback
 };
 
 // Language codes for ElevenLabs
