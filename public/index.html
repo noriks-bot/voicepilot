@@ -3034,37 +3034,15 @@
                 <!-- Step 2: Besedila / poante -->
                 <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
                     <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Besedila / poante</h4>
-                    <p style="color:#78716c; font-size:13px; margin:0 0 10px 34px;" id="vo-step2-help">Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.</p>
-                    <div style="margin:0 0 12px; display:flex; gap:10px;">
-                        <label id="vo-mode-ai-lbl" style="flex:1; padding:10px 12px; border:2px solid #0A59D2; background:#EFF6FF; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-                            <input type="radio" name="vo-script-mode" value="ai" checked onchange="window._voUpdMode()">
-                            <div><div style="font-weight:600; font-size:13px; color:#0F172A;">🤖 AI sestavi script</div><div style="font-size:11px; color:#57534E;">vpiši poante, AI naredi zgodbo</div></div>
-                        </label>
-                        <label id="vo-mode-srt-lbl" style="flex:1; padding:10px 12px; border:2px solid #E7E5E4; background:#fff; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;">
-                            <input type="radio" name="vo-script-mode" value="srt" onchange="window._voUpdMode()">
-                            <div><div style="font-weight:600; font-size:13px; color:#0F172A;">📝 Že imam SRT</div><div style="font-size:11px; color:#57534E;">prilepi SRT, preskoči AI</div></div>
-                        </label>
-                    </div>
+                    <p style="color:#78716c; font-size:13px; margin:0 0 10px 34px;" id="vo-step2-help">Prilepi že pripravljen SRT. Sistem ga bo direktno uporabil za voiceover.</p>
                     <script>
                     window._voUpdMode = function() {
-                        var ai = document.getElementById('vo-mode-ai-lbl');
-                        var srt = document.getElementById('vo-mode-srt-lbl');
-                        var help = document.getElementById('vo-step2-help');
                         var ta = document.getElementById('vo-points');
-                        var val = (document.querySelector('input[name="vo-script-mode"]:checked')||{}).value || 'ai';
-                        if (val === 'ai') {
-                            ai.style.border='2px solid #0A59D2'; ai.style.background='#EFF6FF';
-                            srt.style.border='2px solid #E7E5E4'; srt.style.background='#fff';
-                            help.textContent = 'Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.';
-                            ta.placeholder = '4+2 brezplačno 🔥\nNajboljša majica, kar jih boste kdaj nosili\nUdobnejša zgoraj, bolj sproščena v predelu trupa';
-                        } else {
-                            srt.style.border='2px solid #0A59D2'; srt.style.background='#EFF6FF';
-                            ai.style.border='2px solid #E7E5E4'; ai.style.background='#fff';
-                            help.textContent = 'Prilepi že pripravljen SRT. Sistem ga bo direktno uporabil, brez AI generacije.';
-                            ta.placeholder = '1\n00:00:00,000 --> 00:00:02,000\nVisible belly?\n\n2\n00:00:02,300 --> 00:00:04,300\nIt\'s not your fault.\n\n...';
-                        }
+                        if (ta) ta.placeholder = '1\n00:00:00,000 --> 00:00:02,000\nVisible belly?\n\n2\n00:00:02,300 --> 00:00:04,300\nIt\'s not your fault.\n\n...';
                     };
-                    window._voGetScriptMode = function() { return (document.querySelector('input[name="vo-script-mode"]:checked')||{}).value || 'ai'; };
+                    window._voGetScriptMode = function() { return 'srt'; };
+                    // Init placeholder on load
+                    setTimeout(function(){ if (window._voUpdMode) window._voUpdMode(); }, 100);
                     window._voParseSRT = function(text) {
                         var blocks = text.replace(/\r/g,'').split(/\n\n+/);
                         var segs = [];
