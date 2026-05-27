@@ -7416,6 +7416,17 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                 else if (typeof renderDownloads === 'function') renderDownloads(allDownloadJobs);
             } catch (e) { alert('Napaka pri regeneraciji: ' + (e.message || e)); }
         };
+        window.resumeJob = async function(jobId) {
+            if (!confirm('Nadaljuj job ' + jobId + '?\n\nObdrži že generirane države, naredi samo manjkajoče.')) return;
+            try {
+                const r = await fetch('/api/localizer/resume/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const data = await r.json();
+                if (!r.ok) { alert('Napaka: ' + (data.error || r.statusText)); return; }
+                alert('✅ Nadaljujem ' + (data.remainingCountries||[]).length + ' držav: ' + (data.remainingCountries||[]).join(', '));
+                if (typeof loadDownloads === 'function') loadDownloads();
+                else if (typeof renderDownloads === 'function') renderDownloads(allDownloadJobs);
+            } catch (e) { alert('Napaka pri nadaljevanju: ' + (e.message || e)); }
+        };
         window.markDownloaded = function(key) {
             downloadedItems[key] = true;
             localStorage.setItem('downloadedItems', JSON.stringify(downloadedItems));
@@ -8064,7 +8075,13 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                             '<button onclick="window.regenJob(\'' + r.id + '\')" title="Generiraj ponovno z istimi parametri" style="font-weight:600; padding:6px 10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:6px; cursor:pointer; font-size:12px;">🔄</button>';
                     } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error'].includes(r.status)) {
                         const tip = r.statusReason ? r.statusReason.replace(/"/g,'') : 'Job ni dokončan';
-                        action = '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + '" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
+                        const doneCount = (r.completedLangs && r.completedLangs.length) || 0;
+                        const totalCount = r.totalCount || 0;
+                        const canResume = doneCount > 0 && totalCount > doneCount;
+                        if (canResume) {
+                            action = '<button onclick="window.resumeJob(\'' + r.id + '\')" title="Nadaljuj kjer je ostalo (' + doneCount + '/' + totalCount + ')" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px; margin-right:6px;">▶ Nadaljuj ' + (totalCount - doneCount) + '</button>';
+                        }
+                        action = (action || '') + '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + ' — od za\u010detka" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
                     } else {
                         action = '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
                     }

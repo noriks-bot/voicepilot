@@ -4410,6 +4410,85 @@ app.post('/api/localizer/regenerate/:id', async (req, res) => {
     res.json({ jobId: newJobId, status: 'started', regeneratedFrom: orig.id });
 });
 
+// === RESUME: continue a failed/stale job from where it stopped (skip already-done countries) ===
+app.post('/api/localizer/resume/:id', async (req, res) => {
+    const orig = localizerJobs.get(req.params.id);
+    if (!orig) return res.status(404).json({ error: 'Job not found' });
+    if (!orig.videoClean) return res.status(400).json({ error: 'Missing videoClean on original job' });
+
+    const videoPath = path.join(__dirname, 'uploads', orig.videoClean);
+    if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'Source video not found on disk' });
+
+    const allCountries = orig.countries || [];
+    const doneOutputs = orig.outputs || {};
+    const doneCountries = Object.keys(doneOutputs).filter(k => doneOutputs[k]);
+    const remaining = allCountries.filter(c => !doneCountries.includes(c));
+
+    if (remaining.length === 0) {
+        return res.status(400).json({ error: 'Nothing to resume — all countries already generated' });
+    }
+
+    const newJobId = `gen-${Date.now()}`;
+    const newOutputDir = path.join(__dirname, 'uploads', 'generated', newJobId);
+    fs.mkdirSync(newOutputDir, { recursive: true });
+
+    // Copy already-generated files into new job dir so the final ZIP has everything
+    const carriedOutputs = {};
+    for (const lang of doneCountries) {
+        const srcPath = doneOutputs[lang];
+        if (srcPath && fs.existsSync(srcPath)) {
+            const destPath = path.join(newOutputDir, path.basename(srcPath));
+            try {
+                fs.copyFileSync(srcPath, destPath);
+                carriedOutputs[lang] = destPath;
+            } catch (e) {
+                console.warn(`[resume ${newJobId}] failed to copy ${lang}: ${e.message}`);
+            }
+        }
+    }
+
+    const newJob = {
+        id: newJobId,
+        name: orig.name,
+        namingParts: orig.namingParts,
+        videoClean: orig.videoClean,
+        texts: orig.texts,
+        style: orig.style,
+        fontSize: orig.fontSize,
+        hookStyle: orig.hookStyle,
+        ctaStyle: orig.ctaStyle,
+        perTextStyles: orig.perTextStyles,
+        uppercase: orig.uppercase,
+        countries: remaining,
+        source: orig.source,
+        mode: orig.mode,
+        voiceoverScript: orig.voiceoverScript,
+        videoDuration: orig.videoDuration,
+        textPosition: orig.textPosition,
+        status: 'translating',
+        completed: Object.keys(carriedOutputs).length,
+        currentLang: '',
+        outputs: carriedOutputs,
+        resumedFrom: orig.id,
+        carriedCountries: doneCountries,
+        created: new Date().toISOString()
+    };
+
+    localizerJobs.set(newJobId, newJob);
+    persistJobs();
+
+    const generator = (newJob.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
+    generator(newJob, videoPath).catch(e => {
+        newJob.status = 'error';
+        newJob.error = e.message;
+        persistJobs();
+        console.error(`[${newJobId}] Resume error:`, e);
+    });
+
+    console.log(`Resumed job ${orig.id} -> ${newJobId} (carried ${doneCountries.length}, remaining ${remaining.length}: ${remaining.join(',')})`);
+    res.json({ jobId: newJobId, status: 'started', resumedFrom: orig.id, carriedCountries: doneCountries, remainingCountries: remaining });
+});
+
 // === FIX #4: queue + run endpoints (Voicemaker queues, user clicks RUN in Downloads) ===
 app.post('/api/localizer/queue', async (req, res) => {
     const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition } = req.body;
