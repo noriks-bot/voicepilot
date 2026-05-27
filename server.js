@@ -3439,54 +3439,48 @@ app.post('/api/srt/generate', async (req, res) => {
     try {
         let segments;
 
-        if (isFixed) {
-            // FIXED mode: ask AI to rewrite/adjust the lines to fit exactly fixedDur seconds.
-            // Use OpenAI to redistribute timing AND optionally trim/rephrase lines so all fit.
-            const prompt = `Imam scenarij za reklamno video (en stavek na vrstico). Video traja TOČNO ${fixedDur} sekund.
+        // NARRATIVE MODE: AI builds flowing voiceover from input text
+        // Breaks by natural phrases (commas/clauses), short pauses, may slightly rephrase for fluency
+        const inputText = lines.join(' ');
+        const durConstraint = isFixed
+            ? `Video traja TOČNO ${fixedDur} sekund. Skupna dolžina vseh segmentov + pavz MORA biti = ${fixedDur}s. Zadnji "end" MORA biti = ${fixedDur}.`
+            : `Skupno trajanje naj bo naravno glede na količino teksta (~2.8-3.2 besed/sekundo). Določi sam.`;
 
-Razdeli ČAS med vrstice tako, da skupaj zapolnijo ${fixedDur}s. Če je vrstic preveč ali pretežke za branje, jih prilagodi (skrajšaj / združi / prerazporedi) — ampak SAMO če je nujno. Branje naj bo naravno (povprečno 3 besede/sekundo, min 1.2s na segment, max 6s).
+        const prompt = `Imam tekst za reklamni voiceover. Naredi ENOTEN NARRATIVE GOVOR, kot da profesionalni govorec pripoveduje zgodbo.
 
-Vrne JSON: [{"text": "vrstica", "start": 0.0, "end": 2.5}, ...]
-- start vedno > prejšnji end (lahko +0.1 do +0.4s premor)
-- zadnji end MORA biti = ${fixedDur}
-- SAMO JSON, brez razlage
+${durConstraint}
 
-Vrstice:
-${lines.map((l, i) => `${i+1}. ${l}`).join('\n')}`;
+PRAVILA:
+1. NE ohrani 1:1 vrstic iz inputa — prelomi tekst po NARAVNIH frazah (vejice, dvopičja, smiselne pomenske enote, kratki stavki)
+2. Vsak segment naj traja 2.5-4.2 sekund (max 4.5s, min 2.0s)
+3. Med segmenti naredi KRATKE NARAVNE PAVZE 0.2-0.4s (kot dihanje med frazami) — rajši krajše pavze, da govor teče tekoče in naravno
+4. Tempo branja: ~2.8-3.2 besed/sekundo (naravna pripoved)
+5. Tekst lahko RAHLO PREFORMULIRAŠ za boljšo tekočost — dodaš veznik (in, ampak, zato), preložiš stavek, dodaš vezno frazo. NE spreminjaj sporočila ali izpustiš ključne informacije
+6. Pavza med segmenti: end[i] + pavza = start[i+1]. Pavze naj bodo majhne (rajši 0.2-0.3s kot 0.5s)
+7. Prvi segment začni z start = 0.0
 
-            const r = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-                body: JSON.stringify({
-                    model: 'gpt-4o',
-                    messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 4000
-                })
-            });
-            const data = await r.json();
-            const content = data.choices?.[0]?.message?.content || '[]';
-            const match = content.match(/\[[\s\S]*\]/);
-            segments = match ? JSON.parse(match[0]) : [];
-            if (!Array.isArray(segments) || segments.length === 0) {
-                throw new Error('AI did not return valid segments');
-            }
-        } else {
-            // AUTO mode: timing per line based on word count.
-            // ~3.0 words per second reading rate, min 1.2s, max 5.5s, +0.3s gap.
-            const WPS = 3.0;
-            const MIN = 1.2;
-            const MAX = 5.5;
-            const GAP = 0.3;
-            segments = [];
-            let cursor = 0;
-            for (const line of lines) {
-                const wc = line.split(/\s+/).filter(Boolean).length;
-                let dur = wc / WPS;
-                if (dur < MIN) dur = MIN;
-                if (dur > MAX) dur = MAX;
-                segments.push({ text: line, start: +cursor.toFixed(2), end: +(cursor + dur).toFixed(2) });
-                cursor += dur + GAP;
-            }
+Vrni SAMO JSON array (brez razlage, brez markdown):
+[{"text": "fraza", "start": 0.0, "end": 3.2}, ...]
+
+INPUT TEKST:
+${inputText}`;
+
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+            body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [{ role: 'user', content: prompt }],
+                max_tokens: 4000,
+                temperature: 0.7
+            })
+        });
+        const data = await r.json();
+        const content = data.choices?.[0]?.message?.content || '[]';
+        const match = content.match(/\[[\s\S]*\]/);
+        segments = match ? JSON.parse(match[0]) : [];
+        if (!Array.isArray(segments) || segments.length === 0) {
+            throw new Error('AI did not return valid segments');
         }
 
         // Sanitize: ensure monotonic, end > start
