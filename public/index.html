@@ -8060,7 +8060,7 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                     if (r.status === 'queued') {
                         action = '<button onclick="window.runQueuedJob(\'' + r.id + '\')" title="Zaženi job" style="font-weight:600; padding:6px 14px; background:#16A34A; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">▶ RUN</button>';
                     } else if (r.kind === 'completed' && (r.status === 'done' || r.status === 'completed')) {
-                        action = '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none; margin-right:6px;">ZIP &darr;</a>' +
+                        action = '<a href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="display:inline-block; font-weight:700; padding:6px 14px; background:#0A59D2; color:#fff !important; border-radius:6px; text-decoration:none; margin-right:6px; font-size:13px;">ZIP &darr;</a>' +
                             '<button onclick="window.regenJob(\'' + r.id + '\')" title="Generiraj ponovno z istimi parametri" style="font-weight:600; padding:6px 10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:6px; cursor:pointer; font-size:12px;">🔄</button>';
                     } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error'].includes(r.status)) {
                         const tip = r.statusReason ? r.statusReason.replace(/"/g,'') : 'Job ni dokončan';
