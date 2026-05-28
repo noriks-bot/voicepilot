@@ -4804,12 +4804,15 @@ app.get('/api/localizer/generated-videos', (req, res) => {
                     }
                 }
                 // Validate: if status=done but expected videos missing, mark partial
+                // SKIP če je job resolved via auto-resume (parent ima outputs map na child folder)
                 const expectedLangs = (jobInfo.countries||[]).length || 0;
-                if (status === 'done' && expectedLangs > 0) {
+                if (status === 'done' && expectedLangs > 0 && !jobInfo.resolvedVia) {
                     const mp4Count = videos.filter(v => v.name && v.name.toLowerCase().endsWith('.mp4')).length;
-                    if (mp4Count < expectedLangs) {
+                    const outputsCount = Object.keys(jobInfo.outputs || {}).length;
+                    // Preveri MP4 v parent folderju IN outputs map (resume child folder)
+                    if (mp4Count < expectedLangs && outputsCount < expectedLangs) {
                         status = 'partial';
-                        statusReason = `Manjkajo videji: ${mp4Count}/${expectedLangs}`;
+                        statusReason = `Manjkajo videji: ${Math.max(mp4Count, outputsCount)}/${expectedLangs}`;
                     }
                 }
             }
