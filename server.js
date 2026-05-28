@@ -4212,6 +4212,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }
     job.currentLang = '';
     job.completedAt = new Date().toISOString();
+
+    // Če je to bil resume child job in je done → propagiraj nazaj na parent
+    if (job.status === 'done' && job.resumedFrom) {
+        const parent = localizerJobs.get(job.resumedFrom);
+        if (parent) {
+            // Marker da je parent rešen preko child resume
+            parent.status = 'done';
+            parent.statusReason = `Resolved via auto-resume → ${job.id}`;
+            parent.resolvedVia = job.id;
+            parent.completedAt = job.completedAt;
+            // Skopiraj outputs iz childa nazaj v parent (za UI ZIP download)
+            parent.outputs = { ...(parent.outputs || {}), ...(job.outputs || {}) };
+            delete parent.ttsErrors;
+            console.log(`[${job.id}] propagated done → parent ${parent.id} (was partial)`);
+        }
+    }
+
     persistJobs();
     console.log(`[${job.id}] [VO] All done! status=${job.status} ttsErrors=${totalErrs}`);
 }
