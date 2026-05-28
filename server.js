@@ -30,6 +30,21 @@ const app = express();
 const PORT = process.env.PORT || 3006;
 const DATA_FILE = path.join(__dirname, 'data.json');
 
+// === Global TTS concurrency limiter (ElevenLabs allows ~5 concurrent) ===
+function _makeLimiter(max) {
+    let active = 0; const queue = [];
+    const next = () => {
+        if (active >= max || !queue.length) return;
+        active++;
+        const { fn, resolve, reject } = queue.shift();
+        Promise.resolve().then(fn).then(
+            v => { active--; resolve(v); next(); },
+            e => { active--; reject(e); next(); });
+    };
+    return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); next(); });
+}
+const TTS_SEMAPHORE = _makeLimiter(4);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -1827,10 +1842,15 @@ for (const j of localizerJobs.values()) {
 }
 if (_rescued > 0) { persistJobs(); console.log(`[startup] rescued ${_rescued} stale localizer job(s)`); }
 
-// === WATCHDOG: every 60s mark jobs with no progress >8min as failed_stale ===
+// === WATCHDOG: every 60s mark jobs stuck >8min as failed_stale + AUTO-RESUME partial/failed ===
+const AUTO_RESUME_STATUSES = ['partial', 'failed_tts', 'failed_stale', 'error'];
+const MAX_AUTO_RESUMES = 3;
+const AUTO_RESUME_COOLDOWN_MS = 60 * 1000; // čakaj vsaj 60s preden auto-resume
+
 setInterval(() => {
     const now = Date.now();
     let changed = 0;
+    // FAZA 1: označi stale
     for (const j of localizerJobs.values()) {
         if (!IN_FLIGHT_STATUSES.includes(j.status)) continue;
         const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
@@ -1843,6 +1863,39 @@ setInterval(() => {
         }
     }
     if (changed) persistJobs();
+
+    // FAZA 2: auto-resume partial/failed jobov (skipni že-resumane child jobe)
+    for (const j of Array.from(localizerJobs.values())) {
+        if (!AUTO_RESUME_STATUSES.includes(j.status)) continue;
+        if (j._autoResumeTriggered) continue; // že obravnavan
+        const attempts = j.resumeAttempts || 0;
+        if (attempts >= MAX_AUTO_RESUMES) continue;
+        const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
+        if (now - last < AUTO_RESUME_COOLDOWN_MS) continue; // počakaj cooldown
+
+        // Preveri da je še kaj za narediti
+        const allC = j.countries || [];
+        const doneC = Object.keys(j.outputs || {}).filter(k => (j.outputs || {})[k]);
+        const failedC = Object.keys(j.ttsErrors || {});
+        const stillTodo = allC.filter(c => !doneC.includes(c) || failedC.includes(c));
+        if (stillTodo.length === 0) continue;
+
+        j._autoResumeTriggered = true;
+        console.log(`[watchdog] AUTO-RESUME ${j.id} (status=${j.status}, attempt ${attempts + 1}/${MAX_AUTO_RESUMES}, todo=${stillTodo.length})`);
+        try {
+            const r = _doResumeJob(j, { auto: true });
+            if (!r.ok) {
+                console.warn(`[watchdog] auto-resume ${j.id} failed: ${r.error}`);
+                j._autoResumeTriggered = false; // dovoli ponoven poskus naslednjič
+            } else {
+                j.autoResumedTo = r.jobId;
+                persistJobs();
+            }
+        } catch (e) {
+            console.error(`[watchdog] auto-resume ${j.id} threw:`, e.message);
+            j._autoResumeTriggered = false;
+        }
+    }
 }, 60 * 1000);
 
 // Graceful shutdown: persist before dying so jobs aren't lost
@@ -3370,6 +3423,13 @@ async function generateTTS(text, langCode, outputPath, speed) {
 
     let response = null;
     let lastErr = '';
+    const RATE_DELAYS = [3000, 7000, 15000, 30000, 60000]; // backoff za 429
+    const _doFetch = (b) => TTS_SEMAPHORE(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceConfig.voice_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
+        body: JSON.stringify(b)
+    }));
+    outerAttempts:
     for (const attempt of ATTEMPTS) {
         const body = {
             text: text,
@@ -3384,18 +3444,24 @@ async function generateTTS(text, langCode, outputPath, speed) {
         };
         if (attempt.language_code) body.language_code = attempt.language_code;
 
-        response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceConfig.voice_id}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'xi-api-key': ELEVENLABS_API_KEY
-            },
-            body: JSON.stringify(body)
-        });
-
+        response = await _doFetch(body);
         if (response.ok) break;
         lastErr = await response.text();
-        // Only retry on unsupported_language; for quota/auth bail out immediately
+
+        // 429 / concurrent_limit → exponential backoff retry na ISTEM attempt
+        if (response.status === 429 || /concurrent_limit|rate_limit|too_many/i.test(lastErr)) {
+            for (const w of RATE_DELAYS) {
+                console.warn(`[TTS] 429 ${attempt.model_id}, backoff ${w}ms`);
+                await new Promise(r => setTimeout(r, w));
+                response = await _doFetch(body);
+                if (response.ok) break outerAttempts;
+                lastErr = await response.text();
+                if (!(response.status === 429 || /concurrent_limit|rate_limit|too_many/i.test(lastErr))) break;
+            }
+            if (response.ok) break;
+        }
+
+        // unsupported_language → naslednji model; ostalo → bail
         if (!/unsupported_language|invalid_parameters/i.test(lastErr)) break;
         console.warn(`[TTS] ${attempt.model_id}${attempt.language_code?'+'+attempt.language_code:''} rejected, trying next...`);
     }
@@ -4469,22 +4535,25 @@ app.post('/api/localizer/regenerate/:id', async (req, res) => {
     res.json({ jobId: newJobId, status: 'started', regeneratedFrom: orig.id });
 });
 
-// === RESUME: continue a failed/stale job from where it stopped (skip already-done countries) ===
-app.post('/api/localizer/resume/:id', async (req, res) => {
-    const orig = localizerJobs.get(req.params.id);
-    if (!orig) return res.status(404).json({ error: 'Job not found' });
-    if (!orig.videoClean) return res.status(400).json({ error: 'Missing videoClean on original job' });
+// === RESUME helper (uses by both endpoint + auto-resume watchdog) ===
+function _doResumeJob(orig, opts = {}) {
+    if (!orig) return { ok: false, status: 404, error: 'Job not found' };
+    if (!orig.videoClean) return { ok: false, status: 400, error: 'Missing videoClean' };
 
     const videoPath = path.join(__dirname, 'uploads', orig.videoClean);
-    if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'Source video not found on disk' });
+    if (!fs.existsSync(videoPath)) return { ok: false, status: 404, error: 'Source video not found on disk' };
 
     const allCountries = orig.countries || [];
     const doneOutputs = orig.outputs || {};
     const doneCountries = Object.keys(doneOutputs).filter(k => doneOutputs[k]);
-    const remaining = allCountries.filter(c => !doneCountries.includes(c));
+    // Pri partial/failed_tts: ponovno generiraj VSE jezike pri katerih je bil ttsError (tudi če output exists)
+    const ttsErrLangs = Object.keys(orig.ttsErrors || {});
+    const failedDone = ttsErrLangs.filter(l => doneCountries.includes(l));
+    const effectiveDone = doneCountries.filter(c => !failedDone.includes(c));
+    const remaining = allCountries.filter(c => !effectiveDone.includes(c));
 
     if (remaining.length === 0) {
-        return res.status(400).json({ error: 'Nothing to resume — all countries already generated' });
+        return { ok: false, status: 400, error: 'Nothing to resume — all countries already generated' };
     }
 
     const newJobId = `gen-${Date.now()}`;
@@ -4493,7 +4562,7 @@ app.post('/api/localizer/resume/:id', async (req, res) => {
 
     // Copy already-generated files into new job dir so the final ZIP has everything
     const carriedOutputs = {};
-    for (const lang of doneCountries) {
+    for (const lang of effectiveDone) {
         const srcPath = doneOutputs[lang];
         if (srcPath && fs.existsSync(srcPath)) {
             const destPath = path.join(newOutputDir, path.basename(srcPath));
@@ -4529,7 +4598,9 @@ app.post('/api/localizer/resume/:id', async (req, res) => {
         currentLang: '',
         outputs: carriedOutputs,
         resumedFrom: orig.id,
-        carriedCountries: doneCountries,
+        carriedCountries: effectiveDone,
+        resumeAttempts: (orig.resumeAttempts || 0) + 1,
+        autoResumed: !!opts.auto,
         created: new Date().toISOString()
     };
 
@@ -4544,8 +4615,15 @@ app.post('/api/localizer/resume/:id', async (req, res) => {
         console.error(`[${newJobId}] Resume error:`, e);
     });
 
-    console.log(`Resumed job ${orig.id} -> ${newJobId} (carried ${doneCountries.length}, remaining ${remaining.length}: ${remaining.join(',')})`);
-    res.json({ jobId: newJobId, status: 'started', resumedFrom: orig.id, carriedCountries: doneCountries, remainingCountries: remaining });
+    console.log(`Resumed job ${orig.id} -> ${newJobId} (carried ${effectiveDone.length}, remaining ${remaining.length}: ${remaining.join(',')})${opts.auto ? ' [AUTO]' : ''}`);
+    return { ok: true, jobId: newJobId, status: 'started', resumedFrom: orig.id, carriedCountries: effectiveDone, remainingCountries: remaining };
+}
+
+app.post('/api/localizer/resume/:id', async (req, res) => {
+    const orig = localizerJobs.get(req.params.id);
+    const r = _doResumeJob(orig, { auto: false });
+    if (!r.ok) return res.status(r.status).json({ error: r.error });
+    res.json(r);
 });
 
 // === FIX #4: queue + run endpoints (Voicemaker queues, user clicks RUN in Downloads) ===
