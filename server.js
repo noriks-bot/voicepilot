@@ -1868,10 +1868,39 @@ setInterval(() => {
     for (const j of Array.from(localizerJobs.values())) {
         if (!AUTO_RESUME_STATUSES.includes(j.status)) continue;
         if (j._autoResumeTriggered) continue; // že obravnavan
+        if (j.autoResumedTo) continue; // že ima child resume
         const attempts = j.resumeAttempts || 0;
         if (attempts >= MAX_AUTO_RESUMES) continue;
         const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
         if (now - last < AUTO_RESUME_COOLDOWN_MS) continue; // počakaj cooldown
+
+        // GUARD: če je ta job resume child (ima resumedFrom), preveri root parent
+        // — če root parent že ima vse outputs ali je done, NE resumaj (sirote)
+        if (j.resumedFrom) {
+            // Sledi chain do root
+            let cur = j;
+            const seen = new Set();
+            while (cur.resumedFrom && !seen.has(cur.id)) {
+                seen.add(cur.id);
+                const p = localizerJobs.get(cur.resumedFrom);
+                if (!p) { cur = null; break; }
+                cur = p;
+            }
+            if (cur) {
+                const rootAllC = cur.countries || [];
+                const rootOuts = Object.keys(cur.outputs || {}).filter(k => (cur.outputs || {})[k]);
+                if (cur.status === 'done' || rootOuts.length >= rootAllC.length) {
+                    // Root parent že komplet → ta child je sirota, ne resumaj
+                    console.log(`[watchdog] SKIP ${j.id} — root parent ${cur.id} already complete (${rootOuts.length}/${rootAllC.length})`);
+                    j._autoResumeTriggered = true;
+                    j.status = 'done';
+                    j.statusReason = `Skipped resume — root parent ${cur.id} already complete`;
+                    j.resolvedVia = cur.id;
+                    persistJobs();
+                    continue;
+                }
+            }
+        }
 
         // Preveri da je še kaj za narediti
         const allC = j.countries || [];
