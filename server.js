@@ -1861,96 +1861,30 @@ for (const j of localizerJobs.values()) {
 }
 if (_rescued > 0) { persistJobs(); console.log(`[startup] rescued ${_rescued} stale localizer job(s)`); }
 
-// === WATCHDOG: every 60s mark jobs stuck >8min as failed_stale + AUTO-RESUME partial/failed ===
-const AUTO_RESUME_STATUSES = ['partial', 'failed_tts', 'failed_stale', 'error'];
-const MAX_AUTO_RESUMES = 3;
-const AUTO_RESUME_COOLDOWN_MS = 60 * 1000; // čakaj vsaj 60s preden auto-resume
+// === WATCHDOG: every 60s mark jobs stuck >8min as stale_paused ===
+// FIX 2026-05-29: AUTO-RESUME POPOLNOMA ODSTRANJEN.
+// Razlog: ker je _doResumeJob() kreiral nov job ID za isto delo, je pri TTS 401
+// (ElevenLabs payment) watchdog v ciklu kreiral 3x duplikate istega joba,
+// kar je kurilo ElevenLabs API limit.
+// ABSOLUTNO PRAVILO: watchdog NIKOLI ne kreira novih jobov.
+// Resume = samo manual klik uporabnika preko POST /api/localizer/resume/:id.
 
 setInterval(() => {
     const now = Date.now();
     let changed = 0;
-    // FAZA 1: označi stale
+    // FAZA 1: označi stale (samo update statusa, NE spawn novega)
     for (const j of localizerJobs.values()) {
         if (!IN_FLIGHT_STATUSES.includes(j.status)) continue;
         const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
         if (now - last > STALE_TIMEOUT_MS) {
             const prevStatus = j.status;
             j.status = 'failed_stale';
-            j.statusReason = `No progress for ${Math.round((now-last)/60000)}min in '${prevStatus}' (watchdog)`;
+            j.statusReason = `No progress for ${Math.round((now-last)/60000)}min in '${prevStatus}' (watchdog) — manual resume needed`;
             changed++;
-            console.warn(`[watchdog] ${j.id} stuck in ${prevStatus}, marking failed_stale`);
+            console.warn(`[watchdog] ${j.id} stuck in ${prevStatus}, marking failed_stale (NO auto-resume)`);
         }
     }
     if (changed) persistJobs();
-
-    // FAZA 2: auto-resume partial/failed jobov (skipni že-resumane child jobe)
-    for (const j of Array.from(localizerJobs.values())) {
-        if (!AUTO_RESUME_STATUSES.includes(j.status)) continue;
-        if (j._autoResumeTriggered) continue; // že obravnavan
-        if (j.autoResumedTo) continue; // že ima child resume
-        const attempts = j.resumeAttempts || 0;
-        if (attempts >= MAX_AUTO_RESUMES) continue;
-        const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
-        if (now - last < AUTO_RESUME_COOLDOWN_MS) continue; // počakaj cooldown
-
-        // GUARD: če je ta job resume child (ima resumedFrom), preveri root parent
-        // — če root parent že ima vse outputs ali je done, NE resumaj (sirote)
-        if (j.resumedFrom) {
-            // Sledi chain do root
-            let cur = j;
-            const seen = new Set();
-            while (cur.resumedFrom && !seen.has(cur.id)) {
-                seen.add(cur.id);
-                const p = localizerJobs.get(cur.resumedFrom);
-                if (!p) { cur = null; break; }
-                cur = p;
-            }
-            if (cur) {
-                const rootAllC = cur.countries || [];
-                const rootOuts = Object.keys(cur.outputs || {}).filter(k => (cur.outputs || {})[k]);
-                if (cur.status === 'done' || rootOuts.length >= rootAllC.length) {
-                    // Root parent že komplet → ta child je sirota, ne resumaj
-                    console.log(`[watchdog] SKIP ${j.id} — root parent ${cur.id} already complete (${rootOuts.length}/${rootAllC.length})`);
-                    j._autoResumeTriggered = true;
-                    j.status = 'done';
-                    j.statusReason = `Skipped resume — root parent ${cur.id} already complete`;
-                    j.resolvedVia = cur.id;
-                    persistJobs();
-                    continue;
-                }
-            }
-        }
-
-        // Preveri da je še kaj za narediti
-        const allC = j.countries || [];
-        const doneC = Object.keys(j.outputs || {}).filter(k => (j.outputs || {})[k]);
-        const failedC = Object.keys(j.ttsErrors || {});
-        const stillTodo = allC.filter(c => !doneC.includes(c) || failedC.includes(c));
-        if (stillTodo.length === 0) continue;
-
-        // FIX 2026-05-29: ne auto-resume v prvih 5 min po server startu —
-        // ce je server padel zaradi paralelnih jobov, restart ne sme takoj sprozit spet vseh hkrati.
-        if (Date.now() - SERVER_STARTUP_TS < 5 * 60 * 1000) {
-            console.log(`[watchdog] STARTUP GUARD: skip auto-resume ${j.id} (server up <5min)`);
-            continue;
-        }
-
-        j._autoResumeTriggered = true;
-        console.log(`[watchdog] AUTO-RESUME ${j.id} (status=${j.status}, attempt ${attempts + 1}/${MAX_AUTO_RESUMES}, todo=${stillTodo.length})`);
-        try {
-            const r = _doResumeJob(j, { auto: true });
-            if (!r.ok) {
-                console.warn(`[watchdog] auto-resume ${j.id} failed: ${r.error}`);
-                j._autoResumeTriggered = false; // dovoli ponoven poskus naslednjič
-            } else {
-                j.autoResumedTo = r.jobId;
-                persistJobs();
-            }
-        } catch (e) {
-            console.error(`[watchdog] auto-resume ${j.id} threw:`, e.message);
-            j._autoResumeTriggered = false;
-        }
-    }
 }, 60 * 1000);
 
 // Graceful shutdown: persist before dying so jobs aren't lost
@@ -4068,6 +4002,17 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                 job.ttsErrors = job.ttsErrors || {};
                 job.ttsErrors[lang] = (job.ttsErrors[lang] || 0) + 1;
                 if (/quota_exceeded/i.test(e.message||'')) job.ttsQuotaExceeded = true;
+                // FIX 2026-05-29: pri ElevenLabs payment_issue / 401 takoj abort cel job.
+                // Brez TTS ni smiselno renderirat videa (nima glasu).
+                // Job ostane na ISTEM ID-ju s statusom manual_action_required —
+                // uporabnik plačaja ElevenLabs in klikne Nadaljuj.
+                if (/payment_issue|401|unauthorized/i.test(e.message||'')) {
+                    job.ttsPaymentIssue = true;
+                    job.status = 'manual_action_required';
+                    job.statusReason = 'ElevenLabs payment issue (401) — preveri subscription in ročno nadaljuj';
+                    persistJobs();
+                    throw new Error('TTS_PAYMENT_ABORT'); // breakout iz outer loop preko catcha
+                }
                 // Skip this segment if TTS fails
                 ttsSegments.push({
                     text: segment.translatedText,
@@ -4623,7 +4568,11 @@ app.post('/api/localizer/regenerate/:id', async (req, res) => {
     res.json({ jobId: newJobId, status: 'started', regeneratedFrom: orig.id });
 });
 
-// === RESUME helper (uses by both endpoint + auto-resume watchdog) ===
+// === RESUME helper — FIX 2026-05-29: nadaljuje ISTI job ID, NE kreira novega ===
+// Razlog za refactor: prejšnja verzija je pri vsakem resume klicu kreirala
+// nov gen-${Date.now()} job + kopirala outpute. Watchdog je to klical avtomatsko
+// pri failed_tts → 3x duplikati istega joba → kurjen ElevenLabs limit.
+// Sedaj: resume = update obstoječega zapisa, skip že-done jezike, retry pending+failed.
 function _doResumeJob(orig, opts = {}) {
     if (!orig) return { ok: false, status: 404, error: 'Job not found' };
     if (!orig.videoClean) return { ok: false, status: 400, error: 'Missing videoClean' };
@@ -4634,7 +4583,6 @@ function _doResumeJob(orig, opts = {}) {
     const allCountries = orig.countries || [];
     const doneOutputs = orig.outputs || {};
     const doneCountries = Object.keys(doneOutputs).filter(k => doneOutputs[k]);
-    // Pri partial/failed_tts: ponovno generiraj VSE jezike pri katerih je bil ttsError (tudi če output exists)
     const ttsErrLangs = Object.keys(orig.ttsErrors || {});
     const failedDone = ttsErrLangs.filter(l => doneCountries.includes(l));
     const effectiveDone = doneCountries.filter(c => !failedDone.includes(c));
@@ -4644,67 +4592,48 @@ function _doResumeJob(orig, opts = {}) {
         return { ok: false, status: 400, error: 'Nothing to resume — all countries already generated' };
     }
 
-    const newJobId = `gen-${Date.now()}`;
-    const newOutputDir = path.join(__dirname, 'uploads', 'generated', newJobId);
-    fs.mkdirSync(newOutputDir, { recursive: true });
-
-    // Copy already-generated files into new job dir so the final ZIP has everything
-    const carriedOutputs = {};
-    for (const lang of effectiveDone) {
-        const srcPath = doneOutputs[lang];
-        if (srcPath && fs.existsSync(srcPath)) {
-            const destPath = path.join(newOutputDir, path.basename(srcPath));
-            try {
-                fs.copyFileSync(srcPath, destPath);
-                carriedOutputs[lang] = destPath;
-            } catch (e) {
-                console.warn(`[resume ${newJobId}] failed to copy ${lang}: ${e.message}`);
-            }
-        }
+    // Guard: ne start-aj resume če je job že in-flight (paralelni klici, dvojni klik na "Nadaljuj")
+    if (IN_FLIGHT_STATUSES.includes(orig.status)) {
+        return { ok: false, status: 409, error: `Job already in flight (status=${orig.status})` };
     }
 
-    const newJob = {
-        id: newJobId,
-        name: orig.name,
-        namingParts: orig.namingParts,
-        videoClean: orig.videoClean,
-        texts: orig.texts,
-        style: orig.style,
-        fontSize: orig.fontSize,
-        hookStyle: orig.hookStyle,
-        ctaStyle: orig.ctaStyle,
-        perTextStyles: orig.perTextStyles,
-        uppercase: orig.uppercase,
-        countries: remaining,
-        source: orig.source,
-        mode: orig.mode,
-        voiceoverScript: orig.voiceoverScript,
-        videoDuration: orig.videoDuration,
-        textPosition: orig.textPosition,
-        status: 'translating',
-        completed: Object.keys(carriedOutputs).length,
-        currentLang: '',
-        outputs: carriedOutputs,
-        resumedFrom: orig.id,
-        carriedCountries: effectiveDone,
-        resumeAttempts: (orig.resumeAttempts || 0) + 1,
-        autoResumed: !!opts.auto,
-        created: new Date().toISOString()
-    };
+    // Cleanup failed TTS errors za jezike ki bomo retry-ali — drugače "partial" status ne odide
+    for (const lang of failedDone) {
+        delete orig.ttsErrors[lang];
+        // outputs za failed jezike izbrišemo da se ne kaže ✓ pri jeziku ki ga retry-amo
+        delete orig.outputs[lang];
+    }
+    if (orig.ttsErrors && Object.keys(orig.ttsErrors).length === 0) {
+        delete orig.ttsErrors;
+        delete orig.ttsQuotaExceeded;
+        delete orig.ttsPaymentIssue;
+    }
 
-    localizerJobs.set(newJobId, newJob);
+    // Update istega joba — NOV ID se NE kreira, output dir ostane isti.
+    orig.countries = remaining;          // samo neopravljeni za ta resume cikel
+    orig._fullCountries = orig._fullCountries || allCountries; // za kasnejši reference (UI)
+    orig.status = 'translating';
+    orig.statusReason = undefined;
+    orig.currentLang = '';
+    orig.completed = Object.keys(orig.outputs || {}).filter(k => orig.outputs[k]).length;
+    orig.resumeAttempts = (orig.resumeAttempts || 0) + 1;
+    orig.lastResumeAt = new Date().toISOString();
+    orig.lastProgressAt = Date.now();
     persistJobs();
 
-    const generator = (newJob.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    generator(newJob, videoPath).catch(e => {
-        newJob.status = 'error';
-        newJob.error = e.message;
-        persistJobs();
-        console.error(`[${newJobId}] Resume error:`, e);
+    const generator = (orig.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
+    JOB_SEMAPHORE(() => generator(orig, videoPath)).catch(e => {
+        // Pri TTS_PAYMENT_ABORT je status že manual_action_required, ne overrid-aj
+        if (orig.status !== 'manual_action_required') {
+            orig.status = 'error';
+            orig.error = e.message;
+            persistJobs();
+        }
+        console.error(`[${orig.id}] Resume error:`, e.message);
     });
 
-    console.log(`Resumed job ${orig.id} -> ${newJobId} (carried ${effectiveDone.length}, remaining ${remaining.length}: ${remaining.join(',')})${opts.auto ? ' [AUTO]' : ''}`);
-    return { ok: true, jobId: newJobId, status: 'started', resumedFrom: orig.id, carriedCountries: effectiveDone, remainingCountries: remaining };
+    console.log(`Resumed job ${orig.id} IN-PLACE (carried ${effectiveDone.length}, remaining ${remaining.length}: ${remaining.join(',')}, attempt ${orig.resumeAttempts})${opts.auto ? ' [AUTO]' : ''}`);
+    return { ok: true, jobId: orig.id, status: 'started', resumedInPlace: true, carriedCountries: effectiveDone, remainingCountries: remaining };
 }
 
 app.post('/api/localizer/resume/:id', async (req, res) => {

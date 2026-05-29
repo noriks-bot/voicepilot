@@ -7885,6 +7885,8 @@
             if (status === 'done' || status === 'completed') { bg = '#DCFCE7'; fg = '#15803d'; lbl = 'Koncano'; }
             else if (status === 'partial') { bg = '#FEF3C7'; fg = '#92400E'; lbl = '⚠️ Delno (TTS napaka)'; }
             else if (status === 'failed_tts') { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = '❌ TTS quota'; }
+            else if (status === 'manual_action_required') { bg = '#FED7AA'; fg = '#9A3412'; lbl = '⏸ ElevenLabs payment'; }
+            else if (status === 'failed_stale') { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = '⏸ Obtičal'; }
             else if (['failed', 'error'].includes(status)) { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = 'Napaka'; }
             else if (status === 'queued') { bg = '#E0E7FF'; fg = '#3730A3'; lbl = 'V vrsti'; }
             else if (status === 'translating') { bg = '#DBEAFE'; fg = '#1E40AF'; lbl = 'Prevajam'; dot = '<span class="pulse-dot"></span>'; }
@@ -8071,12 +8073,12 @@
                     } else if (r.kind === 'completed' && (r.status === 'done' || r.status === 'completed')) {
                         action = '<a href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="display:inline-block; font-weight:700; padding:6px 14px; background:#0A59D2; color:#fff !important; border-radius:6px; text-decoration:none; margin-right:6px; font-size:13px;">ZIP &darr;</a>' +
                             '<button onclick="window.regenJob(\'' + r.id + '\')" title="Generiraj ponovno z istimi parametri" style="font-weight:600; padding:6px 10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:6px; cursor:pointer; font-size:12px;">🔄</button>';
-                    } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error'].includes(r.status)) {
+                    } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error','manual_action_required'].includes(r.status)) {
                         const tip = r.statusReason ? r.statusReason.replace(/"/g,'') : 'Job ni dokončan';
                         // VEDNO pokaži NADALJUJ + REGENERIRAJ (server odloči če resume možen)
                         action = '<button onclick="window.resumeJob(\'' + r.id + '\')" title="' + tip + ' — nadaljuj kjer je ostalo" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px; margin-right:6px;">▶ NADALJUJ</button>' +
                                  '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + ' — od začetka" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
-                    } else if (r.kind === 'in_progress' && ['partial','failed_tts','failed_stale','failed','error'].includes(r.status)) {
+                    } else if (r.kind === 'in_progress' && ['partial','failed_tts','failed_stale','failed','error','manual_action_required'].includes(r.status)) {
                         // Job je še v jobs listi z napako → ponudi ročni NADALJUJ + REGENERIRAJ
                         const tip = r.statusReason ? String(r.statusReason).replace(/"/g,'') : 'Job ni dokončan';
                         action = '<button onclick="window.resumeJob(\'' + r.id + '\')" title="' + tip + ' — nadaljuj" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px; margin-right:6px;">▶ NADALJUJ</button>' +
@@ -8097,7 +8099,7 @@
                     if (r.kind === 'in_progress' && r.totalCount > 0) {
                         const doneN = (r.completedLangs || []).length;
                         const pct = Math.max(2, Math.round((doneN / r.totalCount) * 100));
-                        const isErr = ['error','failed','failed_tts','failed_stale'].includes(r.status);
+                        const isErr = ['error','failed','failed_tts','failed_stale','manual_action_required'].includes(r.status);
                         const barColor = isErr ? '#DC2626' : (pct >= 100 ? '#16A34A' : '#0A59D2');
                         progressBarHtml = '<div style="margin-top:6px; width:100%; max-width:260px; height:6px; background:#E5E7EB; border-radius:3px; overflow:hidden;">' +
                             '<div style="height:100%; width:' + pct + '%; background:' + barColor + '; transition:width 0.4s ease;"></div>' +
@@ -8152,7 +8154,7 @@
                 let hasActive = false;
                 for (const r of rows) {
                     const st = (r.getAttribute('data-job-status') || '').toLowerCase();
-                    if (st && !['done','completed','complete','error','failed','failed_stale','cancelled'].includes(st)) { hasActive = true; break; }
+                    if (st && !['done','completed','complete','error','failed','failed_stale','cancelled','manual_action_required'].includes(st)) { hasActive = true; break; }
                 }
                 if (rows.length > 0 && !hasActive) return;
             }
