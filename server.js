@@ -45,6 +45,25 @@ function _makeLimiter(max) {
 }
 const TTS_SEMAPHORE = _makeLimiter(4);
 
+// === Global JOB concurrency limit (max 1 aktiven localizer job) ===
+// FIX 2026-05-29: preprecuje da bi vec bulk video jobov hkrati sprozilo CPU thrashing.
+// Vsi POST-i takoj sprejeti, dejansko delo (generator) ceka v FIFO queue.
+const JOB_SEMAPHORE = _makeLimiter(1);
+
+// === FFMPEG heavy encode limit (max 2 paralelna libx264 -preset fast) ===
+// 4-core CPU prenese 2 hkratna H.264 encoda. Ostali ffmpeg klici (probe, frame extract,
+// silence gen, concat audio) ostajajo brez limita ker so I/O bound.
+const FFMPEG_HEAVY = _makeLimiter(2);
+
+// Wrapper okrog execPromise za heavy ffmpeg encode klice.
+async function _ffmpegHeavyExec(cmd, opts) {
+    return FFMPEG_HEAVY(() => execPromise(cmd, opts));
+}
+
+// Server startup timestamp za watchdog startup guard
+const SERVER_STARTUP_TS = Date.now();
+
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -1909,6 +1928,13 @@ setInterval(() => {
         const stillTodo = allC.filter(c => !doneC.includes(c) || failedC.includes(c));
         if (stillTodo.length === 0) continue;
 
+        // FIX 2026-05-29: ne auto-resume v prvih 5 min po server startu —
+        // ce je server padel zaradi paralelnih jobov, restart ne sme takoj sprozit spet vseh hkrati.
+        if (Date.now() - SERVER_STARTUP_TS < 5 * 60 * 1000) {
+            console.log(`[watchdog] STARTUP GUARD: skip auto-resume ${j.id} (server up <5min)`);
+            continue;
+        }
+
         j._autoResumeTriggered = true;
         console.log(`[watchdog] AUTO-RESUME ${j.id} (status=${j.status}, attempt ${attempts + 1}/${MAX_AUTO_RESUMES}, todo=${stillTodo.length})`);
         try {
@@ -2911,9 +2937,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 fc += `;${lastLabel}[${idx + 1}:v]overlay=${p.x}:${p.y}:enable='between(t\\,${p.start}\\,${p.end})'${outLabel}`;
                 lastLabel = outLabel;
             });
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>&1`);
+            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>&1`);
         } else {
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>/dev/null`);
+            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>/dev/null`);
         }
         
         res.json({ 
@@ -2989,7 +3015,7 @@ app.post('/api/localizer/generate', async (req, res) => {
 
     // Start async generation - any thrown error captured into job state
     const generator = (mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    generator(job, videoPath).catch(e => {
+    JOB_SEMAPHORE(() => generator(job, videoPath)).catch(e => {
         job.status = 'error';
         job.statusReason = `Job crashed: ${e.message}`;
         job.error = e.message;
@@ -3362,9 +3388,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 fc += `;${lastLabel}[${idx + 1}:v]overlay=${p.x}:${p.y}:enable='between(t\\,${p.start}\\,${p.end})'${outLabel}`;
                 lastLabel = outLabel;
             });
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>&1`);
+            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>&1`);
         } else {
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>/dev/null`);
+            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>/dev/null`);
         }
         
         job.outputs[lang] = outVideo;
@@ -4207,16 +4233,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             } else {
                 // No original audio - apply gain + loudnorm to voiceover-only path too
                 const _voOnlyFilter = `[1:a]${_voGainFilter}loudnorm=I=-14:TP=-1.5:LRA=11,apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]`;
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];${_voOnlyFilter}" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];${_voOnlyFilter}" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             }
         } catch (e) {
             // Fallback: no audio mix, just subtitles
             console.error(`[${job.id}] [VO] Audio mix error for ${lang}:`, e.message);
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
         }
         
         job.outputs[lang] = outVideo;
@@ -4364,17 +4390,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 const hasAudio = probeResult.stdout.trim().length > 0;
                 
                 if (hasAudio) {
-                    await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
+                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
                 } else {
-                    await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
+                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
                 }
             } catch (e) {
                 // Fallback: just subtitles + voiceover, no original audio mix
-                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
+                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
             }
         } else {
             // No TTS succeeded - just subtitles
-            await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>/dev/null`);
+            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>/dev/null`);
         }
         
         console.log(`[vo-preview] Done: ${outPath}`);
@@ -4401,7 +4427,7 @@ app.post('/api/localizer/burn-srt', upload.single('srt'), async (req, res) => {
     const outPath = path.join(outDir, outId + '.mp4');
     
     try {
-        await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "subtitles='${srtFile.path}'" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>&1`);
+        await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "subtitles='${srtFile.path}'" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>&1`);
         res.json({ previewUrl: '/uploads/vo-previews/' + outId + '.mp4' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -4744,7 +4770,7 @@ app.post('/api/localizer/run/:id', async (req, res) => {
     persistJobs();
 
     const generator = (job.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    generator(job, videoPath).catch(e => {
+    JOB_SEMAPHORE(() => generator(job, videoPath)).catch(e => {
         job.status = 'error';
         job.statusReason = `Job crashed: ${e.message}`;
         job.error = e.message;
