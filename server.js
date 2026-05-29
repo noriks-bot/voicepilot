@@ -4453,19 +4453,35 @@ app.get('/api/localizer/job/:id/zip', (req, res) => {
     const job = localizerJobs.get(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (job.status !== 'done') return res.status(400).json({ error: 'Job not complete' });
-    
+
+    // ID extraction: 1) namingParts.id, 2) prvi underscore-segment iz job.name (npr. ID102 iz 'ID102_19-05-2026_EN_...'), 3) fallback job.name
+    let zipBase = '';
+    try {
+        if (job.namingParts && job.namingParts.id) {
+            zipBase = String(job.namingParts.id).toUpperCase();
+        } else if (job.name) {
+            const first = String(job.name).replace(/\.[a-z0-9]+$/i, '').split('_')[0];
+            if (first && /^ID\d+/i.test(first)) zipBase = first.toUpperCase();
+        }
+    } catch(e) {}
+    if (!zipBase) zipBase = (job.name || 'localized').replace(/\.[a-z0-9]+$/i, '');
+
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${job.name}-all-countries.zip"`);
-    
+    res.setHeader('Content-Disposition', `attachment; filename="${zipBase}.zip"`);
+
     const archive = archiver('zip', { zlib: { level: 5 } });
     archive.pipe(res);
-    
+
     for (const [lang, videoPath] of Object.entries(job.outputs)) {
         if (fs.existsSync(videoPath)) {
-            archive.file(videoPath, { name: `${job.name}-${lang}.mp4` });
+            // Per-video ime znotraj zipa: ID###_DD-MM-YYYY_LANG_<rest> (isti pattern kot ostali endpointi)
+            let videoName;
+            try { videoName = buildVoFilename(job.namingParts, lang, job.name); } catch(e) { videoName = null; }
+            if (!videoName) videoName = `${zipBase}_${lang}`;
+            archive.file(videoPath, { name: `${videoName}.mp4` });
         }
     }
-    
+
     archive.finalize();
 });
 
