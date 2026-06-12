@@ -3430,6 +3430,61 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // === VOICEOVER: ElevenLabs TTS + Subtitle generation ===
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 
+// === VO CACHE (2026-06-12): dvoplastni cache za ElevenLabs porabo ===
+// Plast A: translation cache (EN->lang, post-proofread) -> deterministicni prevodi za duplikate
+// Plast B: TTS audio cache (text+voice+model+lang+speed -> mp3) -> 0 API klicev za ze generiran audio
+// Kill-switch: TTS_CACHE_DISABLED=1 v .env izklopi OBE plasti (pipeline tece kot prej).
+const _voCrypto = require('crypto');
+const VO_CACHE_DISABLED = process.env.TTS_CACHE_DISABLED === '1';
+const TTS_CACHE_DIR = path.join(__dirname, 'data', 'tts-cache');
+const TTS_CACHE_INDEX_FILE = path.join(TTS_CACHE_DIR, 'index.json');
+const TRANSLATION_CACHE_FILE = path.join(__dirname, 'data', 'translation-cache.json');
+const TTS_CACHE_MAX_AGE_MS = 60 * 24 * 3600 * 1000; // 60 dni
+const TTS_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+
+function _voHash(s) { return _voCrypto.createHash('sha256').update(s, 'utf8').digest('hex'); }
+
+let _ttsCacheIndex = {};
+let _translationCache = {};
+try {
+    fs.mkdirSync(TTS_CACHE_DIR, { recursive: true });
+    if (fs.existsSync(TTS_CACHE_INDEX_FILE)) _ttsCacheIndex = JSON.parse(fs.readFileSync(TTS_CACHE_INDEX_FILE, 'utf8'));
+    if (fs.existsSync(TRANSLATION_CACHE_FILE)) _translationCache = JSON.parse(fs.readFileSync(TRANSLATION_CACHE_FILE, 'utf8'));
+} catch (e) { console.warn('[VO-CACHE] init warning:', e.message); }
+
+function _persistTtsIndex() {
+    try { fs.writeFileSync(TTS_CACHE_INDEX_FILE, JSON.stringify(_ttsCacheIndex)); } catch (e) { console.warn('[VO-CACHE] index persist failed:', e.message); }
+}
+function _persistTranslationCache() {
+    try { fs.writeFileSync(TRANSLATION_CACHE_FILE, JSON.stringify(_translationCache)); } catch (e) { console.warn('[VO-CACHE] translation persist failed:', e.message); }
+}
+
+// Cleanup ob startu: brisi mp3 starejse od 60 dni; ce skupaj > 2GB, brisi najstarejse (mtime FIFO)
+(function _ttsCacheCleanup() {
+    if (VO_CACHE_DISABLED) return;
+    try {
+        const files = fs.readdirSync(TTS_CACHE_DIR).filter(f => f.endsWith('.mp3'))
+            .map(f => { const p = path.join(TTS_CACHE_DIR, f); const st = fs.statSync(p); return { f, p, mtime: st.mtimeMs, size: st.size }; });
+        const now = Date.now();
+        let removed = 0;
+        let kept = [];
+        for (const x of files) {
+            if (now - x.mtime > TTS_CACHE_MAX_AGE_MS) { fs.unlinkSync(x.p); delete _ttsCacheIndex[x.f.replace(/\.mp3$/, '')]; removed++; }
+            else kept.push(x);
+        }
+        kept.sort((a, b) => a.mtime - b.mtime);
+        let total = kept.reduce((a, b) => a + b.size, 0);
+        while (total > TTS_CACHE_MAX_BYTES && kept.length) {
+            const x = kept.shift();
+            fs.unlinkSync(x.p); delete _ttsCacheIndex[x.f.replace(/\.mp3$/, '')]; total -= x.size; removed++;
+        }
+        if (removed) _persistTtsIndex();
+        console.log(`[VO-CACHE] startup: ${kept.length} cached mp3 (${(total / 1024 / 1024).toFixed(0)} MB), ${removed} removed, translations: ${Object.keys(_translationCache).length}`);
+    } catch (e) { console.warn('[VO-CACHE] cleanup warning:', e.message); }
+})();
+
+let _ttsCacheHits = 0, _ttsCacheMisses = 0;
+
 // Voice IDs for each language - native male voice actors (ElevenLabs Voice Library)
 // Selected: professional narrator / storytelling voices, middle-aged male, native accent
 const VOICE_MAP = {
@@ -3460,6 +3515,26 @@ async function generateTTS(text, langCode, outputPath, speed) {
     let _speed = (typeof speed === 'number' && isFinite(speed)) ? speed : 1.0;
     if (_speed < 0.7) _speed = 0.7;
     if (_speed > 1.2) _speed = 1.2;
+
+    // === VO-CACHE plast B: hit -> kopiraj cached mp3, 0 API klicev ===
+    // Speed JE v kljucu: adaptive-speed regen pri novem speedu ostane pravi API klic (1:1 kot prej).
+    const _cacheKey = _voHash(`tts1|${voiceConfig.voice_id}|${voiceConfig.model || 'v2chain'}|${langCode}|${_speed.toFixed(2)}|${text}`);
+    const _cacheMp3 = path.join(TTS_CACHE_DIR, `${_cacheKey}.mp3`);
+    if (!VO_CACHE_DISABLED) {
+        try {
+            const _entry = _ttsCacheIndex[_cacheKey];
+            if (_entry && typeof _entry.d === 'number' && fs.existsSync(_cacheMp3)) {
+                fs.copyFileSync(_cacheMp3, outputPath);
+                const _now = Date.now();
+                fs.utimesSync(_cacheMp3, _now / 1000, _now / 1000); // LRU touch za cleanup
+                _ttsCacheHits++;
+                console.log(`[TTS-CACHE] HIT ${langCode} speed=${_speed.toFixed(2)} (${text.length} chars) [hits=${_ttsCacheHits} misses=${_ttsCacheMisses}]`);
+                return { path: outputPath, duration: _entry.d };
+            }
+        } catch (ce) { console.warn('[TTS-CACHE] read failed, falling through to API:', ce.message); }
+        _ttsCacheMisses++;
+    }
+
     // Per-voice model override: some voices (e.g. SI Uros Novak) are v3-only.
     // For overridden voices, try v3 first, then fall back to v2 attempts in case of API issue.
     // For non-overridden voices, use existing v2 → v2-noLang → turbo_v2_5 chain.
@@ -3534,6 +3609,14 @@ async function generateTTS(text, langCode, outputPath, speed) {
         const durResult = await execPromise(`${FFMPEG} -i "${outputPath}" 2>&1 | grep Duration | awk '{print $2}' | tr -d ','`);
         const parts = durResult.stdout.trim().split(':');
         const duration = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+        // === VO-CACHE plast B: shrani v cache (samo validen audio z uspesno izmerjeno dolzino) ===
+        if (!VO_CACHE_DISABLED && buffer.length > 1024 && isFinite(duration) && duration > 0) {
+            try {
+                fs.copyFileSync(outputPath, _cacheMp3);
+                _ttsCacheIndex[_cacheKey] = { d: duration, c: text.length, t: Date.now() };
+                _persistTtsIndex();
+            } catch (ce) { console.warn('[TTS-CACHE] write failed (ignored):', ce.message); }
+        }
         return { path: outputPath, duration };
     } catch (e) {
         return { path: outputPath, duration: 3 }; // fallback 3s
@@ -3899,6 +3982,12 @@ async function generateVoiceoverCountries(job, videoPath) {
         DE:'German (Deutsch, Germany)'
     };
 
+    // === VO-CACHE plast A: translation cache (final, post-proofread prevodi) ===
+    // Kljuc vkljucuje char budget (odvisen od segment durationa) -> hit samo pri identicnem scriptu + timingih.
+    const _transCacheKey = (lang, budget, src) => _voHash(`tr1|${lang}|${budget}|${src}`);
+    const _cachedLangs = new Set();   // jeziki, 100% pokriti iz cache-a -> skip translate + proofread
+    const _translateOkLangs = new Set(); // jeziki z uspesnim svezim prevodom -> kandidati za cache write
+
     async function _translateOne(lang) {
         const fullLang = _langFull[lang] || lang;
         const tshirt = _tshirtWord[lang] || 't-shirt';
@@ -3906,6 +3995,19 @@ async function generateVoiceoverCountries(job, videoPath) {
         const isVerbose = ['SK','CZ','PL','HU','RO','GR','DE'].includes(lang);
         // FIX A: per-segment hard char budget so TTS fits at speed=1.0
         const budgets = segDurations.map(d => _charBudgetFor(lang, d));
+
+        // VO-CACHE plast A: ce so VSI segmenti tega jezika v cache-u -> 0 OpenAI klicev, deterministicen prevod
+        if (!VO_CACHE_DISABLED) {
+            const cached = textsToTranslate.map((t, i) => {
+                const e = _translationCache[_transCacheKey(lang, budgets[i], t)];
+                return (e && typeof e.text === 'string' && e.text.trim()) ? e.text : null;
+            });
+            if (cached.every(c => c !== null)) {
+                _cachedLangs.add(lang);
+                console.log(`[${job.id}] [VO-CACHE] translation HIT ${lang} (${N} segments, skip translate+proofread)`);
+                return cached;
+            }
+        }
         const tightnessRule = isVerbose
             ? `
 7. CRITICAL TIMING: ${fullLang} tends to be LONGER than English when spoken. Use the SHORTEST natural phrasing. Prefer short common words over compound/formal ones. Drop redundant words.`
@@ -3953,6 +4055,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
         const r = _results[li];
         if (r.status === 'fulfilled') {
             r.value.forEach((txt, i) => { translations[i][lang] = txt; });
+            if (!_cachedLangs.has(lang)) _translateOkLangs.add(lang); // svez prevod OK -> cache write po proofreadu
             console.log(`[${job.id}] [VO] Translated ${lang}: ${r.value.length} segments`);
         } else {
             console.error(`[${job.id}] [VO] Translate failed for ${lang}:`, r.reason?.message || r.reason);
@@ -3983,7 +4086,10 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
         console.log(`[${job.id}] [VO] Generating ${lang}...`);
         
         // NATIVE SPEAKER PROOFREAD for voiceover
-        try {
+        // VO-CACHE plast A: cached prevodi so ze proofread -> skip (identicen output kot prvic)
+        if (!VO_CACHE_DISABLED && _cachedLangs.has(lang)) {
+            console.log(`[${job.id}] [VO-CACHE] proofread SKIP ${lang} (cached translation)`);
+        } else try {
             const voTextsForLang = job.voiceoverScript.map((s, idx) => translations[idx]?.[lang] || s.text);
             const vpResponse = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
@@ -4001,6 +4107,19 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                 console.log("[" + job.id + "] [VO] Proofread " + lang + ": " + vFixed.length + " texts checked");
             }
         } catch(vpe) { console.error("[" + job.id + "] [VO] Proofread error " + lang + ":", vpe.message); }
+        // VO-CACHE plast A: shrani FINALNE (post-proofread) prevode — samo ce je svez prevod uspel.
+        // EN fallback (translate failed) se NIKOLI ne cache-a, da napaka ne zamrzne.
+        if (!VO_CACHE_DISABLED && _translateOkLangs.has(lang) && !_cachedLangs.has(lang)) {
+            try {
+                textsToTranslate.forEach((src, i) => {
+                    const fin = translations[i]?.[lang];
+                    if (fin && fin.trim() && fin !== src) {
+                        _translationCache[_transCacheKey(lang, _charBudgetFor(lang, segDurations[i]), src)] = { text: fin, t: Date.now() };
+                    }
+                });
+                _persistTranslationCache();
+            } catch (ce) { console.warn('[VO-CACHE] translation write failed (ignored):', ce.message); }
+        }
         // Get translated texts for this language
         const langTexts = job.voiceoverScript.map((s, i) => {
             const translated = translations[i]?.[lang] || s.text;
