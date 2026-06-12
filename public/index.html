@@ -3066,7 +3066,7 @@
             var nextId = 1;
 
             function makeRow() {
-                return { id: nextId++, videoFile: null, videoDuration: 0, srt: '', position: 'bottom', uploading: false };
+                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', uploading: false };
             }
 
             function renderRows() {
@@ -3172,6 +3172,7 @@
                 var row = rows.find(function(r){return r.id === id;});
                 if (!row) return;
                 row.uploading = true;
+                row.videoFileOrig = file.name;
                 setStatus(id, '⏳ nalagam...', '#0A59D2');
                 var fd = new FormData();
                 fd.append('video', file);
@@ -3255,8 +3256,11 @@
                     var row = item.row;
                     var segs = item.segs;
                     var videoDuration = row.videoDuration || (segs[segs.length-1].end + 1);
-                    var voId = String(Date.now()).slice(-6) + '-' + (item.idx + 1);
-                    var name = voId + '_' + nowDate + '_tshirt_VO_BULK';
+                    var origFile = row.videoFileOrig || (row.videoFile ? String(row.videoFile).split('/').pop() : '');
+                    var origBase = origFile.replace(/\.[a-z0-9]+$/i, '');
+                    var extractedId = (origFile.match(/ID\d+/i) || [])[0];
+                    var voId = extractedId ? extractedId.toUpperCase() : ('ID' + String(Date.now()).slice(-6) + '-' + (item.idx + 1));
+                    var name = origBase || (voId + '_' + nowDate + '_tshirt_VO_BULK');
                     setStatus(row.id, '⏳ pošiljam...', '#0A59D2');
                     plog('Vrstica ' + (item.idx+1) + ': pošiljam (' + segs.length + ' segmentov, ' + videoDuration.toFixed(1) + 's)...');
                     try {
@@ -3319,6 +3323,7 @@
                         rows.push(target);
                     }
                     target.uploading = true;
+                    target.videoFileOrig = file.name;
                     assignments.push({ id: target.id, file: file });
                 });
                 renderRows();

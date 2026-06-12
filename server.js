@@ -12,9 +12,19 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        const timestamp = Date.now();
-        const ext = path.extname(file.originalname);
-        cb(null, `video-${timestamp}${ext}`);
+        // sanitize: keep alnum, dot, dash, underscore; replace others with _
+        const orig = (file.originalname || 'video.mp4');
+        const safe = orig.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+        const ext = path.extname(safe) || '.mp4';
+        const base = path.basename(safe, ext);
+        const uploadDir = path.join(__dirname, 'uploads');
+        let candidate = safe;
+        let i = 1;
+        while (fs.existsSync(path.join(uploadDir, candidate))) {
+            candidate = `${base}-${i}${ext}`;
+            i++;
+        }
+        cb(null, candidate);
     }
 });
 const upload = multer({ 
@@ -41,7 +51,10 @@ function _makeLimiter(max) {
             v => { active--; resolve(v); next(); },
             e => { active--; reject(e); next(); });
     };
-    return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); next(); });
+    const limiter = (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); next(); });
+    limiter.getActive = () => active;
+    limiter.getQueued = () => queue.length;
+    return limiter;
 }
 const TTS_SEMAPHORE = _makeLimiter(4);
 
@@ -131,7 +144,9 @@ function buildVoFilename(np, lang, origName) {
     if (parts[1] && /^\d{2}-\d{2}-\d{2,4}$/.test(parts[1])) restStart = 2;
     // Skip country code if present at next position
     if (parts[restStart] && COUNTRY_CODES.includes(parts[restStart].toUpperCase())) restStart++;
-    const rest = parts.slice(restStart).join('_');
+    let rest = parts.slice(restStart).join('_');
+    // Strip _without_text / _without-text / _no_text suffix (video je ze lokaliziran)
+    rest = rest.replace(/_+(without[_-]?text|no[_-]?text)/gi, '').replace(/_+$/, '');
     return rest
         ? idPart + '_' + dateStr + '_' + langU + '_' + rest
         : idPart + '_' + dateStr + '_' + langU;
@@ -1886,6 +1901,58 @@ setInterval(() => {
     }
     if (changed) persistJobs();
 }, 60 * 1000);
+
+// === AUTO-RESUME WATCHDOG: every 2 min, resume 1 oldest failed_stale if no active job ===
+// SAFE: uses _doResumeJob in-place (no new job IDs, no duplicates)
+// SAFETY NETS:
+//   - SKIP if JOB_SEMAPHORE busy (active > 0 or queued > 0)
+//   - SKIP if any other job is IN_FLIGHT_STATUSES (covers race window)
+//   - SKIP if job.resumeAttempts >= MAX_AUTO_RESUME_ATTEMPTS
+//   - SKIP jobs with manual_action_required / ttsPaymentIssue / ttsQuotaExceeded
+//   - SKIP if job became failed_stale less than MIN_STALE_AGE_MS ago (give system time)
+//   - resume 1 job per tick (FIFO by created date)
+const MAX_AUTO_RESUME_ATTEMPTS = 3;
+const MIN_STALE_AGE_MS = 30 * 1000; // 30s grace period
+setInterval(() => {
+    try {
+        // Hard guard 1: semaphore busy → wait
+        if (JOB_SEMAPHORE.getActive() > 0 || JOB_SEMAPHORE.getQueued() > 0) return;
+        // Hard guard 2: any in-flight job (catches gen running outside semaphore window)
+        for (const j of localizerJobs.values()) {
+            if (IN_FLIGHT_STATUSES.includes(j.status)) return;
+        }
+        // Collect eligible failed_stale candidates
+        const now = Date.now();
+        const candidates = [];
+        for (const j of localizerJobs.values()) {
+            if (j.status !== 'failed_stale') continue;
+            if ((j.resumeAttempts || 0) >= MAX_AUTO_RESUME_ATTEMPTS) continue;
+            // Skip jobs with explicit manual action needed (TTS payment/quota)
+            if (j.ttsPaymentIssue || j.ttsQuotaExceeded) continue;
+            // Skip jobs that just became stale (give them grace period)
+            const staleAt = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : 0);
+            if (now - staleAt < MIN_STALE_AGE_MS) continue;
+            // Must have source video on disk (else _doResumeJob will fail anyway)
+            if (!j.videoClean) continue;
+            candidates.push(j);
+        }
+        if (candidates.length === 0) return;
+        // Pick oldest first (FIFO)
+        candidates.sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+        const target = candidates[0];
+        console.log(`[auto-resume] picking ${target.id} (attempts=${target.resumeAttempts||0}, candidates=${candidates.length})`);
+        const r = _doResumeJob(target, { auto: true });
+        if (!r.ok) {
+            console.warn(`[auto-resume] skip ${target.id}: ${r.error}`);
+            // Bump attempts even on skip to prevent infinite loop on permanent failures
+            target.resumeAttempts = (target.resumeAttempts || 0) + 1;
+            target.statusReason = `auto-resume skipped: ${r.error} (attempt ${target.resumeAttempts}/${MAX_AUTO_RESUME_ATTEMPTS})`;
+            persistJobs();
+        }
+    } catch (e) {
+        console.error('[auto-resume] error:', e.message);
+    }
+}, 2 * 60 * 1000);
 
 // Graceful shutdown: persist before dying so jobs aren't lost
 function _gracefulExit(sig) {
