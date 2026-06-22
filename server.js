@@ -69,8 +69,19 @@ const JOB_SEMAPHORE = _makeLimiter(1);
 const FFMPEG_HEAVY = _makeLimiter(2);
 
 // Wrapper okrog execPromise za heavy ffmpeg encode klice.
+// CPU patch 2026-06-22: omeji libx264 na -threads 2 + zazeni ffmpeg pod nice -n 10,
+// da node/Express ostane odziven med generacijo (4-core CPU, FFMPEG_HEAVY=2 -> max 4 jedra).
+function _throttleFfmpegCmd(cmd) {
+    let c = cmd;
+    if (/-c:v\s+libx264/.test(c) && !/-threads\s/.test(c)) {
+        c = c.replace(/-c:v\s+libx264/g, "-c:v libx264 -threads 2");
+    }
+    c = c.replace(/(^|\s|&&\s*|;\s*)(\/usr\/local\/bin\/ffmpeg|ffmpeg)(\s)/g,
+                  function (m, pre, bin, post) { return pre + "nice -n 10 " + bin + post; });
+    return c;
+}
 async function _ffmpegHeavyExec(cmd, opts) {
-    return FFMPEG_HEAVY(() => execPromise(cmd, opts));
+    return FFMPEG_HEAVY(function () { return execPromise(_throttleFfmpegCmd(cmd), opts); });
 }
 
 // Server startup timestamp za watchdog startup guard
