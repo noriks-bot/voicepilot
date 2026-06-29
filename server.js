@@ -3883,6 +3883,8 @@ ${inputText}`;
 
 // Generate voiceover video for all countries
 async function generateVoiceoverCountries(job, videoPath) {
+    // Original-audio volume: default 0.05 (lowered under VO), or 0 when user chose "Utišaj zvok"
+    const _origVol = job.muteOriginal ? '0' : '0.05';
     const LANGUAGES = job.countries || ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
     const LANG_NAMES = {
         SI: 'Slovenian', HR: 'Croatian', CZ: 'Czech', PL: 'Polish', BG: 'Bulgarian', RO: 'Romanian',
@@ -4375,7 +4377,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=${_origVol},apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             } else {
                 // No original audio - apply gain + loudnorm to voiceover-only path too
                 const _voOnlyFilter = `[1:a]${_voGainFilter}loudnorm=I=-14:TP=-1.5:LRA=11,apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]`;
@@ -4532,7 +4534,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 const hasAudio = probeResult.stdout.trim().length > 0;
                 
                 if (hasAudio) {
-                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
+                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=${_origVol}[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
                 } else {
                     await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
                 }
@@ -4842,7 +4844,7 @@ app.post('/api/localizer/resume/:id', async (req, res) => {
 
 // === FIX #4: queue + run endpoints (Voicemaker queues, user clicks RUN in Downloads) ===
 app.post('/api/localizer/queue', async (req, res) => {
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition } = req.body;
+    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition, muteOriginal } = req.body;
     if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
         return res.status(400).json({ error: 'Missing data' });
     }
@@ -4873,6 +4875,7 @@ app.post('/api/localizer/queue', async (req, res) => {
         mode: mode || 'subtitles', voiceoverScript: voiceoverScript || null,
         videoDuration: actualVideoDuration || videoDuration || null,
         textPosition: textPosition || 'center',
+        muteOriginal: muteOriginal === true,
         status: 'queued', completed: 0, currentLang: '', outputs: {},
         created: new Date().toISOString()
     };

@@ -3066,7 +3066,7 @@
             var nextId = 1;
 
             function makeRow() {
-                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', uploading: false };
+                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', muteOriginal: false, uploading: false };
             }
 
             function renderRows() {
@@ -3097,6 +3097,17 @@
                         +         '</label>'
                         +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.position === 'bottom' ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.position === 'bottom' ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
                         +           '<input type="radio" name="vo-pos-' + row.id + '" data-pos="' + row.id + '" value="bottom" ' + (row.position === 'bottom' ? 'checked' : '') + '> ⬇️ Spodaj'
+                        +         '</label>'
+                        +       '</div>'
+                        +     '</div>'
+                        +     '<div style="margin-top:10px;">'
+                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">🔊 Zvok originala</div>'
+                        +       '<div style="display:flex; gap:6px;">'
+                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (!row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (!row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
+                        +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="default" ' + (!row.muteOriginal ? 'checked' : '') + '> 🔉 Privzeto'
+                        +         '</label>'
+                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
+                        +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="mute" ' + (row.muteOriginal ? 'checked' : '') + '> 🔇 Utišaj zvok'
                         +         '</label>'
                         +       '</div>'
                         +     '</div>'
@@ -3155,6 +3166,14 @@
                         var id = parseInt(rad.getAttribute('data-pos'), 10);
                         var row = rows.find(function(r){return r.id === id;});
                         if (row && rad.checked) { row.position = rad.value; renderRows(); }
+                    });
+                });
+                // Original audio mute radios
+                document.querySelectorAll('[data-mute]').forEach(function(rad) {
+                    rad.addEventListener('change', function() {
+                        var id = parseInt(rad.getAttribute('data-mute'), 10);
+                        var row = rows.find(function(r){return r.id === id;});
+                        if (row && rad.checked) { row.muteOriginal = (rad.value === 'mute'); renderRows(); }
                     });
                 });
                 // Remove buttons
@@ -3276,7 +3295,8 @@
                             source: 'library',
                             style: 'white',
                             fontSize: 90,
-                            textPosition: row.position
+                            textPosition: row.position,
+                            muteOriginal: row.muteOriginal
                         });
                         ok++;
                         setStatus(row.id, '✅ v Jobs', '#10b981');
