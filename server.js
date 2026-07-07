@@ -2968,7 +2968,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // Generate all 7 country videos
 app.post('/api/localizer/generate', async (req, res) => {
     console.log('Generate request:', JSON.stringify(req.body, null, 2));
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration } = req.body;
+    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, voiceGender } = req.body;
     if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
         console.log('Generate 400: videoClean=', videoClean, 'texts=', texts);
         return res.status(400).json({ error: 'Missing data: videoClean=' + !!videoClean + ' texts=' + (texts?.length || 0) });
@@ -3014,6 +3014,7 @@ app.post('/api/localizer/generate', async (req, res) => {
         mode: mode || 'subtitles',
         voiceoverScript: voiceoverScript || null,
         videoDuration: actualVideoDuration || videoDuration || null,
+        voiceGender: (voiceGender === 'female') ? 'female' : 'male', // male=default, female=VOICE_MAP_FEMALE
         status: 'translating',
         completed: 0,
         currentLang: '',
@@ -3512,6 +3513,22 @@ const VOICE_MAP = {
     EN: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }              // English fallback
 };
 
+// Voice IDs for each language - FEMALE narrator voices (ElevenLabs multilingual)
+// Validated working across all target languages via the same model-fallback chain.
+const VOICE_MAP_FEMALE = {
+    SI: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', model: 'eleven_v3' },   // Slovenian (v3 supports sl)
+    HR: { voice_id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte' },                    // Croatian female
+    CZ: { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura' },                        // Czech female
+    PL: { voice_id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice' },                        // Polish female
+    GR: { voice_id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda' },                      // Greek female
+    IT: { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },                      // Italian female
+    HU: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', model: 'eleven_v3' },    // Hungarian (v3 supports hu)
+    SK: { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura' },                        // Slovak female
+    BG: { voice_id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte' },                    // Bulgarian female
+    RO: { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },                      // Romanian female
+    EN: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah' }                         // English fallback
+};
+
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
     SI: 'sl', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
@@ -3519,8 +3536,9 @@ const ELEVEN_LANG_CODES = {
 
 // Generate TTS audio with ElevenLabs (with model fallback + language_code retry)
 // speed: 0.7-1.2 (1.0 default). Used by adaptive-speed pipeline to fit segment duration.
-async function generateTTS(text, langCode, outputPath, speed) {
-    const voiceConfig = VOICE_MAP[langCode] || VOICE_MAP.HR;
+async function generateTTS(text, langCode, outputPath, speed, voiceGender) {
+    const _map = (voiceGender === 'female') ? VOICE_MAP_FEMALE : VOICE_MAP;
+    const voiceConfig = _map[langCode] || _map.HR || VOICE_MAP.HR;
     const elevenLang = ELEVEN_LANG_CODES[langCode] || 'en';
     // Clamp speed to ElevenLabs valid range
     let _speed = (typeof speed === 'number' && isFinite(speed)) ? speed : 1.0;
@@ -3885,6 +3903,8 @@ ${inputText}`;
 async function generateVoiceoverCountries(job, videoPath) {
     // Original-audio volume: default 0.05 (lowered under VO), or 0 when user chose "Utišaj zvok"
     const _origVol = job.muteOriginal ? '0' : '0.05';
+    // Voice gender: 'male' (default) or 'female' — selects VOICE_MAP vs VOICE_MAP_FEMALE
+    const _voiceGender = (job.voiceGender === 'female') ? 'female' : 'male';
     const LANGUAGES = job.countries || ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
     const LANG_NAMES = {
         SI: 'Slovenian', HR: 'Croatian', CZ: 'Czech', PL: 'Polish', BG: 'Bulgarian', RO: 'Romanian',
@@ -4160,7 +4180,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     HU: 1.15, RO: 1.05, DE: 1.10
                 };
                 const initSpeed = INITIAL_SPEED[lang] || 1.0;
-                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, initSpeed);
+                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, initSpeed, _voiceGender);
                 let usedSpeed = initSpeed;
                 // If audio is too long for the segment, speed up (max 1.2). If much shorter, slow down (min 0.85).
                 const overshoot = ttsResult.duration / segDur;
@@ -4169,14 +4189,14 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     const newSpeed = Math.min(1.2, Math.max(1.05, overshoot * 1.02));
                     console.log(`[${job.id}] [VO] ${lang} seg${i} too long (${ttsResult.duration.toFixed(2)}s vs ${segDur.toFixed(2)}s) -> regen speed=${newSpeed.toFixed(2)}`);
                     try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed);
+                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed, _voiceGender);
                         usedSpeed = newSpeed;
                     } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
                 } else if (overshoot > 1.5) {
                     // Too much overshoot - can't fit even at 1.2. Use 1.2 and let segment extend (FIX #1 handles canvas).
                     console.log(`[${job.id}] [VO] ${lang} seg${i} way too long (${ttsResult.duration.toFixed(2)}s vs ${segDur.toFixed(2)}s) -> regen speed=1.2 (will extend canvas)`);
                     try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, 1.2);
+                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, 1.2, _voiceGender);
                         usedSpeed = 1.2;
                     } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
                 } else if (overshoot < 0.7 && segDur > 2.0) {
@@ -4184,7 +4204,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     const newSpeed = Math.max(0.85, overshoot * 1.05);
                     console.log(`[${job.id}] [VO] ${lang} seg${i} too short -> regen speed=${newSpeed.toFixed(2)}`);
                     try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed);
+                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed, _voiceGender);
                         usedSpeed = newSpeed;
                     } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
                 }
@@ -4744,6 +4764,7 @@ app.post('/api/localizer/regenerate/:id', async (req, res) => {
         mode: orig.mode,
         voiceoverScript: orig.voiceoverScript,
         videoDuration: orig.videoDuration,
+        voiceGender: orig.voiceGender || 'male',
         status: 'translating',
         completed: 0,
         currentLang: '',
@@ -4844,7 +4865,7 @@ app.post('/api/localizer/resume/:id', async (req, res) => {
 
 // === FIX #4: queue + run endpoints (Voicemaker queues, user clicks RUN in Downloads) ===
 app.post('/api/localizer/queue', async (req, res) => {
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition, muteOriginal } = req.body;
+    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition, muteOriginal, voiceGender } = req.body;
     if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
         return res.status(400).json({ error: 'Missing data' });
     }
@@ -4876,6 +4897,7 @@ app.post('/api/localizer/queue', async (req, res) => {
         videoDuration: actualVideoDuration || videoDuration || null,
         textPosition: textPosition || 'center',
         muteOriginal: muteOriginal === true,
+        voiceGender: (voiceGender === 'female') ? 'female' : 'male',
         status: 'queued', completed: 0, currentLang: '', outputs: {},
         created: new Date().toISOString()
     };

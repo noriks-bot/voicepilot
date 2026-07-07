@@ -3066,7 +3066,7 @@
             var nextId = 1;
 
             function makeRow() {
-                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', muteOriginal: false, uploading: false };
+                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', muteOriginal: false, voiceGender: 'male', uploading: false };
             }
 
             function renderRows() {
@@ -3108,6 +3108,17 @@
                         +         '</label>'
                         +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
                         +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="mute" ' + (row.muteOriginal ? 'checked' : '') + '> 🔇 Utišaj zvok'
+                        +         '</label>'
+                        +       '</div>'
+                        +     '</div>'
+                        +     '<div style="margin-top:10px;">'
+                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">🎙️ Glas govorca</div>'
+                        +       '<div style="display:flex; gap:6px;">'
+                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.voiceGender !== "female" ? "#0A59D2" : "#E7E5E4") + '; background:' + (row.voiceGender !== "female" ? "#EFF6FF" : "#fff") + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
+                        +           '<input type="radio" name="vo-gender-' + row.id + '" data-gender="' + row.id + '" value="male" ' + (row.voiceGender !== "female" ? "checked" : "") + '> 👨 Moški'
+                        +         '</label>'
+                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.voiceGender === "female" ? "#0A59D2" : "#E7E5E4") + '; background:' + (row.voiceGender === "female" ? "#EFF6FF" : "#fff") + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
+                        +           '<input type="radio" name="vo-gender-' + row.id + '" data-gender="' + row.id + '" value="female" ' + (row.voiceGender === "female" ? "checked" : "") + '> 👩 Ženska'
                         +         '</label>'
                         +       '</div>'
                         +     '</div>'
@@ -3174,6 +3185,14 @@
                         var id = parseInt(rad.getAttribute('data-mute'), 10);
                         var row = rows.find(function(r){return r.id === id;});
                         if (row && rad.checked) { row.muteOriginal = (rad.value === 'mute'); renderRows(); }
+                    });
+                });
+                // Voice gender radios (male=default / female)
+                document.querySelectorAll('[data-gender]').forEach(function(rad) {
+                    rad.addEventListener('change', function() {
+                        var id = parseInt(rad.getAttribute('data-gender'), 10);
+                        var row = rows.find(function(r){return r.id === id;});
+                        if (row && rad.checked) { row.voiceGender = rad.value; renderRows(); }
                     });
                 });
                 // Remove buttons
@@ -3296,7 +3315,8 @@
                             style: 'white',
                             fontSize: 90,
                             textPosition: row.position,
-                            muteOriginal: row.muteOriginal
+                            muteOriginal: row.muteOriginal,
+                            voiceGender: row.voiceGender || 'male'
                         });
                         ok++;
                         setStatus(row.id, '✅ v Jobs', '#10b981');
