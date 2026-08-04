@@ -5055,6 +5055,47 @@ app.get('/api/localizer/generated/:id/zip', (req, res) => {
     }
 });
 
+// Bulk ZIP: prenesi vec jobov naenkrat v en ZIP (max 10). Body: { ids: [jobId, ...] }
+app.post('/api/localizer/bulk-zip', express.json(), (req, res) => {
+    try {
+        let ids = (req.body && req.body.ids) || [];
+        if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+        // sanitize + dedup + limit 10
+        ids = [...new Set(ids.map(x => String(x).trim()).filter(Boolean))].slice(0, 10);
+        if (ids.length === 0) return res.status(400).json({ error: 'No job ids provided' });
+
+        const baseDir = path.join(__dirname, 'uploads', 'generated');
+        const jobs = [];
+        for (const id of ids) {
+            // path traversal guard
+            if (id.includes('/') || id.includes('..')) continue;
+            const dir = path.join(baseDir, id);
+            if (!dir.startsWith(baseDir)) continue;
+            if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+            const files = fs.readdirSync(dir).filter(f => /\.(mp4|mov|webm|mkv|mp3|wav|srt|ass)$/i.test(f));
+            if (files.length) jobs.push({ id, dir, files });
+        }
+        if (jobs.length === 0) return res.status(404).json({ error: 'No downloadable files found for selected jobs' });
+
+        const stamp = new Date().toISOString().slice(0,10);
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', 'attachment; filename="voicepilot_' + jobs.length + 'jobs_' + stamp + '.zip"');
+        const archive = archiver('zip', { zlib: { level: 5 } });
+        archive.on('error', err => { console.error('[bulk-zip]', err); try { res.status(500).end(); } catch(_){} });
+        archive.pipe(res);
+        for (const j of jobs) {
+            for (const f of j.files) {
+                // vsak job v svojo podmapo, da se imena ne prepletajo
+                archive.file(path.join(j.dir, f), { name: j.id + '/' + f });
+            }
+        }
+        archive.finalize();
+    } catch (e) {
+        console.error('[bulk-zip]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ============ NIGHT QUEUE ENDPOINTS ============
 
 // ============ END QUEUE ENDPOINTS ============
