@@ -6187,9 +6187,9 @@ async function lvTTS(text, lang, out, voiceId, gender) {
         const body = { text, model_id: model };
         if (model === 'eleven_multilingual_v2') {
             body.language_code = code;
-            body.voice_settings = { stability: 0.5, similarity_boost: 0.85, style: 0.25, use_speaker_boost: true };
+            body.voice_settings = { stability: 0.45, similarity_boost: 0.9, style: 0.35, use_speaker_boost: true };
         }
-        const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}`, {
+        const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}?output_format=mp3_44100_192`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
             body: JSON.stringify(body)
         });
@@ -6733,8 +6733,8 @@ async function lvRun(job) {
                 const tp = tempo > 1.001 ? `atempo=${tempo.toFixed(3)},` : '';
                 return `[${i}:a]${tp}adelay=${dly}|${dly}[a${i}]`;
             }).join(';');
-            const voice = path.join(work, `voice-${lang}.mp3`);
-            await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -b:a 192k '${lvSh(voice)}' 2>/dev/null`);
+            const voice = path.join(work, `voice-${lang}.wav`);
+            await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -c:a pcm_s16le '${lvSh(voice)}' 2>/dev/null`);
             lvLog(job, `[${lang}] govor sestavljen`);
             lvP(job, _base + 0.5 * _span);
 
@@ -6795,10 +6795,10 @@ async function lvRun(job) {
             // koncni izris: (lipsync video ze vsebuje nas zvok) ali (original + podaljsanje + nas zvok)
             const out = path.join(work, `${job.name}-${lang}.mp4`);
             if (lipVideo) {
-                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
             } else {
                 const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
-                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`);
             }
             (job.outputs = job.outputs || {})[lang] = out;
             job.progress = Math.min(100, Math.round(20 + (++job.done) * _span)); _li++;
