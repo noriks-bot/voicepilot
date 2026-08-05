@@ -8438,7 +8438,7 @@ async function lvPoll(){
           +'<div style="flex:1;height:1px;background:#e2e8f0"></div></div>';
       }
       const col=j.status==='done'?'#16a34a':j.status==='error'?'#dc2626':(j.status==='queued'?'#d97706':'#3b82f6');
-      const outs=(j.outputs||[]).map(l=>'<a href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:7px 12px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:12px;white-space:nowrap">⬇ '+l+'</a>').join('');
+      const outs=(j.outputs||[]).map(l=>'<a href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:6px 10px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap">⬇ '+l+'</a>').join('');
       const cost=j.cost!=null?('<span style="margin-left:8px;padding:2px 8px;background:#fef3c7;border-radius:6px;font-size:11px;font-weight:700">💰 '+j.cost.toFixed(4)+' €</span>'):'';
       const info=[j.sourceLang?('jezik: '+j.sourceLang):'',j.gender?('govorec: '+(j.gender==='female'?'ženska':'moški')):'',j.cloned?'klon glasu ✓':(j.cloned===false?'rezervni glas':''),j.cleaned?'očiščen ✓':'',j.enhanced?'HD ✓':'',j.hasFace===true?'obraz ✓ (lipsync)':j.hasFace===false?'ni obraza':''].filter(Boolean).join(' · ');
       const ur=dt?String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'):'';
@@ -8454,7 +8454,7 @@ async function lvPoll(){
        +'<details'+(j.status==='running'?' open':'')+' style="margin-top:4px"><summary style="cursor:pointer;font-size:11px;color:#64748b;user-select:none">log</summary>'
        +'<div style="font-family:monospace;font-size:10px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px;max-height:130px;overflow:auto">'+(j.log||[]).join('<br>')+'</div></details>'
        +'</div>'
-       +(outs?'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:45%;padding-top:2px">'+outs+'</div>':'')
+       +(outs?'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'+outs+'</div>':'')
        +'</div>';
     }
     document.getElementById('lvJobs').innerHTML = html || '<div style="color:#94a3b8;text-align:center;padding:30px">Ni opravil</div>';
