@@ -6381,6 +6381,29 @@ async function lvHasFace(video, work, job) {
     } catch (e) { lvLog(job, 'zaznava obraza ni uspela -> brez lipsynca'); return { face: false, gender: null }; }
 }
 
+// ── 5a2) Wav2Lip lipsync (CPU) — tece samo, ce je namescen in je obraz v kadru ──
+const W2L_PY = '/home/ec2-user/wav2lip/venv/bin/python';
+const W2L_DIR = '/home/ec2-user/wav2lip/Wav2Lip';
+function lvLipsyncReady() {
+    return fs.existsSync(W2L_PY) &&
+        fs.existsSync(path.join(W2L_DIR, 'inference.py')) &&
+        fs.existsSync(path.join(W2L_DIR, 'checkpoints', 'wav2lip_gan.pth'));
+}
+async function lvLipsync(videoIn, audioIn, outPath, job, lang) {
+    lvLog(job, `[${lang}] lipsync (Wav2Lip, CPU) — to traja nekaj minut…`);
+    const t0 = Date.now();
+    // resize_factor 2: obdelava na polovicni locljivosti (obraz se vedno oster), ~4x hitreje
+    await execPromise(
+        `cd '${lvSh(W2L_DIR)}' && OMP_NUM_THREADS=3 nice -n 10 '${lvSh(W2L_PY)}' inference.py ` +
+        `--checkpoint_path checkpoints/wav2lip_gan.pth ` +
+        `--face '${lvSh(videoIn)}' --audio '${lvSh(audioIn)}' --outfile '${lvSh(outPath)}' ` +
+        `--resize_factor 2 --wav2lip_batch_size 64 --face_det_batch_size 4 2>&1 | tail -2`,
+        { timeout: 45 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }
+    );
+    if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 50000) throw new Error('Wav2Lip ni ustvaril izhoda');
+    lvLog(job, `[${lang}] lipsync koncan ✓ (${Math.round((Date.now() - t0) / 60000)} min)`);
+}
+
 // ── 5b) spol govorca (da rezervni glas ni moski, ko govori zenska, in obratno) ──
 // Posluh: gpt-4o-audio-preview nad izsekom izvirnega zvoka. Ob napaki -> slika, nato 'male'.
 async function lvSpeakerGender(audioPath, work, job) {
@@ -6545,7 +6568,25 @@ async function lvRun(job) {
 
             // izvirni zvok gre na 0 — v izhod damo SAMO nas govor (samo 1:a je mapiran spodaj)
             lvLog(job, `[${lang}] izvirni zvok UTISAN (0%) — slisi se samo ${lang} govor`);
-            if (job.hasFace) lvLog(job, `[${lang}] obraz zaznan — Wav2Lip ni namescen na strezniku, lipsync preskocen`);
+
+            // ── LIPSYNC (Wav2Lip) — obraz v kadru + namescen ──
+            let lipVideo = null;
+            if (job.hasFace && lvLipsyncReady()) {
+                try {
+                    let lsIn = job.videoPath;
+                    if (vidPad > 0.05) {
+                        lsIn = path.join(work, `padded-${lang}.mp4`);
+                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)}" -an -c:v libx264 -preset veryfast -crf 20 '${lvSh(lsIn)}' 2>/dev/null`);
+                    }
+                    const lsOut = path.join(work, `lipsync-${lang}.mp4`);
+                    await lvLipsync(lsIn, voice, lsOut, job, lang);
+                    lipVideo = lsOut;
+                } catch (e) {
+                    lvLog(job, `[${lang}] lipsync ni uspel (${String(e.message).slice(0, 90)}) -> nadaljujem brez lipsynca`);
+                }
+            } else if (job.hasFace) {
+                lvLog(job, `[${lang}] obraz zaznan — Wav2Lip ni namescen na strezniku, lipsync preskocen`);
+            }
 
             // ── PODNAPISI IZ DEJANSKEGA GOVORA ──
             // STT nad ZE SESTAVLJENIM zvokom -> casi besed so 1:1 z govorom (ne vec iz izvirnika!).
@@ -6576,10 +6617,14 @@ async function lvRun(job) {
             const ass = path.join(work, `subs-${lang}.ass`);
             fs.writeFileSync(ass, lvAss(cues, W, H));
 
-            // en sam prehod: podaljsanje videa + podnapisi + nov zvok
+            // koncni izris: (lipsync video ze vsebuje nas zvok) ali (original + podaljsanje + nas zvok)
             const out = path.join(work, `${job.name}-${lang}.mp4`);
-            const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
-            await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest '${lvSh(out)}' 2>/dev/null`);
+            if (lipVideo) {
+                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "ass='${lvSh(ass)}'" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+            } else {
+                const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
+                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest '${lvSh(out)}' 2>/dev/null`);
+            }
             (job.outputs = job.outputs || {})[lang] = out;
             job.progress = Math.round((++job.done) / job.langs.length * 100);
             lvLog(job, `[${lang}] KONCANO ✓`);
