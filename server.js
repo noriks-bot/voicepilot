@@ -6417,6 +6417,7 @@ async function lvHasFace(video, work, job) {
 // ── 5a2) Wav2Lip lipsync (CPU) — tece samo, ce je namescen in je obraz v kadru ──
 const W2L_PY = '/home/ec2-user/wav2lip/venv/bin/python';
 const W2L_DIR = '/home/ec2-user/wav2lip/Wav2Lip';
+const LV_NOLIPSYNC = () => process.env.LIPSYNC_DISABLED === '1';  // zacasni izklop (prepocasen CPU)
 function lvLipsyncReady() {
     return fs.existsSync(W2L_PY) &&
         fs.existsSync(path.join(W2L_DIR, 'inference.py')) &&
@@ -6722,7 +6723,9 @@ async function lvRun(job) {
 
             // ── LIPSYNC (Wav2Lip) — obraz v kadru + namescen ──
             let lipVideo = null;
-            if (job.hasFace && lvLipsyncReady()) {
+            if (job.hasFace && LV_NOLIPSYNC()) {
+                lvLog(job, `[${lang}] lipsync ZACASNO IZKLOPLJEN (LIPSYNC_DISABLED=1) -> preskocim`);
+            } else if (job.hasFace && lvLipsyncReady()) {
                 try {
                     let lsIn = job.videoPath;
                     if (vidPad > 0.05) {
