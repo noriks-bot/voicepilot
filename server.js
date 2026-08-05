@@ -12,9 +12,19 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        const timestamp = Date.now();
-        const ext = path.extname(file.originalname);
-        cb(null, `video-${timestamp}${ext}`);
+        // sanitize: keep alnum, dot, dash, underscore; replace others with _
+        const orig = (file.originalname || 'video.mp4');
+        const safe = orig.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+        const ext = path.extname(safe) || '.mp4';
+        const base = path.basename(safe, ext);
+        const uploadDir = path.join(__dirname, 'uploads');
+        let candidate = safe;
+        let i = 1;
+        while (fs.existsSync(path.join(uploadDir, candidate))) {
+            candidate = `${base}-${i}${ext}`;
+            i++;
+        }
+        cb(null, candidate);
     }
 });
 const upload = multer({ 
@@ -2671,7 +2681,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // Generate all 7 country videos
 app.post('/api/localizer/generate', async (req, res) => {
     console.log('Generate request:', JSON.stringify(req.body, null, 2));
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration } = req.body;
+    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, voiceGender } = req.body;
     if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
         console.log('Generate 400: videoClean=', videoClean, 'texts=', texts);
         return res.status(400).json({ error: 'Missing data: videoClean=' + !!videoClean + ' texts=' + (texts?.length || 0) });
@@ -2717,6 +2727,7 @@ app.post('/api/localizer/generate', async (req, res) => {
         mode: mode || 'subtitles',
         voiceoverScript: voiceoverScript || null,
         videoDuration: actualVideoDuration || videoDuration || null,
+        voiceGender: (voiceGender === 'female') ? 'female' : 'male', // male=default, female=VOICE_MAP_FEMALE
         status: 'translating',
         completed: 0,
         currentLang: '',
@@ -3155,6 +3166,22 @@ const VOICE_MAP = {
     RO: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }
 };
 
+// Voice IDs for each language - FEMALE narrator voices (ElevenLabs multilingual)
+// Validated working across all target languages via the same model-fallback chain.
+const VOICE_MAP_FEMALE = {
+    SI: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', model: 'eleven_v3' },   // Slovenian (v3 supports sl)
+    HR: { voice_id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte' },                    // Croatian female
+    CZ: { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura' },                        // Czech female
+    PL: { voice_id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice' },                        // Polish female
+    GR: { voice_id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda' },                      // Greek female
+    IT: { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },                      // Italian female
+    HU: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', model: 'eleven_v3' },    // Hungarian (v3 supports hu)
+    SK: { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura' },                        // Slovak female
+    BG: { voice_id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte' },                    // Bulgarian female
+    RO: { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },                      // Romanian female
+    EN: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah' }                         // English fallback
+};
+
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
     HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
@@ -3197,6 +3224,14 @@ async function generateTTS(text, langCode, outputPath) {
         const durResult = await execPromise(`${FFMPEG} -i "${outputPath}" 2>&1 | grep Duration | awk '{print $2}' | tr -d ','`);
         const parts = durResult.stdout.trim().split(':');
         const duration = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+        // === VO-CACHE plast B: shrani v cache (samo validen audio z uspesno izmerjeno dolzino) ===
+        if (!VO_CACHE_DISABLED && buffer.length > 1024 && isFinite(duration) && duration > 0) {
+            try {
+                fs.copyFileSync(outputPath, _cacheMp3);
+                _ttsCacheIndex[_cacheKey] = { d: duration, c: text.length, t: Date.now() };
+                _persistTtsIndex();
+            } catch (ce) { console.warn('[TTS-CACHE] write failed (ignored):', ce.message); }
+        }
         return { path: outputPath, duration };
     } catch (e) {
         return { path: outputPath, duration: 3 }; // fallback 3s
@@ -3429,6 +3464,10 @@ ${lines.map((l, i) => `${i+1}. ${l}`).join('\n')}`;
 
 // Generate voiceover video for all countries
 async function generateVoiceoverCountries(job, videoPath) {
+    // Original-audio volume: default 0.05 (lowered under VO), or 0 when user chose "Utišaj zvok"
+    const _origVol = job.muteOriginal ? '0' : '0.05';
+    // Voice gender: 'male' (default) or 'female' — selects VOICE_MAP vs VOICE_MAP_FEMALE
+    const _voiceGender = (job.voiceGender === 'female') ? 'female' : 'male';
     const LANGUAGES = job.countries || ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
     const LANG_NAMES = {
         SI: 'Slovenian', HR: 'Croatian', CZ: 'Czech', PL: 'Polish', BG: 'Bulgarian', RO: 'Romanian',
@@ -3511,7 +3550,10 @@ Return ONLY valid JSON array:
         console.log(`[${job.id}] [VO] Generating ${lang}...`);
         
         // NATIVE SPEAKER PROOFREAD for voiceover
-        try {
+        // VO-CACHE plast A: cached prevodi so ze proofread -> skip (identicen output kot prvic)
+        if (!VO_CACHE_DISABLED && _cachedLangs.has(lang)) {
+            console.log(`[${job.id}] [VO-CACHE] proofread SKIP ${lang} (cached translation)`);
+        } else try {
             const voTextsForLang = job.voiceoverScript.map((s, idx) => translations[idx]?.[lang] || s.text);
             const vpResponse = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
@@ -3529,6 +3571,19 @@ Return ONLY valid JSON array:
                 console.log("[" + job.id + "] [VO] Proofread " + lang + ": " + vFixed.length + " texts checked");
             }
         } catch(vpe) { console.error("[" + job.id + "] [VO] Proofread error " + lang + ":", vpe.message); }
+        // VO-CACHE plast A: shrani FINALNE (post-proofread) prevode — samo ce je svez prevod uspel.
+        // EN fallback (translate failed) se NIKOLI ne cache-a, da napaka ne zamrzne.
+        if (!VO_CACHE_DISABLED && _translateOkLangs.has(lang) && !_cachedLangs.has(lang)) {
+            try {
+                textsToTranslate.forEach((src, i) => {
+                    const fin = translations[i]?.[lang];
+                    if (fin && fin.trim() && fin !== src) {
+                        _translationCache[_transCacheKey(lang, _charBudgetFor(lang, segDurations[i]), src)] = { text: fin, t: Date.now() };
+                    }
+                });
+                _persistTranslationCache();
+            } catch (ce) { console.warn('[VO-CACHE] translation write failed (ignored):', ce.message); }
+        }
         // Get translated texts for this language
         const langTexts = job.voiceoverScript.map((s, i) => {
             const translated = translations[i]?.[lang] || s.text;
@@ -4029,6 +4084,47 @@ app.get('/api/localizer/generated/:id/zip', (req, res) => {
         archive.finalize();
     } catch (e) {
         console.error('[generated/zip]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Bulk ZIP: prenesi vec jobov naenkrat v en ZIP (max 10). Body: { ids: [jobId, ...] }
+app.post('/api/localizer/bulk-zip', express.json(), (req, res) => {
+    try {
+        let ids = (req.body && req.body.ids) || [];
+        if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+        // sanitize + dedup + limit 10
+        ids = [...new Set(ids.map(x => String(x).trim()).filter(Boolean))].slice(0, 10);
+        if (ids.length === 0) return res.status(400).json({ error: 'No job ids provided' });
+
+        const baseDir = path.join(__dirname, 'uploads', 'generated');
+        const jobs = [];
+        for (const id of ids) {
+            // path traversal guard
+            if (id.includes('/') || id.includes('..')) continue;
+            const dir = path.join(baseDir, id);
+            if (!dir.startsWith(baseDir)) continue;
+            if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
+            const files = fs.readdirSync(dir).filter(f => /\.(mp4|mov|webm|mkv|mp3|wav|srt|ass)$/i.test(f));
+            if (files.length) jobs.push({ id, dir, files });
+        }
+        if (jobs.length === 0) return res.status(404).json({ error: 'No downloadable files found for selected jobs' });
+
+        const stamp = new Date().toISOString().slice(0,10);
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', 'attachment; filename="voicepilot_' + jobs.length + 'jobs_' + stamp + '.zip"');
+        const archive = archiver('zip', { zlib: { level: 5 } });
+        archive.on('error', err => { console.error('[bulk-zip]', err); try { res.status(500).end(); } catch(_){} });
+        archive.pipe(res);
+        for (const j of jobs) {
+            for (const f of j.files) {
+                // vsak job v svojo podmapo, da se imena ne prepletajo
+                archive.file(path.join(j.dir, f), { name: j.id + '/' + f });
+            }
+        }
+        archive.finalize();
+    } catch (e) {
+        console.error('[bulk-zip]', e);
         res.status(500).json({ error: e.message });
     }
 });

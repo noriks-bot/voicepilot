@@ -18,3 +18,5 @@ creatives.db-wal
 # Backups
 *.bak
 *.bak.*
+data/tts-cache/
+data/translation-cache.json

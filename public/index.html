@@ -2387,6 +2387,7 @@
                         <p>Generirani videoposnetki - klikni za prenos.</p>
                     </div>
                     <div class="page-actions">
+                        <button id="btn-bulk-dl" onclick="window.bulkDownloadSelected()" disabled style="font-weight:600; padding:8px 16px; background:#0A59D2; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin-right:8px; opacity:0.5;">↓ Prenesi izbrane (<span id="bulk-dl-count">0</span>)</button>
                         <button class="btn-refresh" onclick="loadDownloadsPage()" id="btn-refresh-downloads">Osvezi</button>
                     </div>
                 </div>
@@ -2395,6 +2396,7 @@
                     <table class="activity-table downloads-table">
                         <thead>
                             <tr>
+                                <th style="width:34px; text-align:center;"><input type="checkbox" id="dl-select-all" onclick="window.toggleSelectAllDownloads(this)" title="Izberi vse (do 10)" style="cursor:pointer; width:16px; height:16px;"></th>
                                 <th>Ime</th>
                                 <th>Jeziki</th>
                                 <th>Status</th>
@@ -7587,6 +7589,10 @@ Style: Authentic, confident, persuasive — a narrative that makes the viewer fe
                         '<td style="text-align:right;">' + action + '</td>' +
                         '</tr>';
                 }).join('');
+                // reset bulk-download izbor po vsakem renderju (checkboxi so novi/prazni)
+                const _selAll = document.getElementById('dl-select-all');
+                if (_selAll) _selAll.checked = false;
+                if (window.updateBulkDlUI) window.updateBulkDlUI();
             } catch (e) {
                 tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Napaka: ' + e.message + '</td></tr>';
             } finally {
