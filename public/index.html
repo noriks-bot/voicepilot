@@ -8349,6 +8349,10 @@
         <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="EN"> 🇬🇧 EN</label>
       </div>
 
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;font-weight:600;cursor:pointer">
+        <input type="checkbox" id="lvLipsync"> 💋 Lipsync (sinhronizacija ust — POCASNO: ~15 min na minuto videa)
+      </label>
+
       <button onclick="lvStart()" id="lvBtn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🚀 Generiraj</button>
       <div id="lvMsg" style="margin-top:10px;font-size:12px"></div>
     </div>
@@ -8394,6 +8398,7 @@ async function lvStart(){
     const fd=new FormData();
     fd.append('video',files[i]); fd.append('langs',langs.join(','));
     fd.append('product',document.getElementById('lvProduct').value.trim()||'NORIKS');
+    fd.append('lipsync',document.getElementById('lvLipsync').checked?'1':'0');
     try{
       const r=await fetch('/api/lipvoice/upload',{method:'POST',body:fd});
       const d=await r.json();

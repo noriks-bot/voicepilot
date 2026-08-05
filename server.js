@@ -6723,9 +6723,9 @@ async function lvRun(job) {
 
             // ── LIPSYNC (Wav2Lip) — obraz v kadru + namescen ──
             let lipVideo = null;
-            if (job.hasFace && LV_NOLIPSYNC()) {
-                lvLog(job, `[${lang}] lipsync ZACASNO IZKLOPLJEN (LIPSYNC_DISABLED=1) -> preskocim`);
-            } else if (job.hasFace && lvLipsyncReady()) {
+            if (job.hasFace && (!job.lipsync || LV_NOLIPSYNC())) {
+                lvLog(job, `[${lang}] obraz v kadru, a lipsync ${LV_NOLIPSYNC() ? 'globalno izklopljen (LIPSYNC_DISABLED=1)' : 'ni izbran (checkbox)'} -> preskocim`);
+            } else if (job.hasFace && job.lipsync && lvLipsyncReady()) {
                 try {
                     let lsIn = job.videoPath;
                     if (vidPad > 0.05) {
@@ -6840,6 +6840,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
     const job = { id, name: (path.parse(req.file.originalname).name.replace(/[^\w-]/g, '_') || 'video'),
         videoPath: req.file.path, srcPath: req.file.path, langs, product: (req.body.product||"NORIKS").trim(),
         clean: String(req.body.clean || '1') !== '0',
+        lipsync: String(req.body.lipsync || '0') === '1',
         status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
