@@ -1,4 +1,5 @@
-require("dotenv").config();
+// vedno beri .env iz mape aplikacije (pm2 cwd je /home/ec2-user!) in PREPISI podedovane stare vrednosti
+require("dotenv").config({ path: __dirname + "/.env", override: true });
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
