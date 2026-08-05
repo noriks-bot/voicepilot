@@ -1515,7 +1515,6 @@
             border-radius: 14px;
             overflow: auto;
             max-width: 100%;
-            max-height: calc(100vh - 220px);
         }
         .creatives-matrix {
             width: 100%;
@@ -1535,8 +1534,7 @@
             text-transform: uppercase;
             letter-spacing: 0.06em;
             border-bottom: 2px solid #E0DFDD;
-            z-index: 5;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            z-index: 2;
         }
         .creatives-matrix thead th.sticky-col,
         .creatives-matrix tbody td.sticky-col {
@@ -1548,20 +1546,7 @@
             border-right: 1px solid #E5E5E5;
             min-width: 110px;
         }
-        .creatives-matrix thead th.sticky-col { z-index: 6; }
         .creatives-matrix thead th.country-col { min-width: 52px; }
-        .creatives-matrix th.date-col { min-width: 90px; text-align: center !important; }
-        .creatives-matrix td.date-cell { text-align: center; font-size: 12px; color: #4B5563; white-space: nowrap; padding: 8px 10px !important; font-variant-numeric: tabular-nums; }
-        .creatives-matrix th.wt-col, .creatives-matrix td.wt-cell { background: #FFF7ED; border-left: 2px solid #FED7AA; border-right: 2px solid #FED7AA; }
-        .creatives-matrix td.wt-dur .wt-mark { font-size: 11px; font-weight: 700; color: #9A3412; }
-        .creatives-matrix th.author-col, .creatives-matrix td.author-cell { min-width: 90px; text-align: center; padding: 8px 6px; }
-        .author-pill { display: inline-block; padding: 2px 7px; margin: 1px 1px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; }
-        .author-pill.author-tk { background: #DBEAFE; color: #1E40AF; }
-        .author-pill.author-fa { background: #FCE7F3; color: #9D174D; }
-        .author-pill.author-gp { background: #D1FAE5; color: #065F46; }
-        .author-pill.author-wr { background: #FEF3C7; color: #92400E; }
-        .author-pill.author-srb { background: #E0E7FF; color: #3730A3; }
-        .author-empty { color: #9CA3AF; font-weight: 500; }
         .creatives-matrix thead th.count-col { min-width: 120px; }
         .creatives-matrix tbody td {
             padding: 10px 6px;
@@ -1810,7 +1795,6 @@
             border-bottom: 1px solid #F0F0F0;
             vertical-align: middle;
         }
-        .creative-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; background: #DBEAFE; color: #1E40AF; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; vertical-align: middle; }
         .activity-table tbody tr:last-child td { border-bottom: none; }
         .activity-table tbody tr:hover td { background: #FAF9F7; }
         .activity-job {
@@ -2130,7 +2114,7 @@
     <!-- Downloads Panel (Slide-in) -->
     <div id="downloads-panel" style="position:fixed; top:0; right:-450px; width:450px; height:100vh; background:#1a1a1a; border-left:1px solid #333; z-index:1000; transition:right 0.3s; overflow-y:auto; padding:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <h3 style="margin:0;">📥 Jobs</h3>
+            <h3 style="margin:0;">📥 Downloads</h3>
             <button onclick="toggleDownloads()" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">✕</button>
         </div>
         
@@ -2172,6 +2156,7 @@
             </a>
             <a class="nav-item" data-page="srtmaker" onclick="switchPage('srtmaker')">
                 <span class="icon">📝</span><span class="label">SRT Maker</span>
+                <span class="badge">soon</span>
             </a>
             <a class="nav-item active" data-page="voiceover" onclick="switchPage('voiceover')">
                 <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
@@ -2183,7 +2168,7 @@
             <div class="sidebar-section-label">Account</div>
             <a class="nav-item" data-page="downloads" onclick="switchPage('downloads')">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
-                <span class="nav-label">Jobs</span>
+                <span class="nav-label">Downloads</span>
             </a>
             <a class="nav-item" data-page="settings" onclick="switchPage('settings')">
                 <span class="icon">⚙️</span><span class="label">Settings</span>
@@ -2210,6 +2195,13 @@
                         <p>Pregled aktivnosti in hitri dostop.</p>
                     </div>
                 </div>
+                <div class="stat-grid">
+                    <div class="stat-card"><div class="label">Aktivni job-i</div><div class="value" id="stat-active">0</div><div class="trend">v teku</div></div>
+                    <div class="stat-card"><div class="label">Končani danes</div><div class="value" id="stat-done">0</div><div class="trend">↑ produktivno</div></div>
+                    <div class="stat-card"><div class="label">Skupaj kreativ</div><div class="value" id="stat-total">—</div><div class="trend">arhiv</div></div>
+                    <div class="stat-card"><div class="label">Status API</div><div class="value" style="font-size:18px; color:var(--success);">● Online</div><div class="trend">ElevenLabs + OpenAI</div></div>
+                </div>
+
                 <div class="section-heading">Hitri start</div>
                 <div class="quick-grid">
                     <a class="quick-card quick-primary" onclick="switchPage('voiceover')">
@@ -2217,6 +2209,14 @@
                         <div class="quick-body">
                             <div class="quick-title">Nov voiceover</div>
                             <div class="quick-desc">Naloži video + tekst, generiraj AI govor in podnapise.</div>
+                        </div>
+                        <div class="quick-arrow">&rarr;</div>
+                    </a>
+                    <a class="quick-card" onclick="switchPage('localize')">
+                        <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg></div>
+                        <div class="quick-body">
+                            <div class="quick-title">Lokaliziraj video</div>
+                            <div class="quick-desc">Prevedi + dub video v vse jezike trgov.</div>
                         </div>
                         <div class="quick-arrow">&rarr;</div>
                     </a>
@@ -2231,7 +2231,7 @@
                     <a class="quick-card" href="javascript:void(0)" onclick="switchPage('downloads')">
                         <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
                         <div class="quick-body">
-                            <div class="quick-title">Jobs</div>
+                            <div class="quick-title">Downloads</div>
                             <div class="quick-desc">Knjižnica izhodov: video, srt, mp3.</div>
                         </div>
                         <div class="quick-arrow">&rarr;</div>
@@ -2277,267 +2277,19 @@
                 </div>
             </section>
 
-            <!-- SRT MAKER page -->
+            <!-- SRT MAKER page (placeholder) -->
             <section class="page-content" id="page-srtmaker" style="display:none;">
                 <div class="page-header">
                     <div class="page-title">
-                        <h1>📝 SRT Maker</h1>
-                        <p>Iz teksta (ena vrstica = en kader) zgeneriraj časovno SRT skripto.</p>
+                        <h1>SRT Maker</h1>
+                        <p>Generiraj .srt subtitle datoteke iz tekstov.</p>
                     </div>
                 </div>
-
-                <!-- Step 1: Script input -->
-                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
-                    <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">1</span> Skript</h4>
-                    <p style="color:#78716c; font-size:13px; margin:0 0 14px 34px;">Vsaka vrstica = en kader / segment.</p>
-                    <textarea id="srt-input" style="width:100%; min-height:240px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:14px; resize:vertical; line-height:1.7; font-family:'JetBrains Mono', monospace; box-sizing:border-box;" placeholder="Stop buying t-shirts that make you look worse.&#10;Every time you pull your shirt down... that's a sign.&#10;NORIKS — the t-shirt that fixes everything.&#10;Slim at the top. Loose at the bottom.&#10;Hides the belly. Highlights the chest.&#10;Join 100,000+ happy customers.&#10;4 + 2 FREE — this week only. 🔥"></textarea>
+                <div class="card" style="text-align:center; padding:60px 24px;">
+                    <div style="font-size:48px; margin-bottom:12px;">🚧</div>
+                    <div style="font-size:18px; font-weight:600; margin-bottom:6px;">V pripravi</div>
+                    <div style="color:var(--text-dim);">SRT generator bo na voljo kmalu.</div>
                 </div>
-
-                <!-- Step 2: Duration mode -->
-                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
-                    <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Trajanje</h4>
-                    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-left:34px;">
-                        <label id="srt-mode-fixed-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F0F6FF; border:2px solid #0A59D2; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
-                            <input type="radio" name="srt-mode" value="fixed" checked onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
-                            <div>
-                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127919; Fiksno trajanje</div>
-                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Vpi&scaron;i sekunde ali izberi z drsnikom</div>
-                            </div>
-                        </label>
-                        <label id="srt-mode-auto-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
-                            <input type="radio" name="srt-mode" value="auto" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
-                            <div>
-                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#9889; Avtomatsko</div>
-                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Predlagamo trajanje glede na tekst</div>
-                            </div>
-                        </label>
-                        <label id="srt-mode-creative-lbl" style="display:flex; align-items:center; gap:10px; padding:14px 16px; background:#fff; border:2px solid #E7E5E4; border-radius:10px; cursor:pointer; transition:all 0.15s ease;">
-                            <input type="radio" name="srt-mode" value="from-creative" onchange="window._srtUpdMode()" style="accent-color:#0A59D2;">
-                            <div>
-                                <div style="font-weight:600; color:#0F172A; font-size:14px;">&#127916; Iz creative</div>
-                                <div style="color:#78716c; font-size:12px; margin-top:2px;">Preberi dol&zcaron;ino izbranega videa</div>
-                            </div>
-                        </label>
-                    </div>
-                    <div id="srt-fixed-controls" style="display:block; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
-                        <div style="display:flex; align-items:center; gap:14px;">
-                            <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Trajanje:</span>
-                            <input type="range" id="srt-duration" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'range\');" style="flex:1; accent-color:#0A59D2;">
-                            <input type="number" id="srt-duration-num" min="10" max="120" step="1" value="30" oninput="window._srtSyncDur(\'num\');" style="width:80px; padding:8px 10px; border:1px solid #E7E5E4; border-radius:8px; font-size:14px; font-weight:700; color:#0A59D2; text-align:center;">
-                            <span style="color:#57534e; font-size:13px; font-weight:600;">s</span>
-                        </div>
-                        <div style="color:#78716c; font-size:11px; margin-top:8px;">10&ndash;120 sekund. AI bo (po potrebi) skraj&scaron;al/zdru&zcaron;il vrstice.</div>
-                    </div>
-                    <div id="srt-creative-controls" style="display:none; margin:16px 0 0 34px; padding:16px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px;">
-                        <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
-                            <span style="color:#57534e; font-size:13px; font-weight:600; min-width:90px;">Creative:</span>
-                            <input type="text" id="srt-creative-search" placeholder="Vpi&scaron;i ID ali ime... (npr. ID210FA)" oninput="window._srtFilterCreatives()" style="flex:1; padding:10px 12px; border:1px solid #E7E5E4; border-radius:8px; font-size:13px; font-family:JetBrains Mono,monospace;">
-                        </div>
-                        <div id="srt-creative-list" style="max-height:200px; overflow-y:auto; border:1px solid #E7E5E4; border-radius:8px; background:#fff; display:none;"></div>
-                        <div id="srt-creative-selected" style="display:none; margin-top:10px; padding:10px 12px; background:#F0F6FF; border:1px solid #0A59D2; border-radius:8px; font-size:13px;">
-                            <span style="color:#57534e;">Izbrano: </span>
-                            <span id="srt-creative-name" style="font-weight:600; color:#0F172A; font-family:JetBrains Mono,monospace;"></span>
-                            <span id="srt-creative-dur" style="color:#0A59D2; font-weight:700; margin-left:8px;"></span>
-                            <button onclick="window._srtClearCreative()" style="float:right; background:none; border:none; color:#B91C1C; cursor:pointer; font-size:12px;">&times;</button>
-                        </div>
-                        <div style="color:#78716c; font-size:11px; margin-top:8px;">Preberemo trajanje izbranega videa in ga uporabimo kot fiksno.</div>
-                    </div>
-                </div>
-
-                <!-- Step 3: Generate -->
-                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
-                    <h4 style="margin:0 0 14px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">3</span> Generiraj SRT</h4>
-                    <button id="btn-srt-generate" onclick="window._srtGenerate()" style="width:100%; padding:14px; background:#0A59D2; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(10,89,210,0.2);" onmouseover="this.style.background='#0847A8';" onmouseout="this.style.background='#0A59D2';">✨ Generiraj SRT</button>
-                    <div id="srt-status" style="margin-top:12px; font-size:13px; color:#78716c; display:none;"></div>
-                </div>
-
-                <!-- Step 4: Output (2 columns: full + split) -->
-                <div id="srt-output-card" style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04); display:none;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                        <h4 style="margin:0; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#10b981; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">✓</span> SRT izhod <span id="srt-meta" style="color:#78716c; font-size:12px; font-weight:400; margin-left:8px;"></span></h4>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-                        <div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                <label style="font-size:12px; font-weight:600; color:#0F172A;">📜 Cel SRT (1 segment) <span style="color:#78716c; font-weight:400;">– za govor (TTS)</span></label>
-                                <div style="display:flex; gap:6px;">
-                                    <button onclick="window._srtCopy('full')" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600;">📋</button>
-                                    <button onclick="window._srtDownload('full')" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600;">⬇️</button>
-                                </div>
-                            </div>
-                            <textarea id="srt-output" readonly style="width:100%; min-height:280px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:12px; resize:vertical; line-height:1.6; font-family:\'JetBrains Mono\', monospace; box-sizing:border-box;"></textarea>
-                        </div>
-                        <div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                <label style="font-size:12px; font-weight:600; color:#0F172A;">✂️ Razbit SRT (~3s kadri) <span style="color:#78716c; font-weight:400;">– za podnapise</span></label>
-                                <div style="display:flex; gap:6px;">
-                                    <button onclick="window._srtCopy(\'split\')" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600;">📋</button>
-                                    <button onclick="window._srtDownload(\'split\')" style="background:#fff; border:1px solid #E7E5E4; color:#0A59D2; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600;">⬇️</button>
-                                </div>
-                            </div>
-                            <textarea id="srt-output-split" readonly style="width:100%; min-height:280px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:12px; resize:vertical; line-height:1.6; font-family:\'JetBrains Mono\', monospace; box-sizing:border-box;"></textarea>
-                        </div>
-                    </div>
-                </div>
-
-                <script>
-                window._srtSyncDur = function(src) {
-                    const range = document.getElementById('srt-duration');
-                    const num = document.getElementById('srt-duration-num');
-                    if (src === 'range') { num.value = Math.max(10, Math.min(120, Number(range.value) || 30)); }
-                    else { range.value = Math.max(10, Math.min(120, Number(num.value) || 30)); }
-                };
-                window._srtCreativesCache = null;
-                window._srtSelectedCreative = null;
-                window._srtLoadCreatives = async function() {
-                    if (window._srtCreativesCache) return;
-                    try {
-                        const r = await fetch('/api/creatives');
-                        const d = await r.json();
-                        const items = d.creatives || d.items || [];
-                        window._srtCreativesCache = items;
-                    } catch (e) { window._srtCreativesCache = []; }
-                };
-                window._srtFilterCreatives = function() {
-                    const q = (document.getElementById('srt-creative-search').value || '').toLowerCase().trim();
-                    const list = document.getElementById('srt-creative-list');
-                    if (!q || q.length < 2) { list.style.display = 'none'; return; }
-                    const items = (window._srtCreativesCache || []).filter(c => (c.id || '').toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q)).slice(0, 30);
-                    if (items.length === 0) { list.innerHTML = '<div style="padding:12px; color:#9ca3af; font-size:13px;">Ni zadetkov za "' + q + '".</div>'; list.style.display = 'block'; return; }
-                    list.innerHTML = items.map(c => '<div onclick="window._srtPickCreative(\'' + (c.id||'') + '\')" style="padding:10px 12px; border-bottom:1px solid #f3f4f6; cursor:pointer; font-size:13px;" onmouseover="this.style.background=\'#F0F6FF\'" onmouseout="this.style.background=\'#fff\'"><span style="font-family:JetBrains Mono,monospace; font-weight:600; color:#0A59D2;">' + (c.id || '?') + '</span><span style="color:#57534e; margin-left:8px;">' + ((c.productType || c.name || '').substring(0, 40)) + '</span><span style="color:#9ca3af; margin-left:8px; font-size:11px;">' + (c.videoCount || 0) + ' video</span></div>').join('');
-                    list.style.display = 'block';
-                };
-                window._srtPickCreative = async function(id) {
-                    document.getElementById('srt-creative-list').style.display = 'none';
-                    document.getElementById('srt-creative-search').value = id;
-                    document.getElementById('srt-creative-name').textContent = 'Berem dol\u017eino...';
-                    document.getElementById('srt-creative-dur').textContent = '';
-                    document.getElementById('srt-creative-selected').style.display = 'block';
-                    try {
-                        const r = await fetch('/api/srt/creative-duration?id=' + encodeURIComponent(id));
-                        const d = await r.json();
-                        if (!r.ok) throw new Error(d.error || 'Napaka');
-                        window._srtSelectedCreative = { id, duration: d.duration, fileName: d.fileName };
-                        document.getElementById('srt-creative-name').textContent = d.fileName || id;
-                        document.getElementById('srt-creative-dur').textContent = '\u2192 ' + d.duration.toFixed(1) + 's';
-                    } catch (e) {
-                        document.getElementById('srt-creative-name').textContent = 'Napaka: ' + e.message;
-                        document.getElementById('srt-creative-dur').textContent = '';
-                        window._srtSelectedCreative = null;
-                    }
-                };
-                window._srtClearCreative = function() {
-                    window._srtSelectedCreative = null;
-                    document.getElementById('srt-creative-selected').style.display = 'none';
-                    document.getElementById('srt-creative-search').value = '';
-                    document.getElementById('srt-creative-list').style.display = 'none';
-                };
-                window._srtUpdMode = function() {
-                    const mode = document.querySelector('input[name="srt-mode"]:checked').value;
-                    const auto = document.getElementById('srt-mode-auto-lbl');
-                    const fixed = document.getElementById('srt-mode-fixed-lbl');
-                    const creat = document.getElementById('srt-mode-creative-lbl');
-                    const ctrlsFixed = document.getElementById('srt-fixed-controls');
-                    const ctrlsCreat = document.getElementById('srt-creative-controls');
-                    [auto, fixed, creat].forEach(el => { if (el) { el.style.background = '#fff'; el.style.borderColor = '#E7E5E4'; }});
-                    if (ctrlsFixed) ctrlsFixed.style.display = 'none';
-                    if (ctrlsCreat) ctrlsCreat.style.display = 'none';
-                    if (mode === 'auto') {
-                        if (auto) { auto.style.background = '#F0F6FF'; auto.style.borderColor = '#0A59D2'; }
-                    } else if (mode === 'fixed') {
-                        if (fixed) { fixed.style.background = '#F0F6FF'; fixed.style.borderColor = '#0A59D2'; }
-                        if (ctrlsFixed) ctrlsFixed.style.display = 'block';
-                    } else if (mode === 'from-creative') {
-                        if (creat) { creat.style.background = '#F0F6FF'; creat.style.borderColor = '#0A59D2'; }
-                        if (ctrlsCreat) ctrlsCreat.style.display = 'block';
-                        window._srtLoadCreatives();
-                    }
-                };
-                window._srtGenerate = async function() {
-                    const text = document.getElementById('srt-input').value.trim();
-                    const mode = document.querySelector('input[name="srt-mode"]:checked').value;
-                    let duration = Number((document.getElementById('srt-duration-num') || document.getElementById('srt-duration')).value);
-                    let creativeId = null;
-                    if (mode === 'from-creative') {
-                        if (!window._srtSelectedCreative) {
-                            const s = document.getElementById('srt-status');
-                            s.style.display = 'block'; s.style.color = '#B91C1C';
-                            s.textContent = '\u26a0\ufe0f Izberi kreativo iz seznama.';
-                            return;
-                        }
-                        duration = window._srtSelectedCreative.duration;
-                        creativeId = window._srtSelectedCreative.id;
-                    }
-                    const btn = document.getElementById('btn-srt-generate');
-                    const status = document.getElementById('srt-status');
-                    const outCard = document.getElementById('srt-output-card');
-                    const out = document.getElementById('srt-output');
-                    const meta = document.getElementById('srt-meta');
-                    if (!text) {
-                        status.style.display = 'block';
-                        status.style.color = '#B91C1C';
-                        status.textContent = '⚠️ Vpiši vsaj eno vrstico.';
-                        return;
-                    }
-                    btn.disabled = true;
-                    btn.textContent = mode === 'fixed' ? '⏳ AI razporeja čas...' : '⏳ Računam timing...';
-                    status.style.display = 'block';
-                    status.style.color = '#78716c';
-                    status.textContent = 'Generiram SRT...';
-                    try {
-                        const r = await fetch('/api/srt/generate', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text, mode, duration, creativeId })
-                        });
-                        const data = await r.json();
-                        if (!r.ok) throw new Error(data.error || 'Napaka');
-                        out.value = data.srt;
-                        const outSplit = document.getElementById('srt-output-split');
-                        if (outSplit) outSplit.value = data.srtSplit || '';
-                        const segCount = (data.segments || []).length;
-                        const splitCount = (data.segmentsSplit || []).length;
-                        meta.textContent = `· ${segCount} segment(ov) · ${splitCount} chunkov · ${data.videoDuration}s · ${data.mode === 'fixed' ? 'fiksno' : 'avto'}`;
-                        outCard.style.display = 'block';
-                        outCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        status.style.color = '#15803d';
-                        status.textContent = `✓ Generirano: ${segCount} segmentov, skupaj ${data.videoDuration}s`;
-                    } catch (e) {
-                        status.style.color = '#B91C1C';
-                        status.textContent = '✗ Napaka: ' + e.message;
-                    } finally {
-                        btn.disabled = false;
-                        btn.textContent = '✨ Generiraj SRT';
-                    }
-                };
-                window._srtCopy = function(which) {
-                    const id = (which === 'split') ? 'srt-output-split' : 'srt-output';
-                    const out = document.getElementById(id);
-                    if (!out) return;
-                    out.select();
-                    document.execCommand('copy');
-                    const status = document.getElementById('srt-status');
-                    status.style.display = 'block';
-                    status.style.color = '#15803d';
-                    status.textContent = '📋 Kopirano: ' + (which === 'split' ? 'razbit SRT' : 'cel SRT');
-                    setTimeout(() => { if (status.textContent.startsWith('📋')) status.style.display = 'none'; }, 2000);
-                };
-                window._srtDownload = function(which) {
-                    const id = (which === 'split') ? 'srt-output-split' : 'srt-output';
-                    const suffix = (which === 'split') ? '-split' : '-full';
-                    const srt = document.getElementById(id)?.value || '';
-                    if (!srt) return;
-                    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'subtitle' + suffix + '-' + Date.now() + '.srt';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                };
-                </script>
             </section>
 
             <!-- VOICEOVER page wraps existing .container -->
@@ -2548,7 +2300,7 @@
                         <p>Podnapisi + AI govor iz tekstov knjižnice.</p>
                     </div>
                     <div class="page-actions">
-                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Jobs</a>
+                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
                     </div>
                 </div>
                 <!-- INSERT_CONTAINER_HERE -->
@@ -2563,7 +2315,7 @@
                         <p>Naloži video pare (text + clean), zaznaj teksti, lokaliziraj v vse trge.</p>
                     </div>
                     <div class="page-actions">
-                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Jobs</a>
+                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Downloads</a>
                     </div>
                 </div>
                 <!-- Actual UI lives in #mode-localize inside .container, made visible via body.page-localize CSS -->
@@ -2603,11 +2355,9 @@
                 <table class="creatives-matrix">
                     <thead>
                         <tr>
-                            <th class="date-col">Datum</th>
                             <th class="sticky-col">ID</th>
                             <th class="prod-col">Produkt</th>
-                            <th class="author-col" title="Avtor kreative">Avtor</th>
-                            <th class="country-col wt-col" data-cc="WT" title="Without Text variant na voljo">WT</th>
+                            <th class="country-col" data-cc="EN">EN</th>
                             <th class="country-col" data-cc="SI">SI</th>
                             <th class="country-col" data-cc="HR">HR</th>
                             <th class="country-col" data-cc="SK">SK</th>
@@ -2618,6 +2368,8 @@
                             <th class="country-col" data-cc="GR">GR</th>
                             <th class="country-col" data-cc="IT">IT</th>
                             <th class="country-col" data-cc="DE">DE</th>
+                            <th class="country-col" data-cc="BG">BG</th>
+                            <th class="country-col" data-cc="AT">AT</th>
                             <th class="count-col">Pokritost</th>
                         </tr>
                     </thead>
@@ -2632,11 +2384,10 @@
             <section class="page-content" id="page-downloads" style="display:none;">
                 <div class="page-header">
                     <div class="page-title">
-                        <h1>Jobs</h1>
+                        <h1>Downloads</h1>
                         <p>Generirani videoposnetki - klikni za prenos.</p>
                     </div>
                     <div class="page-actions">
-                        <button id="btn-bulk-dl" onclick="window.bulkDownloadSelected()" disabled style="font-weight:600; padding:8px 16px; background:#0A59D2; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin-right:8px; opacity:0.5;">↓ Prenesi izbrane (<span id="bulk-dl-count">0</span>)</button>
                         <button class="btn-refresh" onclick="loadDownloadsPage()" id="btn-refresh-downloads">Osvezi</button>
                     </div>
                 </div>
@@ -2645,9 +2396,7 @@
                     <table class="activity-table downloads-table">
                         <thead>
                             <tr>
-                                <th style="width:34px; text-align:center;"><input type="checkbox" id="dl-select-all" onclick="window.toggleSelectAllDownloads(this)" title="Izberi vse (do 10)" style="cursor:pointer; width:16px; height:16px;"></th>
                                 <th>Ime</th>
-                                <th>Tip</th>
                                 <th>Jeziki</th>
                                 <th>Status</th>
                                 <th>Cas</th>
@@ -2655,7 +2404,7 @@
                             </tr>
                         </thead>
                         <tbody id="downloads-tbody">
-                            <tr class="empty-row"><td colspan="7"><span class="spinner"></span>Nalagam ...</td></tr>
+                            <tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2699,7 +2448,7 @@
                     <span id="user-name">User</span>
                     <button class="logout-btn" onclick="logout()">Odjava</button>
                 </div>
-                <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background: #10b981; text-decoration: none; display: inline-block;" onclick="if(typeof savePairMetadata==='function')savePairMetadata();if(typeof saveVideoPairsToStorage==='function')saveVideoPairsToStorage();">📥 Jobs</a>
+                <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background: #10b981; text-decoration: none; display: inline-block;" onclick="if(typeof savePairMetadata==='function')savePairMetadata();if(typeof saveVideoPairsToStorage==='function')saveVideoPairsToStorage();">📥 Downloads</a>
             </div>
         </header>
         
@@ -3013,448 +2762,386 @@
         <div class="mode-content active" id="mode-voiceover">
             <div style="padding:0;">
                 
-                <!-- Hidden defaults (kept for backend compatibility) -->
+                <!-- Step 1: Upload video -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h4 style="margin:0; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">1</span> Naloži video</h4>
+                        <button onclick="window._voReset()" style="background:#fff; border:1px solid #E7E5E4; color:#57534e; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500; transition:all 0.15s ease;" onmouseover="this.style.background='#FEE2E2';this.style.borderColor='#FECACA';this.style.color='#B91C1C';" onmouseout="this.style.background='#fff';this.style.borderColor='#E7E5E4';this.style.color='#57534e';">Počisti vse</button>
+                    </div>
+                    <div style="display:flex; gap:16px; align-items:center;">
+                        <div style="flex:1; padding:32px 20px; border:2px dashed #D6D3D1; border-radius:10px; text-align:center; cursor:pointer; color:#78716c; background:#FAFAF9; transition:all 0.15s ease;" id="vo-upload-zone" onmouseover="this.style.borderColor='#0A59D2';this.style.background='#F0F6FF';this.style.color='#0A59D2';" onmouseout="this.style.borderColor='#D6D3D1';this.style.background='#FAFAF9';this.style.color='#78716c';">
+                            📁 Klikni ali povleci video sem
+                            <input type="file" accept="video/*" id="vo-file-input" style="position:absolute; opacity:0; width:0; height:0;">
+                        </div>
+                        <div id="vo-video-preview" style="display:none; max-width:200px;">
+                            <video id="vo-video-el" style="width:100%; border-radius:8px;" controls muted></video>
+                            <div id="vo-video-info" style="color:#888; font-size:12px; margin-top:5px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hidden SRT defaults (section removed - we use text only) -->
                 <div style="display:none;">
+                    <div id="vo-srt-zone">Klikni za SRT</div>
+                    <input type="file" accept=".srt,.vtt" id="vo-srt-input">
+                    <span id="vo-srt-status"></span>
+                </div>
+
+                <!-- Step 2: Besedila / poante -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 6px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">2</span> Besedila / poante</h4>
+                    <p style="color:#78716c; font-size:13px; margin:0 0 14px 34px;">Vpiši ključne poante, besedila, CTA — vsako v svojo vrstico. AI bo iz tega sestavil zgodbo.</p>
+                    <textarea id="vo-points" style="width:100%; min-height:160px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:14px; font-size:14px; resize:vertical; line-height:1.8; font-family:'JetBrains Mono', monospace;" placeholder="4+2 brezplačno 🔥
+Najboljša majica, kar jih boste kdaj nosili
+Udobnejša zgoraj, bolj sproščena v predelu trupa
+Iz super mehkega materiala
+Čas je, da si nadenete majico NORIKS"></textarea>
+                </div>
+                </div>
+
+                <!-- Hidden defaults for removed sections (Prompt + Naming) -->
+                <div style="display:none;">
+                    <textarea id="vo-prompt">Role: Act as an expert Direct-Response Copywriter and Scriptwriter for short-form video ads (TikTok, Reels, Shorts).
+
+Task: Create a Story: Transform these points into a cohesive, high-converting storytelling script in Slovenian.
+Structure:
+* Hook: Start with a relatable problem or a bold claim about comfort/style.
+* Transformation: Seamlessly weave in the benefits to show how the product changes the user's day.
+* Offer & CTA: End with urgency and the specific offer from the text.
+
+Style: Authentic, confident, persuasive — a narrative that makes the viewer feel the comfort, not just a list of features.</textarea>
                     <input type="text" id="vo-name-id" value="">
                     <input type="text" id="vo-name-date" readonly value="">
                     <select id="vo-name-product"><option value="tshirt" selected>tshirt</option><option value="boxers">boxers</option><option value="set">set</option></select>
                     <input type="text" id="vo-author" value="VO">
                 </div>
 
-                <!-- BULK HEADER -->
-                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:18px 24px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.04); display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <h4 style="margin:0 0 4px; font-size:16px; color:#0F172A;">📦 Bulk Voiceover Maker</h4>
-                        <p style="margin:0; color:#78716c; font-size:13px;">Naloži do <b>15 video+SRT parov</b> hkrati. Vsak gre v ločen job — enako kot 15× enojni način.</p>
-                    </div>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <span id="vo-bulk-count" style="font-size:12px; color:#57534E; padding:6px 10px; background:#F5F5F4; border-radius:8px; font-weight:600;">1 / 15</span>
-                        <button id="vo-bulk-clear" style="background:#fff; border:1px solid #E7E5E4; color:#57534e; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:500;" onmouseover="this.style.background='#FEE2E2';this.style.borderColor='#FECACA';this.style.color='#B91C1C';" onmouseout="this.style.background='#fff';this.style.borderColor='#E7E5E4';this.style.color='#57534e';">🗑 Počisti vse</button>
-                    </div>
-                </div>
-
-                <!-- MULTI-VIDEO UPLOAD ZONE -->
-                <div id="vo-multi-zone" style="position:relative; background:#fff; border:2px dashed #BFDBFE; border-radius:14px; padding:22px 24px; margin-bottom:16px; cursor:pointer; transition:all 0.15s ease;" onmouseover="this.style.borderColor='#0A59D2';this.style.background='#F0F6FF';" onmouseout="this.style.borderColor='#BFDBFE';this.style.background='#fff';">
-                    <div style="display:flex; align-items:center; gap:14px;">
-                        <div style="font-size:28px;">📥</div>
-                        <div style="flex:1;">
-                            <div style="font-size:15px; font-weight:600; color:#0F172A;">Naloži več videov hkrati</div>
-                            <div style="font-size:12px; color:#78716c; margin-top:2px;">Izberi ali povleci do <b>15 video datotek</b> — za vsak video se avtomatsko ustvari vrstica. SRT vpišeš ročno spodaj.</div>
+                <!-- Step 3: Preview & Generate -->
+                <div style="background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:24px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                    <h4 style="margin:0 0 16px; font-size:15px; color:#0F172A; display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:#0A59D2; color:#fff; border-radius:6px; font-size:12px; font-weight:700;">3</span> Predogled & Generiranje</h4>
+                    <button id="btn-vo-preview" style="width:100%; padding:14px; background:#0A59D2; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; margin-bottom:16px; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(10,89,210,0.2);" onmouseover="this.style.background='#0847A8';" onmouseout="this.style.background='#0A59D2';">🇸🇮 Generiraj SLO predogled</button>
+                    
+                    <div id="vo-script-editor" style="display:none;">
+                        <h5 style="color:#0A59D2; margin:0 0 10px; font-size:13px; font-weight:600;">Generirano besedilo:</h5>
+                        <div id="vo-script-items"></div>
+                        <button id="btn-vo-regen" style="width:100%; padding:10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; margin:10px 0; transition:all 0.15s ease;" onmouseover="this.style.background='#EFF6FF';" onmouseout="this.style.background='#fff';">🔄 Regeneriraj besedilo</button>
+                        <div id="vo-preview-video-container" style="display:none; margin:15px 0;">
+                            <video id="vo-preview-video" style="width:100%; border-radius:8px;" controls></video>
                         </div>
-                        <div id="vo-multi-status" style="font-size:12px; color:#0A59D2; font-weight:600;"></div>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px; margin:15px 0;">
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="SI" checked> 🇸🇮</label>
+                            <input type="checkbox" class="vo-country-check" value="HR" checked> 🇭🇷</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="CZ" checked> 🇨🇿</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="PL" checked> 🇵🇱</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="GR" checked> 🇬🇷</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="IT" checked> 🇮🇹</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="HU" checked> 🇭🇺</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="SK" checked> 🇸🇰</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="BG" checked> 🇧🇬</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="RO" checked> 🇷🇴</label>
+                            <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" class="vo-country-check" value="DE" checked> 🇩🇪</label>
+                        </div>
+                        <button id="btn-vo-generate" style="width:100%; padding:14px; background:#10b981; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:15px; font-weight:600; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(16,185,129,0.2);" onmouseover="this.style.background='#059669';" onmouseout="this.style.background='#10b981';">🚀 Generiraj vse z Voice-over</button>
                     </div>
-                    <input type="file" id="vo-multi-input" accept="video/*" multiple style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">
                 </div>
-
-                <!-- ROWS CONTAINER -->
-                <div id="vo-bulk-rows"></div>
-
-                <!-- ADD ROW + GENERATE -->
-                <div style="display:flex; gap:12px; margin-top:8px;">
-                    <button id="vo-bulk-add" style="flex:0 0 auto; padding:12px 18px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:10px; cursor:pointer; font-size:14px; font-weight:600; transition:all 0.15s ease;" onmouseover="this.style.background='#EFF6FF';" onmouseout="this.style.background='#fff';">+ Dodaj vrstico</button>
-                    <button id="vo-bulk-generate" style="flex:1; padding:14px; background:#10b981; color:#fff; border:none; border-radius:10px; cursor:pointer; font-size:15px; font-weight:700; transition:all 0.15s ease; box-shadow:0 1px 2px rgba(16,185,129,0.2);" onmouseover="this.style.background='#059669';" onmouseout="this.style.background='#10b981';">🚀 Generiraj vse v Jobs</button>
-                </div>
-
-                <!-- PROGRESS PANEL -->
-                <div id="vo-bulk-progress" style="display:none; margin-top:16px; background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:18px 24px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">
-                    <h4 style="margin:0 0 12px; font-size:14px; color:#0F172A;">Napredek pošiljanja</h4>
-                    <div id="vo-bulk-progress-log" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:#57534E; max-height:240px; overflow-y:auto;"></div>
-                </div>
-
             </div>
         </div>
         
         <script>
-        // === MODE 3: VOICE-OVER (BULK) ===
+        // === MODE 3: VOICE-OVER ===
         (function() {
-            var MAX_ROWS = 15;
-            var rows = []; // [{id, videoFile, videoDuration, srt, position}]
-            var nextId = 1;
-
-            function makeRow() {
-                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', muteOriginal: false, voiceGender: 'male', uploading: false };
-            }
-
-            function renderRows() {
-                var container = document.getElementById('vo-bulk-rows');
-                container.innerHTML = '';
-                rows.forEach(function(row, idx) {
-                    var div = document.createElement('div');
-                    div.style.cssText = 'background:#fff; border:1px solid #E7E5E4; border-radius:14px; padding:18px 20px; margin-bottom:12px; box-shadow:0 1px 2px rgba(0,0,0,0.04);';
-                    div.innerHTML = ''
-                        + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">'
-                        +   '<div style="display:flex; align-items:center; gap:10px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; background:#0A59D2; color:#fff; border-radius:8px; font-size:12px; font-weight:700;">' + (idx+1) + '</span>'
-                        +     '<span style="font-size:14px; font-weight:600; color:#0F172A;">Vrstica ' + (idx+1) + '</span>'
-                        +     '<span data-status="' + row.id + '" style="font-size:11px; color:#78716C; padding:3px 8px; background:#F5F5F4; border-radius:6px;">prazno</span>'
-                        +   '</div>'
-                        +   (rows.length > 1 ? '<button data-remove="' + row.id + '" style="background:#fff; border:1px solid #E7E5E4; color:#B91C1C; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:12px;" title="Odstrani vrstico">🗑 Odstrani</button>' : '')
-                        + '</div>'
-                        + '<div style="display:grid; grid-template-columns: 1fr 1.2fr; gap:14px;">'
-                        +   '<div>'
-                        +     '<div style="font-size:12px; font-weight:600; color:#0F172A; margin-bottom:6px;">🎬 Video</div>'
-                        +     '<div data-dropzone="' + row.id + '" style="padding:24px 14px; border:2px dashed #D6D3D1; border-radius:10px; text-align:center; cursor:pointer; color:#78716c; background:#FAFAF9; font-size:13px; transition:all 0.15s ease; position:relative;">' + (row.videoFile ? '✅ ' + row.videoFile.split('/').pop().substring(0,32) + (row.videoDuration ? ' · ' + row.videoDuration.toFixed(1) + 's' : '') : '📁 Klikni ali povleci video sem')
-                        +       '<input type="file" data-fileinput="' + row.id + '" accept="video/*" style="position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; cursor:pointer;">'
-                        +     '</div>'
-                        +     '<div style="margin-top:10px;">'
-                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">📍 Pozicija besedila</div>'
-                        +       '<div style="display:flex; gap:6px;">'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.position === 'middle' ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.position === 'middle' ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-pos-' + row.id + '" data-pos="' + row.id + '" value="middle" ' + (row.position === 'middle' ? 'checked' : '') + '> 🎯 Sredina'
-                        +         '</label>'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.position === 'bottom' ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.position === 'bottom' ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-pos-' + row.id + '" data-pos="' + row.id + '" value="bottom" ' + (row.position === 'bottom' ? 'checked' : '') + '> ⬇️ Spodaj'
-                        +         '</label>'
-                        +       '</div>'
-                        +     '</div>'
-                        +     '<div style="margin-top:10px;">'
-                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">🔊 Zvok originala</div>'
-                        +       '<div style="display:flex; gap:6px;">'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (!row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (!row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="default" ' + (!row.muteOriginal ? 'checked' : '') + '> 🔉 Privzeto'
-                        +         '</label>'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="mute" ' + (row.muteOriginal ? 'checked' : '') + '> 🔇 Utišaj zvok'
-                        +         '</label>'
-                        +       '</div>'
-                        +     '</div>'
-                        +     '<div style="margin-top:10px;">'
-                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">🎙️ Glas govorca</div>'
-                        +       '<div style="display:flex; gap:6px;">'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.voiceGender !== "female" ? "#0A59D2" : "#E7E5E4") + '; background:' + (row.voiceGender !== "female" ? "#EFF6FF" : "#fff") + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-gender-' + row.id + '" data-gender="' + row.id + '" value="male" ' + (row.voiceGender !== "female" ? "checked" : "") + '> 👨 Moški'
-                        +         '</label>'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.voiceGender === "female" ? "#0A59D2" : "#E7E5E4") + '; background:' + (row.voiceGender === "female" ? "#EFF6FF" : "#fff") + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-gender-' + row.id + '" data-gender="' + row.id + '" value="female" ' + (row.voiceGender === "female" ? "checked" : "") + '> 👩 Ženska'
-                        +         '</label>'
-                        +       '</div>'
-                        +     '</div>'
-                        +   '</div>'
-                        +   '<div>'
-                        +     '<div style="font-size:12px; font-weight:600; color:#0F172A; margin-bottom:6px;">📄 SRT besedilo</div>'
-                        +     '<textarea data-srt="' + row.id + '" style="width:100%; min-height:170px; background:#FAFAF9; border:1px solid #E7E5E4; border-radius:10px; color:#0F172A; padding:12px; font-size:13px; resize:vertical; line-height:1.6; font-family:\'JetBrains Mono\', monospace;" placeholder="1\n00:00:00,000 --> 00:00:02,000\nVisible belly?\n\n2\n00:00:02,300 --> 00:00:04,300\nIt&apos;s not your fault.">' + (row.srt || '') + '</textarea>'
-                        +   '</div>'
-                        + '</div>';
-                    container.appendChild(div);
-                });
-                document.getElementById('vo-bulk-count').textContent = rows.length + ' / ' + MAX_ROWS;
-                wireRowEvents();
-            }
-
-            function setStatus(id, txt, color) {
-                var el = document.querySelector('[data-status="' + id + '"]');
-                if (!el) return;
-                el.textContent = txt;
-                el.style.background = color || '#F5F5F4';
-                el.style.color = (color && color !== '#F5F5F4') ? '#fff' : '#78716C';
-            }
-
-            function wireRowEvents() {
-                // File inputs
-                document.querySelectorAll('[data-fileinput]').forEach(function(input) {
-                    input.addEventListener('change', function(e) {
-                        var id = parseInt(input.getAttribute('data-fileinput'), 10);
-                        var f = e.target.files && e.target.files[0];
-                        if (f) uploadForRow(id, f);
-                    });
-                });
-                // Drag/drop on dropzones
-                document.querySelectorAll('[data-dropzone]').forEach(function(zone) {
-                    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.style.borderColor = '#0A59D2'; zone.style.background = '#F0F6FF'; });
-                    zone.addEventListener('dragleave', function() { zone.style.borderColor = '#D6D3D1'; zone.style.background = '#FAFAF9'; });
-                    zone.addEventListener('drop', function(e) {
-                        e.preventDefault();
-                        zone.style.borderColor = '#D6D3D1'; zone.style.background = '#FAFAF9';
-                        var id = parseInt(zone.getAttribute('data-dropzone'), 10);
-                        var f = e.dataTransfer.files && e.dataTransfer.files[0];
-                        if (f && /^video\//.test(f.type)) uploadForRow(id, f);
-                    });
-                });
-                // SRT textareas
-                document.querySelectorAll('[data-srt]').forEach(function(ta) {
-                    ta.addEventListener('input', function() {
-                        var id = parseInt(ta.getAttribute('data-srt'), 10);
-                        var row = rows.find(function(r){return r.id === id;});
-                        if (row) row.srt = ta.value;
-                    });
-                });
-                // Position radios
-                document.querySelectorAll('[data-pos]').forEach(function(rad) {
-                    rad.addEventListener('change', function() {
-                        var id = parseInt(rad.getAttribute('data-pos'), 10);
-                        var row = rows.find(function(r){return r.id === id;});
-                        if (row && rad.checked) { row.position = rad.value; renderRows(); }
-                    });
-                });
-                // Original audio mute radios
-                document.querySelectorAll('[data-mute]').forEach(function(rad) {
-                    rad.addEventListener('change', function() {
-                        var id = parseInt(rad.getAttribute('data-mute'), 10);
-                        var row = rows.find(function(r){return r.id === id;});
-                        if (row && rad.checked) { row.muteOriginal = (rad.value === 'mute'); renderRows(); }
-                    });
-                });
-                // Voice gender radios (male=default / female)
-                document.querySelectorAll('[data-gender]').forEach(function(rad) {
-                    rad.addEventListener('change', function() {
-                        var id = parseInt(rad.getAttribute('data-gender'), 10);
-                        var row = rows.find(function(r){return r.id === id;});
-                        if (row && rad.checked) { row.voiceGender = rad.value; renderRows(); }
-                    });
-                });
-                // Remove buttons
-                document.querySelectorAll('[data-remove]').forEach(function(btn) {
-                    btn.addEventListener('click', function() {
-                        var id = parseInt(btn.getAttribute('data-remove'), 10);
-                        rows = rows.filter(function(r){return r.id !== id;});
-                        if (rows.length === 0) rows.push(makeRow());
-                        renderRows();
-                    });
-                });
-            }
-
-            function uploadForRow(id, file) {
-                var row = rows.find(function(r){return r.id === id;});
-                if (!row) return;
-                row.uploading = true;
-                row.videoFileOrig = file.name;
-                setStatus(id, '⏳ nalagam...', '#0A59D2');
-                var fd = new FormData();
-                fd.append('video', file);
+            var voVideoFile = null;
+            var voVideoDuration = 0;
+            var voScript = [];
+            var voSrtLoaded = false;
+            
+            // Upload
+            var uploadZone = document.getElementById('vo-upload-zone');
+            var fileInput = document.getElementById('vo-file-input');
+            
+            function uploadVoVideo(file) {
+                if (!file) return;
+                uploadZone.textContent = '⏳ Nalagam...';
+                var formData = new FormData();
+                formData.append('video', file);
                 var xhr = new XMLHttpRequest();
                 xhr.open('POST', '/api/upload-video', true);
                 xhr.onload = function() {
                     try {
                         var data = JSON.parse(xhr.responseText);
-                        row.videoFile = data.filename;
-                        row.uploading = false;
-                        // Fetch duration
-                        fetch('/api/localizer/video-duration?file=' + encodeURIComponent(row.videoFile))
-                            .then(function(r){ return r.json(); })
-                            .then(function(d){ row.videoDuration = d.duration || 0; setStatus(id, '✅ ' + row.videoDuration.toFixed(1) + 's', '#10b981'); renderRows(); })
-                            .catch(function(){ setStatus(id, '✅ naloženo', '#10b981'); renderRows(); });
-                    } catch(e) { setStatus(id, '❌ napaka uploada', '#B91C1C'); row.uploading = false; }
+                        voVideoFile = data.filename;
+                        document.getElementById('vo-video-el').src = '/uploads/' + voVideoFile;
+                        document.getElementById('vo-video-preview').style.display = 'block';
+                        uploadZone.textContent = '✅ ' + file.name;
+                        var baseName = file.name.replace(/\.[^.]+$/, '').split('_')[0] || 'VO';
+                        var idEl = document.getElementById('vo-name-id'); if(idEl) idEl.value = baseName;
+                        fetch('/api/localizer/video-duration?file=' + encodeURIComponent(voVideoFile))
+                            .then(function(r){return r.json()})
+                            .then(function(d){ voVideoDuration = d.duration || 30; document.getElementById('vo-video-info').textContent = voVideoDuration.toFixed(1) + 's'; });
+                            saveVoState();
+                    } catch(e) { uploadZone.textContent = '❌ Napaka'; }
                 };
-                xhr.onerror = function() { setStatus(id, '❌ network', '#B91C1C'); row.uploading = false; };
-                xhr.send(fd);
+                xhr.onerror = function() { uploadZone.textContent = '❌ Napaka'; };
+                xhr.send(formData);
             }
-
-            // SRT parser (matches the one used in original form)
+            
+            if (uploadZone && fileInput) {
+                uploadZone.addEventListener('click', function() { fileInput.click(); });
+                fileInput.addEventListener('change', function() { uploadVoVideo(this.files[0]); });
+                uploadZone.addEventListener('dragover', function(e) { e.preventDefault(); uploadZone.style.borderColor = '#8b5cf6'; });
+                uploadZone.addEventListener('dragleave', function(e) { e.preventDefault(); uploadZone.style.borderColor = '#333'; });
+                uploadZone.addEventListener('drop', function(e) {
+                    e.preventDefault(); uploadZone.style.borderColor = '#333';
+                    var file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith('video/')) uploadVoVideo(file);
+                });
+            }
+            
+            // SRT upload
+            var srtZone = document.getElementById('vo-srt-zone');
+            var srtInput = document.getElementById('vo-srt-input');
+            if (srtZone && srtInput) {
+                srtZone.addEventListener('click', function() { srtInput.click(); });
+                srtInput.addEventListener('change', function() {
+                    var file = this.files[0]; if (!file) return;
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        var parsed = parseSRT(e.target.result);
+                        if (parsed.length > 0) {
+                            voScript = parsed; voSrtLoaded = true;
+                        saveVoState();
+                            renderScriptEditor();
+                            document.getElementById('vo-script-editor').style.display = 'block';
+                            document.getElementById('vo-srt-status').textContent = '✅ ' + parsed.length + ' stavkov';
+                            srtZone.textContent = '✅ ' + file.name;
+                        }
+                    };
+                    reader.readAsText(file);
+                });
+            }
+            
             function parseSRT(text) {
-                var blocks = text.replace(/\r/g,'').split(/\n\n+/);
-                var segs = [];
-                var toSec = function(ts){ var m = ts.match(/(\d+):(\d+):(\d+)[,.](\d+)/); if(!m) return 0; return (+m[1])*3600 + (+m[2])*60 + (+m[3]) + (+m[4])/1000; };
-                blocks.forEach(function(b){
-                    var lines = b.trim().split('\n');
-                    if (lines.length < 2) return;
-                    var idx = lines[0].match(/^\d+$/) ? 1 : 0;
-                    var tline = lines[idx] || '';
-                    var tm = tline.match(/(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/);
-                    if (!tm) return;
-                    var txt = lines.slice(idx+1).join(' ').trim();
-                    if (!txt) return;
-                    segs.push({ start: toSec(tm[1]), end: toSec(tm[2]), text: txt });
+                var blocks = text.trim().split(/\n\s*\n/), result = [];
+                blocks.forEach(function(block) {
+                    var lines = block.trim().split('\n');
+                    var timeLine = lines.find(function(l) { return l.includes('-->'); });
+                    if (!timeLine) return;
+                    var parts = timeLine.split('-->');
+                    var start = srtTime(parts[0].trim()), end = srtTime(parts[1].trim());
+                    var textLines = [], found = false;
+                    lines.forEach(function(l) { if (l.includes('-->')) { found = true; return; } if (found && l.trim()) textLines.push(l.trim()); });
+                    if (textLines.length && !isNaN(start)) result.push({ text: textLines.join(' '), start: start, end: end });
                 });
-                return segs;
+                return result;
             }
-
-            // Logging
-            function plog(msg, color) {
-                var box = document.getElementById('vo-bulk-progress');
-                var log = document.getElementById('vo-bulk-progress-log');
-                box.style.display = 'block';
-                var line = document.createElement('div');
-                line.style.cssText = 'padding:3px 0; color:' + (color || '#57534E') + ';';
-                var time = new Date().toLocaleTimeString('sl-SI');
-                line.textContent = '[' + time + '] ' + msg;
-                log.appendChild(line);
-                log.scrollTop = log.scrollHeight;
+            function srtTime(ts) { ts = ts.replace(',','.'); var p = ts.split(':'); return p.length===3 ? parseFloat(p[0])*3600+parseFloat(p[1])*60+parseFloat(p[2]) : parseFloat(ts); }
+            
+            // Script editor
+            function renderScriptEditor() {
+                var container = document.getElementById('vo-script-items');
+                var html = '';
+                voScript.forEach(function(item, i) {
+                    html += '<div style="background:#1a1a1a; border:1px solid #333; border-radius:8px; padding:10px; margin-bottom:8px;">';
+                    html += '<div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">';
+                    html += '<span style="color:#8b5cf6; font-weight:600;">#' + (i+1) + '</span>';
+                    html += '<span style="color:#666; font-size:11px;">' + item.start.toFixed(1) + 's → ' + item.end.toFixed(1) + 's</span>';
+                    html += '</div>';
+                    html += '<textarea id="vo-edit-' + i + '" style="width:100%; background:#0f0f0f; border:1px solid #333; border-radius:6px; color:#fff; padding:8px; resize:vertical; min-height:34px; font-size:13px;">' + item.text + '</textarea>';
+                    html += '</div>';
+                });
+                container.innerHTML = html;
             }
-
-            // Sequential submit
-            async function submitAll() {
-                var btn = document.getElementById('vo-bulk-generate');
-                var addBtn = document.getElementById('vo-bulk-add');
-                // Validate
-                var prepared = [];
-                for (var i = 0; i < rows.length; i++) {
-                    var row = rows[i];
-                    if (!row.videoFile) { alert('Vrstica ' + (i+1) + ': manjka video.'); return; }
-                    if (row.uploading) { alert('Vrstica ' + (i+1) + ': še nalaga.'); return; }
-                    var srtText = (row.srt || '').trim();
-                    if (!srtText) { alert('Vrstica ' + (i+1) + ': manjka SRT.'); return; }
-                    var segs = parseSRT(srtText);
-                    if (!segs.length) { alert('Vrstica ' + (i+1) + ': SRT ni v veljavnem formatu.'); return; }
-                    prepared.push({ row: row, segs: segs, idx: i });
-                }
-
-                btn.disabled = true; btn.textContent = '⏳ Pošiljam...';
-                addBtn.disabled = true;
-                document.getElementById('vo-bulk-progress-log').innerHTML = '';
-                plog('Začenjam: ' + prepared.length + ' vrstic, sekvenčno.', '#0A59D2');
-
-                var allCountries = ['SI','HR','CZ','PL','GR','IT','HU','SK','RO','DE'];
-                var nowDate = (function(){ var d = new Date(); return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getFullYear()).slice(-2); })();
-                var ok = 0, fail = 0;
-                for (var j = 0; j < prepared.length; j++) {
-                    var item = prepared[j];
-                    var row = item.row;
-                    var segs = item.segs;
-                    var videoDuration = row.videoDuration || (segs[segs.length-1].end + 1);
-                    var origFile = row.videoFileOrig || (row.videoFile ? String(row.videoFile).split('/').pop() : '');
-                    var origBase = origFile.replace(/\.[a-z0-9]+$/i, '');
-                    var extractedId = (origFile.match(/ID\d+/i) || [])[0];
-                    var voId = extractedId ? extractedId.toUpperCase() : ('ID' + String(Date.now()).slice(-6) + '-' + (item.idx + 1));
-                    var name = origBase || (voId + '_' + nowDate + '_tshirt_VO_BULK');
-                    setStatus(row.id, '⏳ pošiljam...', '#0A59D2');
-                    plog('Vrstica ' + (item.idx+1) + ': pošiljam (' + segs.length + ' segmentov, ' + videoDuration.toFixed(1) + 's)...');
-                    try {
-                        await window.postJSON('/api/localizer/queue', {
-                            videoClean: row.videoFile,
-                            name: name,
-                            namingParts: { id: voId, date: nowDate, product: 'tshirt', type: 'VO', author: 'BULK' },
-                            texts: segs.map(function(s){ return { text: s.text }; }),
-                            mode: 'voiceover',
-                            voiceoverScript: segs,
-                            videoDuration: videoDuration,
-                            countries: allCountries,
-                            source: 'library',
-                            style: 'white',
-                            fontSize: 90,
-                            textPosition: row.position,
-                            muteOriginal: row.muteOriginal,
-                            voiceGender: row.voiceGender || 'male'
+            
+            // SLO Preview
+            document.getElementById('btn-vo-preview').addEventListener('click', async function() {
+                if (!voVideoFile) { alert('Najprej naloži video!'); return; }
+                var btn = this;
+                btn.disabled = true;
+                try {
+                    if (!voSrtLoaded && (!voScript.length || btn.textContent.includes('Regeneriraj'))) {
+                        var points = document.getElementById('vo-points').value.trim();
+                        if (!points) { alert('Vpiši besedila/poante!'); btn.disabled = false; return; }
+                        var prompt = document.getElementById('vo-prompt').value.trim();
+                        btn.textContent = '⏳ Generiram besedilo...';
+                        var scriptData = await window.postJSON('/api/localizer/voiceover-script', {
+                            texts: [{ text: points }],
+                            videoDuration: voVideoDuration || 30,
+                            product: document.getElementById('vo-name-product')?.value || 'tshirt',
+                            userPrompt: prompt,
+                            mode: 'story'
                         });
-                        ok++;
-                        setStatus(row.id, '✅ v Jobs', '#10b981');
-                        plog('Vrstica ' + (item.idx+1) + ': ✅ v vrsti', '#10b981');
-                    } catch(e) {
-                        fail++;
-                        setStatus(row.id, '❌ napaka', '#B91C1C');
-                        plog('Vrstica ' + (item.idx+1) + ': ❌ ' + (e.message || e), '#B91C1C');
+                        voScript = scriptData.script || [];
+                        renderScriptEditor();
+                        document.getElementById('vo-script-editor').style.display = 'block';
                     }
-                }
-
-                plog('Končano. ✅ ' + ok + ' uspešno · ❌ ' + fail + ' napak. Pojdi v Jobs in pritisni ▶ RUN.', ok > 0 ? '#10b981' : '#B91C1C');
-                if (fail === 0) {
-                    alert('✅ Vse vrstice (' + ok + ') v vrsti! Pojdi v Jobs in pritisni ▶ RUN.');
-                } else {
-                    alert('Končano: ✅ ' + ok + ' · ❌ ' + fail + '. Glej napredek za podrobnosti.');
-                }
-                btn.disabled = false; btn.textContent = '🚀 Generiraj vse v Jobs';
-                addBtn.disabled = false;
-            }
-
-            // === Multi-upload: handle N files at once, auto-create rows ===
-            async function handleMultiFiles(fileList) {
-                var files = Array.from(fileList || []).filter(function(f){ return /^video\//.test(f.type); });
-                if (!files.length) return;
-                var statusEl = document.getElementById('vo-multi-status');
-
-                // Find slots: reuse empty rows (no videoFile) first, then add new rows up to MAX_ROWS
-                var emptyRows = rows.filter(function(r){ return !r.videoFile && !r.uploading; });
-                var freeSlots = emptyRows.length + (MAX_ROWS - rows.length);
-                if (files.length > freeSlots) {
-                    alert('Lahko naložiš samo še ' + freeSlots + ' video(ev). Trenutno imaš ' + rows.length + '/' + MAX_ROWS + ' vrstic.');
-                    files = files.slice(0, freeSlots);
-                    if (!files.length) return;
-                }
-
-                // Assign each file to a row (reuse empty, else create new)
-                var assignments = [];
-                files.forEach(function(file) {
-                    var target = rows.find(function(r){ return !r.videoFile && !r.uploading && !assignments.find(function(a){ return a.id === r.id; }); });
-                    if (!target) {
-                        if (rows.length >= MAX_ROWS) return;
-                        target = makeRow();
-                        rows.push(target);
-                    }
-                    target.uploading = true;
-                    target.videoFileOrig = file.name;
-                    assignments.push({ id: target.id, file: file });
-                });
-                renderRows();
-
-                statusEl.textContent = '⏳ nalagam ' + assignments.length + ' video(ev)...';
-                var done = 0;
-                for (var i = 0; i < assignments.length; i++) {
-                    var a = assignments[i];
-                    await new Promise(function(resolve) {
-                        var row = rows.find(function(r){ return r.id === a.id; });
-                        if (!row) return resolve();
-                        setStatus(row.id, '⏳ nalagam...', '#0A59D2');
-                        var fd = new FormData();
-                        fd.append('video', a.file);
-                        var xhr = new XMLHttpRequest();
-                        xhr.open('POST', '/api/upload-video', true);
-                        xhr.onload = function() {
-                            try {
-                                var data = JSON.parse(xhr.responseText);
-                                row.videoFile = data.filename;
-                                row.uploading = false;
-                                fetch('/api/localizer/video-duration?file=' + encodeURIComponent(row.videoFile))
-                                    .then(function(r){ return r.json(); })
-                                    .then(function(d){ row.videoDuration = d.duration || 0; setStatus(row.id, '✅ ' + row.videoDuration.toFixed(1) + 's', '#10b981'); renderRows(); resolve(); })
-                                    .catch(function(){ setStatus(row.id, '✅ naloženo', '#10b981'); renderRows(); resolve(); });
-                            } catch(e) { setStatus(row.id, '❌ napaka uploada', '#B91C1C'); row.uploading = false; resolve(); }
-                        };
-                        xhr.onerror = function() { setStatus(row.id, '❌ network', '#B91C1C'); row.uploading = false; resolve(); };
-                        xhr.send(fd);
+                    var currentScript = voScript.map(function(item, i) {
+                        var ta = document.getElementById('vo-edit-' + i);
+                        return { text: ta ? ta.value : item.text, start: item.start, end: item.end };
                     });
-                    done++;
-                    statusEl.textContent = '⏳ ' + done + ' / ' + assignments.length;
-                }
-                statusEl.textContent = '✅ ' + done + ' naloženih';
-                setTimeout(function(){ statusEl.textContent = ''; }, 4000);
-                // Reset input so same files can be re-selected later
-                var input = document.getElementById('vo-multi-input');
-                if (input) input.value = '';
-            }
-
-            document.getElementById('vo-multi-input').addEventListener('change', function(e) {
-                handleMultiFiles(e.target.files);
+                    btn.textContent = '⏳ Generiram SLO preview...';
+                    var previewResp = await window.postJSON('/api/localizer/vo-preview', {
+                        videoClean: voVideoFile, script: currentScript, videoDuration: voVideoDuration || 30
+                    });
+                    if (previewResp.previewUrl) {
+                        document.getElementById('vo-preview-video').src = previewResp.previewUrl + '?t=' + Date.now();
+                        document.getElementById('vo-preview-video-container').style.display = 'block';
+                    }
+                    btn.textContent = '🇸🇮 Regeneriraj SLO Preview';
+                    saveVoState();
+                    btn.disabled = false;
+                } catch(e) { alert('Napaka: ' + (e.message||e)); btn.textContent = '🇸🇮 SLO Preview'; btn.disabled = false; }
             });
-            // Drag/drop on the multi-zone
-            var multiZone = document.getElementById('vo-multi-zone');
-            multiZone.addEventListener('dragover', function(e){ e.preventDefault(); multiZone.style.borderColor='#0A59D2'; multiZone.style.background='#F0F6FF'; });
-            multiZone.addEventListener('dragleave', function(){ multiZone.style.borderColor='#BFDBFE'; multiZone.style.background='#fff'; });
-            multiZone.addEventListener('drop', function(e){
-                e.preventDefault();
-                multiZone.style.borderColor='#BFDBFE'; multiZone.style.background='#fff';
-                if (e.dataTransfer.files && e.dataTransfer.files.length) handleMultiFiles(e.dataTransfer.files);
+            
+            // Regenerate text only
+            document.getElementById('btn-vo-regen').addEventListener('click', async function() {
+                if (!voVideoFile) { alert('Najprej naloži video!'); return; }
+                var points = document.getElementById('vo-points').value.trim();
+                if (!points) { alert('Vpiši besedila!'); return; }
+                var prompt = document.getElementById('vo-prompt').value.trim();
+                var btn = this;
+                btn.textContent = '⏳ Generiram...'; btn.disabled = true; voSrtLoaded = false;
+                try {
+                    var scriptData = await window.postJSON('/api/localizer/voiceover-script', {
+                        texts: [{ text: points }], videoDuration: voVideoDuration || 30,
+                        product: document.getElementById('vo-name-product')?.value || 'tshirt',
+                        userPrompt: prompt, mode: 'story'
+                    });
+                    voScript = scriptData.script || [];
+                    renderScriptEditor();
+                    btn.textContent = '🔄 Regeneriraj besedilo'; btn.disabled = false;
+                    saveVoState();
+                } catch(e) { alert('Napaka: ' + (e.message||e)); btn.textContent = '🔄 Regeneriraj besedilo'; btn.disabled = false; }
+                    saveVoState();
             });
-
-            // === Wire global buttons ===
-            document.getElementById('vo-bulk-add').addEventListener('click', function() {
-                if (rows.length >= MAX_ROWS) { alert('Maksimum ' + MAX_ROWS + ' vrstic.'); return; }
-                rows.push(makeRow());
-                renderRows();
+            
+            // Generate all
+            document.getElementById('btn-vo-generate').addEventListener('click', async function() {
+                if (!voVideoFile || !voScript.length) { alert('Najprej naredi SLO Preview!'); return; }
+                var editedScript = voScript.map(function(item, i) {
+                    var ta = document.getElementById('vo-edit-' + i);
+                    return { text: ta ? ta.value : item.text, start: item.start, end: item.end };
+                });
+                var countries = Array.from(document.querySelectorAll('.vo-country-check:checked')).map(function(cb){return cb.value;});
+                if (!countries.length) { alert('Izberi vsaj eno državo!'); return; }
+                var voId = document.getElementById('vo-name-id').value || '001';
+                var voDate = document.getElementById('vo-name-date').value || '';
+                var voProduct = document.getElementById('vo-name-product').value || 'tshirt';
+                var author = document.getElementById('vo-author').value || 'VO';
+                var btn = this; btn.textContent = '⏳ Generiram...'; btn.disabled = true;
+                try {
+                    await window.postJSON('/api/localizer/generate', {
+                        videoClean: voVideoFile,
+                        name: voId + '_' + voDate + '_' + voProduct + '_VO_' + author,
+                        namingParts: {id: voId, date: voDate, product: voProduct, type: 'VO', author: author},
+                        texts: editedScript.map(function(s){return {text: s.text};}),
+                        mode: 'voiceover', voiceoverScript: editedScript, videoDuration: voVideoDuration || 30,
+                        countries: countries, source: 'library', style: 'white', fontSize: 90
+                    });
+                    alert('✅ Voice-over generiranje startano! Poglej v Downloads.');
+                    // Reset form so user can upload new video immediately
+                    if (typeof window._voReset === 'function') window._voReset();
+                    // Close preview modal if open
+                    if (typeof closeVoModal === 'function') closeVoModal();
+                } catch(e) { alert('Napaka: ' + (e.message||e)); }
+                btn.textContent = '🚀 Generiraj vse z Voice-over'; btn.disabled = false;
             });
-            document.getElementById('vo-bulk-clear').addEventListener('click', function() {
-                if (!confirm('Počistim vse vrstice?')) return;
-                rows = [makeRow()];
-                renderRows();
-                document.getElementById('vo-bulk-progress').style.display = 'none';
-                document.getElementById('vo-bulk-progress-log').innerHTML = '';
-                document.getElementById('vo-multi-status').textContent = '';
-            });
-            document.getElementById('vo-bulk-generate').addEventListener('click', submitAll);
-
-            // Compatibility shims for code elsewhere that may reference old VO API
+            
+            // Reset
             window._voReset = function() {
-                rows = [makeRow()];
-                renderRows();
-                document.getElementById('vo-bulk-progress').style.display = 'none';
-                document.getElementById('vo-bulk-progress-log').innerHTML = '';
+                voVideoFile = null; voVideoDuration = 0; voScript = []; voSrtLoaded = false;
+                if (uploadZone) uploadZone.textContent = '📁 Klikni ali povleci video sem';
+                document.getElementById('vo-video-preview').style.display = 'none';
+                document.getElementById('vo-name-id').value = '';
+                document.getElementById('vo-author').value = '';
+                document.getElementById('vo-points').value = '';
+                document.getElementById('vo-script-editor').style.display = 'none';
+                document.getElementById('vo-preview-video-container').style.display = 'none';
+                document.getElementById('vo-srt-status').textContent = '';
+                var sz = document.getElementById('vo-srt-zone'); if(sz) sz.textContent = 'Klikni za SRT';
+                sessionStorage.removeItem("voState");
             };
-            window._voGetTextPosition = function() { return rows[0] ? rows[0].position : 'middle'; };
-            window._voGetScriptMode = function() { return 'srt'; };
-            window._voUpdMode = function() {};
-            window._voUpdPos = function() {};
-            window._voParseSRT = parseSRT;
+            
+            // Set date
+            var d = new Date(), dd = String(d.getDate()).padStart(2,'0'), mm = String(d.getMonth()+1).padStart(2,'0'), yy = String(d.getFullYear()).slice(-2);
+            var dateEl = document.getElementById('vo-name-date'); if (dateEl) dateEl.value = dd+'-'+mm+'-'+yy;
 
-            // Init: 1 empty row
-            rows.push(makeRow());
-            renderRows();
+            // === STATE PERSISTENCE ===
+            function saveVoState() {
+                try {
+                    var scriptEdits = voScript.map(function(item, i) {
+                        var ta = document.getElementById('vo-edit-' + i);
+                        return { text: ta ? ta.value : item.text, start: item.start, end: item.end };
+                    });
+                    sessionStorage.setItem('voState', JSON.stringify({
+                        voVideoFile: voVideoFile,
+                        voVideoDuration: voVideoDuration,
+                        voScript: scriptEdits.length ? scriptEdits : voScript,
+                        voSrtLoaded: voSrtLoaded,
+                        points: document.getElementById('vo-points')?.value || '',
+                        prompt: document.getElementById('vo-prompt')?.value || '',
+                        voId: document.getElementById('vo-name-id')?.value || '',
+                        voProduct: document.getElementById('vo-name-product')?.value || 'tshirt',
+                        author: document.getElementById('vo-author')?.value || '',
+                        uploadLabel: uploadZone?.textContent || '',
+                        scriptVisible: document.getElementById('vo-script-editor')?.style.display !== 'none',
+                        previewUrl: document.getElementById('vo-preview-video')?.src || '',
+                        previewVisible: document.getElementById('vo-preview-video-container')?.style.display !== 'none',
+                        activeTab: document.querySelector('.mode-tab.active')?.dataset?.mode || ''
+                    }));
+                } catch(e) {}
+            }
+            
+            function restoreVoState() {
+                try {
+                    var raw = sessionStorage.getItem('voState');
+                    if (!raw) return;
+                    var s = JSON.parse(raw);
+                    if (!s.voVideoFile) return;
+                    voVideoFile = s.voVideoFile;
+                    voVideoDuration = s.voVideoDuration || 0;
+                    voScript = s.voScript || [];
+                    voSrtLoaded = s.voSrtLoaded || false;
+                    if (uploadZone) uploadZone.textContent = s.uploadLabel || '✅ Video naložen';
+                    if (s.voVideoFile) {
+                        document.getElementById('vo-video-el').src = '/uploads/' + voVideoFile;
+                        document.getElementById('vo-video-preview').style.display = 'block';
+                        document.getElementById('vo-video-info').textContent = voVideoDuration.toFixed(1) + 's';
+                    }
+                    if (s.points) document.getElementById('vo-points').value = s.points;
+                    if (s.prompt) document.getElementById('vo-prompt').value = s.prompt;
+                    if (s.voId) document.getElementById('vo-name-id').value = s.voId;
+                    if (s.voProduct) document.getElementById('vo-name-product').value = s.voProduct;
+                    if (s.author) document.getElementById('vo-author').value = s.author;
+                    if (voScript.length) {
+                        renderScriptEditor();
+                        if (s.scriptVisible) document.getElementById('vo-script-editor').style.display = 'block';
+                    }
+                    if (s.previewUrl && s.previewVisible) {
+                        document.getElementById('vo-preview-video').src = s.previewUrl;
+                        document.getElementById('vo-preview-video-container').style.display = 'block';
+                    }
+                    // Restore active tab
+                    if (s.activeTab === 'voiceover') {
+                        setTimeout(function() {
+                            document.querySelectorAll('.mode-tab').forEach(function(t) { t.classList.remove('active'); });
+                            document.querySelectorAll('.mode-content').forEach(function(c) { c.classList.remove('active'); });
+                            var voTab = document.querySelector('.mode-tab[data-mode="voiceover"]');
+                            if (voTab) voTab.classList.add('active');
+                            var voContent = document.getElementById('mode-voiceover');
+                            if (voContent) voContent.classList.add('active');
+                        }, 100);
+                    }
+                } catch(e) {}
+            }
+            
+            // Auto-save on key events
+            document.getElementById('vo-points')?.addEventListener('input', function() { setTimeout(saveVoState, 500); });
+            document.getElementById('vo-prompt')?.addEventListener('input', function() { setTimeout(saveVoState, 500); });
+            document.getElementById('vo-author')?.addEventListener('input', saveVoState);
+            document.getElementById('vo-name-id')?.addEventListener('input', saveVoState);
+            
+            // Restore on load
+            restoreVoState();
         })();
         </script>
         <!-- MODE 2: Localize (Bulk) -->
@@ -5420,11 +5107,11 @@
             
             closeVoModal();
             
-            document.getElementById('btn-generate').textContent = '🎙️ V vrsto...';
+            document.getElementById('btn-generate').textContent = '🎙️ Generiram voice-over...';
             document.getElementById('btn-generate').disabled = true;
             
             try {
-                const response = await window.postJSON('/api/localizer/queue', payload);
+                const response = await window.postJSON('/api/localizer/generate', payload);
                 console.log('Started voiceover generation:', response);
                 document.getElementById('btn-generate').textContent = '🚀 Generiraj';
                 document.getElementById('btn-generate').disabled = false;
@@ -5550,9 +5237,8 @@
         window.generateVoPreview = async function() {
             if (!voVideoFile) { alert('Najprej naloži video!'); return; }
             if (voSelectedTexts.length === 0) { alert('Dodaj tekste iz knjižnice!'); return; }
-
+            
             const btn = document.getElementById('btn-vo-preview');
-            if (!btn) { alert('Forma ni na voljo v bulk načinu.'); return; }
             btn.textContent = '⏳ Generiram besedilo...';
             btn.disabled = true;
             
@@ -5575,8 +5261,7 @@
                 const previewResp = await window.postJSON('/api/localizer/vo-preview', {
                     videoClean: voVideoFile,
                     script: voScript,
-                    videoDuration: voVideoDuration,
-                    textPosition: window._voGetTextPosition && window._voGetTextPosition()
+                    videoDuration: voVideoDuration
                 });
                 
                 if (previewResp.previewUrl) {
@@ -5631,12 +5316,11 @@
             const date = String(today.getDate()).padStart(2,'0') + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getFullYear()).slice(-2);
             
             const btn = document.getElementById('btn-vo-generate');
-            if (!btn) { alert('Forma ni na voljo v bulk načinu.'); return; }
             btn.textContent = '⏳ Generiram...';
             btn.disabled = true;
             
             try {
-                const resp = await window.postJSON('/api/localizer/queue', {
+                const resp = await window.postJSON('/api/localizer/generate', {
                     videoClean: voVideoFile,
                     name: id + '_' + date + '_' + product + '_VO_' + author,
                     namingParts: { id, date, product, type: 'VO', author },
@@ -5647,11 +5331,10 @@
                     countries: selectedCountries,
                     source: 'library',
                     style: 'white',
-                    fontSize: 90,
-                    textPosition: window._voGetTextPosition && window._voGetTextPosition()
+                    fontSize: 90
                 });
                 
-                alert('✅ Voice-over v vrsti! Pojdi v Jobs in pritisni ▶ RUN.');
+                alert('✅ Voice-over generiranje startano! Poglej v Downloads.');
                 // Reset form so user can upload new video immediately
                 if (typeof window._voReset === 'function') window._voReset();
                 if (typeof closeVoModal === 'function') closeVoModal();
@@ -7407,28 +7090,6 @@
             }).join('');
         }
         
-        window.regenJob = async function(jobId) {
-            if (!confirm('Regeneriraj job ' + jobId + '?\n\nIsti video, isti tekst, ista nastavitev — samo se enkrat poženemo generacijo.')) return;
-            try {
-                const r = await fetch('/api/localizer/regenerate/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                const data = await r.json();
-                if (!r.ok) { alert('Napaka: ' + (data.error || r.statusText)); return; }
-                // Refresh downloads to show new in-progress job
-                if (typeof loadDownloads === 'function') loadDownloads();
-                else if (typeof renderDownloads === 'function') renderDownloads(allDownloadJobs);
-            } catch (e) { alert('Napaka pri regeneraciji: ' + (e.message || e)); }
-        };
-        window.resumeJob = async function(jobId) {
-            if (!confirm('Nadaljuj job ' + jobId + '?\n\nObdrži že generirane države, naredi samo manjkajoče.')) return;
-            try {
-                const r = await fetch('/api/localizer/resume/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                const data = await r.json();
-                if (!r.ok) { alert('Napaka: ' + (data.error || r.statusText)); return; }
-                alert('✅ Nadaljujem ' + (data.remainingCountries||[]).length + ' držav: ' + (data.remainingCountries||[]).join(', '));
-                if (typeof loadDownloads === 'function') loadDownloads();
-                else if (typeof renderDownloads === 'function') renderDownloads(allDownloadJobs);
-            } catch (e) { alert('Napaka pri nadaljevanju: ' + (e.message || e)); }
-        };
         window.markDownloaded = function(key) {
             downloadedItems[key] = true;
             localStorage.setItem('downloadedItems', JSON.stringify(downloadedItems));
@@ -7561,14 +7222,14 @@
 
     
         // ========== ALL CREATIVES ==========
-        const CREATIVE_COUNTRIES = ["SI", "HR", "SK", "CZ", "HU", "PL", "RO", "GR", "IT", "DE"];
+        const CREATIVE_COUNTRIES = ["EN", "SI", "HR", "SK", "CZ", "HU", "PL", "RO", "GR", "IT", "DE", "BG", "AT"];
         let _creativesData = null;
         window._creativesData = null;
 
         async function loadCreatives(forceRefresh) {
             const tbody = document.getElementById('creatives-tbody');
             const meta = document.getElementById('creatives-meta');
-            const colspan = CREATIVE_COUNTRIES.length + 6; // +Datum +ID +Produkt +Avtor +WT +Pokritost
+            const colspan = CREATIVE_COUNTRIES.length + 3;
             if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Nalagam kreative ...</td></tr>';
             try {
                 const r = await fetch('/api/creatives');
@@ -7589,7 +7250,7 @@
             const btn = document.getElementById('btn-refresh-creatives');
             if (btn) { btn.disabled = true; btn.textContent = 'Sinhronizacija ...'; }
             const tbody = document.getElementById('creatives-tbody');
-            const colspan = CREATIVE_COUNTRIES.length + 6; // +Datum +ID +Produkt +Avtor +WT +Pokritost
+            const colspan = CREATIVE_COUNTRIES.length + 3;
             if (tbody) tbody.innerHTML = '<tr class="loading-row"><td colspan="' + colspan + '"><span class="spinner"></span>Sinhroniziram z Dropboxom ...</td></tr>';
             try {
                 const r = await fetch('/api/creatives/sync', { method: 'POST' });
@@ -7615,7 +7276,7 @@
             const q = (document.getElementById('creatives-search').value || '').toLowerCase().trim();
             const productFilter = document.getElementById('creatives-product').value;
             const statusFilter = document.getElementById('creatives-status').value;
-            const colspan = CREATIVE_COUNTRIES.length + 6; // +Datum +ID +Produkt +Avtor +WT +Pokritost
+            const colspan = CREATIVE_COUNTRIES.length + 3;
 
             let rows = _creativesData.creatives || [];
             if (q) rows = rows.filter(c => (c.creativeId || '').toLowerCase().includes(q) || (c.productType || '').toLowerCase().includes(q));
@@ -7623,25 +7284,10 @@
             if (statusFilter) {
                 rows = rows.filter(c => {
                     const present = countriesPresent(c);
-                    const missing = CREATIVE_COUNTRIES.filter(cc => !present.has(cc));
+                    const missing = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && !present.has(cc));
                     return statusFilter === 'incomplete' ? missing.length > 0 : missing.length === 0;
                 });
             }
-
-            // Sort by fileDate (from filename) first, newest on top
-            rows.sort((a, b) => {
-                const da = a.fileDate || '';
-                const db = b.fileDate || '';
-                if (da && db && da !== db) return db.localeCompare(da);
-                if (da && !db) return -1;
-                if (!da && db) return 1;
-                const ta = a.latestModified ? new Date(a.latestModified).getTime() : 0;
-                const tb = b.latestModified ? new Date(b.latestModified).getTime() : 0;
-                if (tb !== ta) return tb - ta;
-                const an = parseInt((a.creativeId||'').replace(/\D/g,''))||0;
-                const bn = parseInt((b.creativeId||'').replace(/\D/g,''))||0;
-                return bn - an;
-            });
 
             if (rows.length === 0) {
                 tbody.innerHTML = '<tr class="empty-row"><td colspan="' + colspan + '">Ni kreativ za prikaz</td></tr>';
@@ -7667,90 +7313,16 @@
                     }
                     return '<td class="cc-cell ' + (has ? 'cc-yes' : 'cc-no') + '"><span class="cc-mark">' + (has ? '+' : '-') + '</span></td>';
                 }).join('');
-                const localCount = CREATIVE_COUNTRIES.filter(cc => present.has(cc)).length;
-                const totalLocal = CREATIVE_COUNTRIES.length;
+                const localCount = CREATIVE_COUNTRIES.filter(cc => cc !== 'EN' && present.has(cc)).length;
+                const totalLocal = CREATIVE_COUNTRIES.length - 1;
                 const product = c.productType || 'other';
-                const wtCell = c.hasWT
-                    ? '<td class="cc-cell cc-yes wt-cell wt-dur" data-cid="' + (c.creativeId || '') + '" title="Without Text varianta na voljo — klikni za dol\u017Eino"><span class="cc-mark wt-mark">+</span></td>'
-                    : '<td class="cc-cell cc-no wt-cell"><span class="cc-mark">-</span></td>';
-                const authorList = c.authors || [];
-                const authorCell = '<td class="author-cell">' + (authorList.length
-                    ? authorList.map(function(a){return '<span class="author-pill author-' + a.toLowerCase() + '">' + a + '</span>';}).join(' ')
-                    : '<span class="author-empty">-</span>') + '</td>';
-                const dateStr = (function(){
-                    // Use fileDate parsed from video filename (user's requirement)
-                    if (c.fileDate) {
-                        const parts = c.fileDate.split('-'); // YYYY-MM-DD
-                        if (parts.length === 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
-                        return c.fileDate;
-                    }
-                    if (c.latestModified) {
-                        const d = new Date(c.latestModified);
-                        if (!isNaN(d)) {
-                            const dd = String(d.getDate()).padStart(2,'0');
-                            const mm = String(d.getMonth()+1).padStart(2,'0');
-                            return dd + '.' + mm + '.' + d.getFullYear();
-                        }
-                    }
-                    return '-';
-                })();
                 return '<tr>' +
-                    '<td class="date-cell">' + dateStr + '</td>' +
                     '<td class="sticky-col"><span class="creative-id">' + c.creativeId + '</span></td>' +
                     '<td><span class="product-pill ' + product + '">' + product + '</span></td>' +
-                    authorCell +
-                    wtCell +
                     cells +
                     '<td class="cov-cell"><span class="cov-bar"><span class="cov-fill" style="width:' + Math.round(localCount/totalLocal*100) + '%"></span></span><span class="cov-num">' + localCount + '/' + totalLocal + '</span></td>' +
                     '</tr>';
             }).join('');
-            // Lazy fetch WT durations (one at a time, cached server-side)
-            try { fetchWtDurations(); } catch(e) {}
-        }
-
-        // Client-side cache + queue for WT durations
-        const _wtDurCache = (window._wtDurCache = window._wtDurCache || {});
-        let _wtDurInFlight = false;
-        async function fetchWtDurations() {
-            if (_wtDurInFlight) return;
-            const cells = Array.from(document.querySelectorAll('td.wt-dur'));
-            const pending = cells.filter(td => !td.dataset.durDone);
-            if (pending.length === 0) return;
-            _wtDurInFlight = true;
-            try {
-                for (const td of pending) {
-                    const cid = td.getAttribute('data-cid');
-                    if (!cid) { td.dataset.durDone = '1'; continue; }
-                    if (_wtDurCache[cid]) {
-                        renderWtDur(td, _wtDurCache[cid]);
-                        continue;
-                    }
-                    try {
-                        const r = await fetch('/api/creatives/wt-duration?id=' + encodeURIComponent(cid));
-                        if (!r.ok) { td.dataset.durDone = '1'; continue; }
-                        const j = await r.json();
-                        if (j && Number.isFinite(j.duration)) {
-                            _wtDurCache[cid] = j.duration;
-                            renderWtDur(td, j.duration);
-                        } else {
-                            td.dataset.durDone = '1';
-                        }
-                    } catch(e) {
-                        td.dataset.durDone = '1';
-                    }
-                }
-            } finally {
-                _wtDurInFlight = false;
-            }
-        }
-        function renderWtDur(td, dur) {
-            const sec = Math.round(dur * 10) / 10;
-            const label = (sec >= 10 ? Math.round(sec) : sec.toFixed(1)) + 's';
-            const mark = td.querySelector('.wt-mark') || td.querySelector('.cc-mark');
-            if (mark) mark.textContent = label;
-            else td.textContent = label;
-            td.dataset.durDone = '1';
-            td.title = 'WT video dolžina: ' + sec + 's';
         }
 
         async function openDropboxLink(td) {
@@ -7776,6 +7348,10 @@
 
         function countriesPresent(c) {
             const set = new Set();
+            // EN = "non-localized" original exists = creative has files without country tag (or total > sum of country files)
+            // proxy: if fileCount > countryCount localized files, treat as having EN original
+            // simpler heuristic: always show EN as present if creative has any files at all (it always has source)
+            set.add('EN');
             (c.countries || []).forEach(cc => set.add(cc));
             return set;
         }
@@ -7838,10 +7414,6 @@
 
                 tbody.innerHTML = jobs.map(j => {
                     const id = (j.id || '').slice(0, 14);
-                    // Extract creative ID (e.g. ID210) from job name/filename
-                    const nameSrc = j.name || j.filename || j.videoClean || j.video || '';
-                    const creMatch = String(nameSrc).match(/ID\d+/i);
-                    const creativeId = creMatch ? creMatch[0].toUpperCase() : null;
                     const src = j.filename || j.sourceFile || j.source || j.video || '-';
                     const langs = j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []);
                     const langHtml = (langs && langs.length) ?
@@ -7851,7 +7423,7 @@
                     const status = j.status || 'pending';
                     const when = j.createdAt || j.created_at || j.startedAt || null;
                     return '<tr>' +
-                        '<td><span class="activity-job">' + (id || '-') + '</span>' + (creativeId ? ' <span class="creative-badge" title="Kreativa">' + creativeId + '</span>' : '') + '</td>' +
+                        '<td><span class="activity-job">' + (id || '-') + '</span></td>' +
                         '<td><div class="activity-source" title="' + String(src).replace(/"/g, '&quot;') + '">' + String(src) + '</div></td>' +
                         '<td><div class="activity-langs">' + langHtml + '</div></td>' +
                         '<td><span class="status-pill ' + _statusClass(status) + '">' + _statusLabel(status) + '</span></td>' +
@@ -7891,36 +7463,6 @@
             if (isNaN(d.getTime())) return '-';
             return d.toLocaleString('sl-SI', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
-        // Only the time part - used when row date is shown in section header
-        function _fmtTimeDl(iso) {
-            if (!iso) return '-';
-            const d = new Date(typeof iso === 'string' && /^\d+$/.test(iso) ? Number(iso) : iso);
-            if (isNaN(d.getTime())) return '-';
-            return d.toLocaleString('sl-SI', { hour: '2-digit', minute: '2-digit' });
-        }
-        // Day key (YYYY-MM-DD) for grouping
-        function _dayKey(iso) {
-            if (!iso) return 'unknown';
-            const d = new Date(typeof iso === 'string' && /^\d+$/.test(iso) ? Number(iso) : iso);
-            if (isNaN(d.getTime())) return 'unknown';
-            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-        }
-        // Day label: "Danes", "Vceraj", or full date in Slovenian
-        function _dayLabel(iso) {
-            if (!iso) return 'Brez datuma';
-            const d = new Date(typeof iso === 'string' && /^\d+$/.test(iso) ? Number(iso) : iso);
-            if (isNaN(d.getTime())) return 'Brez datuma';
-            const today = new Date(); today.setHours(0,0,0,0);
-            const yest = new Date(today); yest.setDate(yest.getDate() - 1);
-            const that = new Date(d); that.setHours(0,0,0,0);
-            const dayNames = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
-            const monthNames = ['januar','februar','marec','april','maj','junij','julij','avgust','september','oktober','november','december'];
-            const dn = dayNames[d.getDay()];
-            const fullDate = d.getDate() + '. ' + monthNames[d.getMonth()] + ' ' + d.getFullYear();
-            if (that.getTime() === today.getTime()) return 'Danes &middot; ' + dn + ', ' + fullDate;
-            if (that.getTime() === yest.getTime()) return 'Vceraj &middot; ' + dn + ', ' + fullDate;
-            return dn + ', ' + fullDate;
-        }
         function _detectCountryDl(name) {
             if (!name) return null;
             const m1 = name.match(/-([A-Z]{2})\.mp4$/);
@@ -7934,12 +7476,7 @@
         function _statusBadge(status) {
             let bg, fg, lbl, dot = '';
             if (status === 'done' || status === 'completed') { bg = '#DCFCE7'; fg = '#15803d'; lbl = 'Koncano'; }
-            else if (status === 'partial') { bg = '#FEF3C7'; fg = '#92400E'; lbl = '⚠️ Delno (TTS napaka)'; }
-            else if (status === 'failed_tts') { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = '❌ TTS quota'; }
-            else if (status === 'manual_action_required') { bg = '#FED7AA'; fg = '#9A3412'; lbl = '⏸ ElevenLabs payment'; }
-            else if (status === 'failed_stale') { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = '⏸ Obtičal'; }
             else if (['failed', 'error'].includes(status)) { bg = '#FEE2E2'; fg = '#B91C1C'; lbl = 'Napaka'; }
-            else if (status === 'queued') { bg = '#E0E7FF'; fg = '#3730A3'; lbl = 'V vrsti'; }
             else if (status === 'translating') { bg = '#DBEAFE'; fg = '#1E40AF'; lbl = 'Prevajam'; dot = '<span class="pulse-dot"></span>'; }
             else if (status === 'rendering' || status === 'generating') { bg = '#FEF3C7'; fg = '#92400E'; lbl = 'Renderiram'; dot = '<span class="pulse-dot"></span>'; }
             else { bg = '#F3F4F6'; fg = '#374151'; lbl = 'Caka'; dot = '<span class="pulse-dot"></span>'; }
@@ -7950,68 +7487,33 @@
             const m = String(name).match(/(ID[A-Z0-9]+|[A-Z]{2,4}[0-9]{2,6})/i);
             return m ? m[1] : '';
         }
-        async function loadDownloadsPage(silent) {
+        async function loadDownloadsPage() {
             const tbody = document.getElementById('downloads-tbody');
             const btn = document.getElementById('btn-refresh-downloads');
             if (!tbody) return;
             if (btn) btn.disabled = true;
-            if (!silent) tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam ...</td></tr>';
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><span class="spinner"></span>Nalagam ...</td></tr>';
             try {
                 const [genRes, jobsRes] = await Promise.all([
                     fetch('/api/localizer/generated-videos').then(r => r.json()),
                     fetch('/api/localizer/jobs').then(r => r.json()).catch(() => ({ jobs: [] })),
                 ]);
                 const rows = [];
-                // Pre-index active (non-done) jobs so we can show ALL countries even when some files already exist
-                const activeJobs = (jobsRes.jobs || []).filter(j => {
-                    const st = (j.status || 'pending').toLowerCase();
-                    return !['done', 'completed', 'complete'].includes(st);
-                });
-                const activeById = new Map(activeJobs.map(j => [j.id, j]));
-
-                // 1) Completed jobs from generated folder (skip those that are still active)
+                // 1) Completed jobs from generated folder
                 for (const j of (genRes.jobs || [])) {
-                    if (activeById.has(j.id)) continue; // handled in step 2 with full country list
-                    const videos = (j.videos || []).filter(v => v.name && v.name.toLowerCase().endsWith('.mp4') && !v.name.startsWith('tts-') && !v.name.startsWith('vo-subs-'));
+                    const videos = (j.videos || []).filter(v => v.name && v.name.endsWith('.mp4'));
                     if (videos.length === 0) continue;
-                    const KNOWN_COUNTRIES = ['SI','HR','HU','PL','SK','CZ','RO','GR','BG','IT','DE','AT','US','EN','FR','ES','NL','SE','NO','DK','FI','BA','RS','ME','MK'];
                     const filesByLang = {};
                     for (const v of videos) {
-                        let cc = null;
-                        const mid = v.name.match(/_\d{2}-\d{2}-\d{2}_([A-Z]{2})_/);
-                        if (mid && KNOWN_COUNTRIES.includes(mid[1])) cc = mid[1];
-                        if (!cc) {
-                            const end = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
-                            if (end && KNOWN_COUNTRIES.includes(end[1])) cc = end[1];
-                        }
-                        if (!cc) {
-                            const any = v.name.match(/_([A-Z]{2})_/g);
-                            if (any) {
-                                for (const tok of any) {
-                                    const code = tok.replace(/_/g, '');
-                                    if (KNOWN_COUNTRIES.includes(code)) { cc = code; break; }
-                                }
-                            }
-                        }
-                        if (cc) filesByLang[cc] = v.name;
+                        const cm = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
+                        if (cm) filesByLang[cm[1]] = v.name;
                     }
                     let displayName = j.id;
                     let creativeId = '';
-                    let detectedMode = j.mode || '';
                     if (videos[0]) {
-                        let baseName = videos[0].name.replace(/\.mp4$/, '');
-                        for (const cc of Object.keys(filesByLang)) {
-                            baseName = baseName.replace(new RegExp('_' + cc + '_', 'g'), '_');
-                            baseName = baseName.replace(new RegExp('_' + cc + '$'), '');
-                        }
-                        baseName = baseName.replace(/_(VO|SRT)(_VO|_SRT)?$/, '');
+                        const baseName = videos[0].name.replace(/[_-]([A-Z]{2})\.mp4$/, '').replace(/_(VO|SRT)$/, '');
                         displayName = baseName;
                         creativeId = _creativeIdFromName(baseName);
-                        if (!detectedMode) {
-                            if (/_VO(_|\.|$)/i.test(videos[0].name)) detectedMode = 'voiceover';
-                            else if (/_SRT(_|\.|$)/i.test(videos[0].name)) detectedMode = 'subtitles';
-                            else detectedMode = 'localizer';
-                        }
                     }
                     let ts = j.timestamp;
                     if (!ts && j.id) {
@@ -8021,35 +7523,13 @@
                     rows.push({
                         kind: 'completed', id: j.id, name: displayName, creativeId,
                         languages: Object.keys(filesByLang), filesByLang, timestamp: ts,
-                        fileCount: videos.length,
-                        status: j.status || 'done',
-                        statusReason: j.statusReason || null,
-                        ttsErrors: j.ttsErrors || null,
-                        mode: detectedMode
+                        fileCount: videos.length, status: 'done'
                     });
                 }
-                // 2) In-progress jobs (not done) - show ALL countries from the job definition
-                // Build a quick lookup of which language files already exist on disk per job
-                const filesByJob = {};
-                for (const gj of (genRes.jobs || [])) {
-                    const KNOWN = ['SI','HR','HU','PL','SK','CZ','RO','GR','BG','IT','DE','AT','US','EN','FR','ES','NL','SE','NO','DK','FI','BA','RS','ME','MK'];
-                    const m = {};
-                    for (const v of (gj.videos || [])) {
-                        if (!v.name || !v.name.toLowerCase().endsWith('.mp4')) continue;
-                        if (v.name.startsWith('tts-') || v.name.startsWith('vo-subs-')) continue;
-                        let cc = null;
-                        const mid = v.name.match(/_\d{2}-\d{2}-\d{2}_([A-Z]{2})_/);
-                        if (mid && KNOWN.includes(mid[1])) cc = mid[1];
-                        if (!cc) {
-                            const end = v.name.match(/[_-]([A-Z]{2})\.mp4$/);
-                            if (end && KNOWN.includes(end[1])) cc = end[1];
-                        }
-                        if (cc) m[cc] = v.name;
-                    }
-                    filesByJob[gj.id] = m;
-                }
-
+                // 2) In-progress jobs (not done)
+                const completedIds = new Set(rows.map(r => r.id));
                 for (const j of (jobsRes.jobs || [])) {
+                    if (completedIds.has(j.id)) continue;
                     const st = j.status || 'pending';
                     if (['done', 'completed', 'complete'].includes(st)) continue;
                     let ts = j.created || j.createdAt || j.startedAt || j.updatedAt || null;
@@ -8058,57 +7538,35 @@
                         const idMatch = String(j.id).match(/(\d{10,})/);
                         if (idMatch) ts = Number(idMatch[1]);
                     }
-                    // ALWAYS prefer the full country list from the job (even during translating/pending)
                     const langs = j.countries || j.languages || j.targetLanguages || (j.outputs ? Object.keys(j.outputs) : []);
-                    // completedLangs = those whose video file exists on disk OR in j.outputs
-                    const onDisk = filesByJob[j.id] || {};
-                    const fromOutputs = j.outputs ? Object.keys(j.outputs) : [];
-                    const completedSet = new Set([...Object.keys(onDisk), ...fromOutputs]);
-                    const completedLangs = Array.from(completedSet);
+                    const completedLangs = j.outputs ? Object.keys(j.outputs) : [];
                     const creativeId = (j.namingParts && j.namingParts.id) || _creativeIdFromName(j.name) || '';
                     rows.push({
                         kind: 'in_progress', id: j.id, name: j.name || j.filename || j.id, creativeId,
                         languages: langs, completedLangs, timestamp: ts, fileCount: completedLangs.length,
-                        status: st, totalCount: langs.length, currentLang: j.currentLang || '',
-                        mode: j.mode || 'localizer',
-                        filesByLang: onDisk
+                        status: st, totalCount: langs.length, currentLang: j.currentLang || ''
                     });
                 }
                 rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                 if (rows.length === 0) {
-                    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="5"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
                     return;
                 }
-                // Group rows by day for chronological section headers
-                let lastDayKey = null;
                 tbody.innerHTML = rows.map(r => {
-                    const dk = _dayKey(r.timestamp);
-                    let sectionHtml = '';
-                    if (dk !== lastDayKey) {
-                        lastDayKey = dk;
-                        sectionHtml = '<tr class="day-section"><td colspan="7" style="background:#F8FAFC; padding:14px 16px 8px 16px; font-size:12px; font-weight:700; color:#0F172A; letter-spacing:0.3px; text-transform:uppercase; border-top:2px solid #E2E8F0;">' + _dayLabel(r.timestamp) + '</td></tr>';
-                    }
-                    const rowHtml = (() => {
                     // Languages chips with status indicator
                     let langsHtml;
                     if (r.kind === 'completed') {
-                        const _ok = (r.status === 'done' || r.status === 'completed');
-                        langsHtml = (r.languages || []).map(l => {
-                            const file = r.filesByLang && r.filesByLang[l];
-                            if (file && _ok) {
-                                const url = '/uploads/generated/' + r.id + '/' + encodeURIComponent(file);
-                                return '<a href="' + url + '" download class="lang-chip" style="background:#DCFCE7; color:#15803d; text-decoration:none; cursor:pointer;" title="Prenesi ' + l + '">' + l + ' &darr;</a>';
-                            }
-                            return '<span class="lang-chip" style="background:#FEE2E2; color:#9CA3AF; cursor:not-allowed; pointer-events:none; opacity:0.65; text-decoration:line-through;" title="Ni mogoče prenesti — status: ' + (r.status||'?') + '">' + l + ' &times;</span>';
-                        }).join('');
-                    } else {
-                        const done = new Set(r.completedLangs || []);
                         langsHtml = (r.languages || []).map(l => {
                             const file = r.filesByLang && r.filesByLang[l];
                             if (file) {
                                 const url = '/uploads/generated/' + r.id + '/' + encodeURIComponent(file);
                                 return '<a href="' + url + '" download class="lang-chip" style="background:#DCFCE7; color:#15803d; text-decoration:none; cursor:pointer;" title="Prenesi ' + l + '">' + l + ' &darr;</a>';
                             }
+                            return '<span class="lang-chip">' + l + '</span>';
+                        }).join('');
+                    } else {
+                        const done = new Set(r.completedLangs || []);
+                        langsHtml = (r.languages || []).map(l => {
                             if (done.has(l)) return '<span class="lang-chip" style="background:#DCFCE7; color:#15803d;">' + l + ' &check;</span>';
                             if (l === r.currentLang) return '<span class="lang-chip" style="background:#DBEAFE; color:#1E40AF;">' + l + ' ...</span>';
                             return '<span class="lang-chip" style="background:#F3F4F6; color:#6B7280;">' + l + '</span>';
@@ -8118,184 +7576,29 @@
                     const progress = r.kind === 'in_progress' && r.totalCount ?
                         ' &middot; ' + (r.completedLangs ? r.completedLangs.length : 0) + '/' + r.totalCount :
                         (r.kind === 'completed' ? ' &middot; ' + r.fileCount + ' datotek' : '');
-                    let action;
-                    if (r.status === 'queued') {
-                        action = '<button onclick="window.runQueuedJob(\'' + r.id + '\')" title="Zaženi job" style="font-weight:600; padding:6px 14px; background:#16A34A; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">▶ RUN</button>';
-                    } else if (r.kind === 'completed' && (r.status === 'done' || r.status === 'completed')) {
-                        action = '<a href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="display:inline-block; font-weight:700; padding:6px 14px; background:#0A59D2; color:#fff !important; border-radius:6px; text-decoration:none; margin-right:6px; font-size:13px;">ZIP &darr;</a>' +
-                            '<button onclick="window.regenJob(\'' + r.id + '\')" title="Generiraj ponovno z istimi parametri" style="font-weight:600; padding:6px 10px; background:#fff; color:#0A59D2; border:1px solid #BFDBFE; border-radius:6px; cursor:pointer; font-size:12px;">🔄</button>';
-                    } else if (r.kind === 'completed' && ['partial','failed_tts','failed_stale','failed','error','manual_action_required'].includes(r.status)) {
-                        const tip = r.statusReason ? r.statusReason.replace(/"/g,'') : 'Job ni dokončan';
-                        // VEDNO pokaži NADALJUJ + REGENERIRAJ (server odloči če resume možen)
-                        action = '<button onclick="window.resumeJob(\'' + r.id + '\')" title="' + tip + ' — nadaljuj kjer je ostalo" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px; margin-right:6px;">▶ NADALJUJ</button>' +
-                                 '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + ' — od začetka" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
-                    } else if (r.kind === 'in_progress' && ['partial','failed_tts','failed_stale','failed','error','manual_action_required'].includes(r.status)) {
-                        // Job je še v jobs listi z napako → ponudi ročni NADALJUJ + REGENERIRAJ
-                        const tip = r.statusReason ? String(r.statusReason).replace(/"/g,'') : 'Job ni dokončan';
-                        action = '<button onclick="window.resumeJob(\'' + r.id + '\')" title="' + tip + ' — nadaljuj" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px; margin-right:6px;">▶ NADALJUJ</button>' +
-                                 '<button onclick="window.regenJob(\'' + r.id + '\')" title="' + tip + ' — od začetka" style="font-weight:600; padding:6px 12px; background:#B91C1C; color:white; border-radius:6px; border:none; cursor:pointer; font-size:12px;">🔄 Regeneriraj</button>';
-                    } else {
-                        action = '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
-                    }
-                    // Always add a delete button at the end (works for all rows)
-                    action += '<button onclick="window.deleteJobRow(\'' + r.id + '\')" title="Izbriši job" style="margin-left:6px; font-weight:600; padding:6px 9px; background:#fff; color:#B91C1C; border:1px solid #FECACA; border-radius:6px; cursor:pointer; font-size:12px;" onmouseover="this.style.background=\'#FEE2E2\';" onmouseout="this.style.background=\'#fff\';">✕</button>';
-                    // Job type pill
-                    let typeBg, typeFg, typeLbl;
-                    const m = (r.mode || '').toLowerCase();
-                    if (m === 'voiceover' || m === 'vo') { typeBg = '#EDE9FE'; typeFg = '#6D28D9'; typeLbl = 'Voiceover'; }
-                    else if (m === 'subtitles' || m === 'srt') { typeBg = '#CFFAFE'; typeFg = '#0E7490'; typeLbl = 'Podnapisi'; }
-                    else { typeBg = '#E0E7FF'; typeFg = '#3730A3'; typeLbl = 'Lokalizator'; }
-                    const typePill = '<span style="display:inline-block; padding:3px 10px; background:' + typeBg + '; color:' + typeFg + '; border-radius:12px; font-size:11px; font-weight:600;">' + typeLbl + '</span>';
-                    let progressBarHtml = '';
-                    if (r.kind === 'in_progress' && r.totalCount > 0) {
-                        const doneN = (r.completedLangs || []).length;
-                        const pct = Math.max(2, Math.round((doneN / r.totalCount) * 100));
-                        const isErr = ['error','failed','failed_tts','failed_stale','manual_action_required'].includes(r.status);
-                        const barColor = isErr ? '#DC2626' : (pct >= 100 ? '#16A34A' : '#0A59D2');
-                        progressBarHtml = '<div style="margin-top:6px; width:100%; max-width:260px; height:6px; background:#E5E7EB; border-radius:3px; overflow:hidden;">' +
-                            '<div style="height:100%; width:' + pct + '%; background:' + barColor + '; transition:width 0.4s ease;"></div>' +
-                            '</div>' +
-                            '<div style="font-size:10px; color:#6B7280; margin-top:3px;">' + doneN + '/' + r.totalCount + ' jezikov &middot; ' + pct + '%' + (r.currentLang ? ' &middot; ' + r.currentLang + ' ...' : '') + '</div>';
-                    }
-                    // Checkbox za bulk prenos — samo ce ima job prenosljive datoteke
-                    const _hasFiles = (r.filesByLang && Object.keys(r.filesByLang).length > 0);
-                    const _cbCell = _hasFiles
-                        ? '<td style="text-align:center;"><input type="checkbox" class="dl-row-cb" data-job-id="' + String(r.id).replace(/"/g,'&quot;') + '" onclick="window.onDownloadRowCbClick(event)" style="cursor:pointer; width:16px; height:16px;"></td>'
-                        : '<td></td>';
-                    return '<tr data-job-status="' + String(r.status || '') + '">' +
-                        _cbCell +
+                    const action = r.kind === 'completed' ?
+                        '<a class="btn-link" href="/api/localizer/generated/' + r.id + '/zip" title="Prenesi vse kot ZIP" style="font-weight:600; padding:6px 12px; background:#0A59D2; color:white; border-radius:6px; text-decoration:none;">ZIP &darr;</a>' :
+                        '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>';
+                    return '<tr>' +
                         '<td>' + creativeIdHtml + '<span class="activity-source" style="font-weight:600;">' + String(r.name) + '</span>' +
-                        '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div>' + progressBarHtml + '</td>' +
-                        '<td>' + typePill + '</td>' +
+                        '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div></td>' +
                         '<td><div class="activity-langs" style="display:flex; flex-wrap:wrap; gap:4px;">' + (langsHtml || '<span style="color:#9ca3af; font-size:11px;">&mdash;</span>') + '</div></td>' +
                         '<td>' + _statusBadge(r.status) + '</td>' +
-                        '<td class="activity-time">' + _fmtTimeDl(r.timestamp) + '</td>' +
+                        '<td class="activity-time">' + _fmtDateDl(r.timestamp) + '</td>' +
                         '<td style="text-align:right;">' + action + '</td>' +
                         '</tr>';
-                    })();
-                    return sectionHtml + rowHtml;
                 }).join('');
-                // reset bulk-download izbor po vsakem renderju (checkboxi so novi/prazni)
-                const _selAll = document.getElementById('dl-select-all');
-                if (_selAll) _selAll.checked = false;
-                if (window.updateBulkDlUI) window.updateBulkDlUI();
             } catch (e) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Napaka: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Napaka: ' + e.message + '</td></tr>';
             } finally {
                 if (btn) btn.disabled = false;
             }
         }
-        // Delete a job (works for completed + in-progress)
-        // ===== BULK DOWNLOAD (checkbox multi-select, max 10) =====
-        window.MAX_BULK_DL = 10;
-        window.onDownloadRowCbClick = function(ev) {
-            const cb = ev.target;
-            const selected = document.querySelectorAll('.dl-row-cb:checked');
-            if (cb.checked && selected.length > window.MAX_BULK_DL) {
-                cb.checked = false;
-                alert('Naenkrat lahko izbereš največ ' + window.MAX_BULK_DL + ' jobov.');
-                return;
-            }
-            window.updateBulkDlUI();
-        };
-        window.toggleSelectAllDownloads = function(masterCb) {
-            const all = Array.from(document.querySelectorAll('.dl-row-cb'));
-            if (masterCb.checked) {
-                // izberi prvih MAX (do 10), ostale pusti
-                all.forEach((cb, i) => { cb.checked = i < window.MAX_BULK_DL; });
-                if (all.length > window.MAX_BULK_DL) {
-                    masterCb.checked = false; // ni res "vse" ker jih je vec kot 10
-                }
-            } else {
-                all.forEach(cb => { cb.checked = false; });
-            }
-            window.updateBulkDlUI();
-        };
-        window.updateBulkDlUI = function() {
-            const n = document.querySelectorAll('.dl-row-cb:checked').length;
-            const btn = document.getElementById('btn-bulk-dl');
-            const cnt = document.getElementById('bulk-dl-count');
-            if (cnt) cnt.textContent = String(n);
-            if (btn) {
-                btn.disabled = (n === 0);
-                btn.style.opacity = (n === 0) ? '0.5' : '1';
-                btn.style.cursor = (n === 0) ? 'default' : 'pointer';
-            }
-        };
-        window.bulkDownloadSelected = async function() {
-            const ids = Array.from(document.querySelectorAll('.dl-row-cb:checked')).map(cb => cb.getAttribute('data-job-id')).filter(Boolean);
-            if (ids.length === 0) { alert('Nič ni izbrano.'); return; }
-            if (ids.length > window.MAX_BULK_DL) { alert('Največ ' + window.MAX_BULK_DL + ' naenkrat.'); return; }
-            const btn = document.getElementById('btn-bulk-dl');
-            const origHtml = btn ? btn.innerHTML : '';
-            if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.innerHTML = '⏳ Pripravljam ZIP ...'; }
-            try {
-                const resp = await fetch('/api/localizer/bulk-zip', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids })
-                });
-                if (!resp.ok) {
-                    let msg = 'HTTP ' + resp.status;
-                    try { const j = await resp.json(); if (j.error) msg = j.error; } catch(_) {}
-                    throw new Error(msg);
-                }
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const stamp = new Date().toISOString().slice(0,10);
-                a.download = 'voicepilot_' + ids.length + 'jobs_' + stamp + '.zip';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 4000);
-                // po prenosu odkljukaj vse
-                document.querySelectorAll('.dl-row-cb:checked').forEach(cb => { cb.checked = false; });
-                const master = document.getElementById('dl-select-all');
-                if (master) master.checked = false;
-                window.updateBulkDlUI();
-            } catch (e) {
-                alert('Napaka pri prenosu: ' + e.message);
-            } finally {
-                if (btn) { btn.innerHTML = origHtml; btn.style.opacity = '1'; window.updateBulkDlUI(); }
-            }
-        };
-
-        window.deleteJobRow = async function(jobId) {
-            if (!confirm('Izbrišem job ' + jobId + '?\n\nVideo + audio + script datoteke bodo trajno izbrisani.')) return;
-            try {
-                const r = await fetch('/api/localizer/job/' + encodeURIComponent(jobId), {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ author: (window.currentUser || '') })
-                });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok) {
-                    alert(data.error || ('Napaka: ' + r.status));
-                    return;
-                }
-                // Reload table
-                if (typeof loadDownloadsPage === 'function') loadDownloadsPage();
-            } catch(e) {
-                alert('Napaka pri brisanju: ' + (e.message || e));
-            }
-        };
         // auto-refresh every 5s if downloads page is visible AND any in-progress
         setInterval(function() {
             const page = document.getElementById('page-downloads');
             if (!page || page.style.display === 'none') return;
-            const tbody = document.getElementById('downloads-tbody');
-            if (tbody) {
-                const rows = tbody.querySelectorAll('tr[data-job-status]');
-                let hasActive = false;
-                for (const r of rows) {
-                    const st = (r.getAttribute('data-job-status') || '').toLowerCase();
-                    if (st && !['done','completed','complete','error','failed','failed_stale','cancelled','manual_action_required'].includes(st)) { hasActive = true; break; }
-                }
-                if (rows.length > 0 && !hasActive) return;
-            }
-            loadDownloadsPage(true);
+            loadDownloadsPage();
         }, 5000);
         (function(){
             const _origSP = window.switchPage;
