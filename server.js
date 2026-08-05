@@ -6680,6 +6680,7 @@ async function lvRun(job) {
         const _span = 80 / job.langs.length;
         for (const lang of job.langs) {
             const _base = 20 + _li * _span;
+            try {
             lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
             const tr = await lvTranslate(segs, lang, job.product || "NORIKS", job);
             (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
@@ -6796,6 +6797,12 @@ async function lvRun(job) {
             (job.outputs = job.outputs || {})[lang] = out;
             job.progress = Math.min(100, Math.round(20 + (++job.done) * _span)); _li++;
             lvLog(job, `[${lang}] KONCANO ✓`);
+            } catch (eLang) {
+                // ta drzava je padla -> zabelezi in NADALJUJ z ostalimi
+                (job.langErrors = job.langErrors || {})[lang] = String(eLang.message).slice(0, 200);
+                lvLog(job, `[${lang}] NAPAKA (${String(eLang.message).slice(0, 120)}) -> nadaljujem z naslednjo drzavo`);
+                job.done++; _li++;
+            }
         }
         // ── STROSKOVNIK: vsi API klici po postavkah + skupni znesek ──
         const eur = (x) => Math.round(x * 10000) / 10000;
@@ -6823,6 +6830,9 @@ async function lvRun(job) {
         };
         job.cost = eur(cOpenai + cEleven + cVmake);
         lvLog(job, `STROSKI: OpenAI ${eur(cOpenai)} € (gpt ${((job.cost_gptIn||0)+(job.cost_gptOut||0))} tok, vizija ${((job.cost_miniIn||0)+(job.cost_miniOut||0))} tok${job.cost_audTok?`, audio ${job.cost_audTok} tok`:''}${job.cost_whisperMin?`, whisper ${(job.cost_whisperMin).toFixed(1)} min`:''}) | ElevenLabs ${eur(cEleven)} € (TTS ${job.cost_ttsChars||0} znakov, scribe ${(job.cost_scribeMin||0).toFixed(1)} min, klon vkljucen v narocnino) | vmake ${nVmake} nalog${C.vmakeTask?` = ${eur(cVmake)} €`:' (krediti na vmake racunu — EUR cena se ni nastavljena)'} | SKUPAJ ${job.cost} €`);
+        const nOut = Object.keys(job.outputs || {}).length;
+        if (nOut === 0 && job.langErrors && Object.keys(job.langErrors).length) throw new Error('nobena drzava ni uspela: ' + Object.values(job.langErrors)[0]);
+        if (job.langErrors && Object.keys(job.langErrors).length) lvLog(job, 'OPOZORILO: padle drzave: ' + Object.keys(job.langErrors).join(', ') + ' -> gumb ponovi');
         job.status = 'done'; job.progress = 100;
     } catch (e) {
         job.status = 'error'; job.error = e.message; lvLog(job, 'NAPAKA: ' + e.message);
@@ -6862,7 +6872,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 // javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
@@ -6874,6 +6884,26 @@ app.get('/api/lipvoice/src/:id', (req, res) => {
     res.type('video/mp4');
     fs.createReadStream(f).pipe(res);
 });
+// ponovi ENO drzavo: nov job iz ZE OCISCENEGA videa starega joba (vmake se NE ponovi)
+app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
+    const old = lvJobs.get(req.params.id);
+    const L = String(req.params.lang || '').toUpperCase();
+    if (!old) return res.status(404).json({ error: 'Ni joba' });
+    const src = (old.videoPath && fs.existsSync(old.videoPath)) ? old.videoPath
+        : ((old.srcPath && fs.existsSync(old.srcPath)) ? old.srcPath : null);
+    if (!src) return res.status(410).json({ error: 'Izvorni video ni vec na disku' });
+    const id = 'lv-' + Date.now();
+    const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
+        langs: [L], product: old.product || 'NORIKS',
+        clean: src !== old.srcPath ? false : (old.clean !== false), // ze ocisceni video -> brez vmake
+        lipsync: !!old.lipsync,
+        status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
+        log: ['ponovitev drzave ' + L + ' iz joba ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
+    if (src !== old.srcPath) { job.cleaned = old.cleaned; job.enhanced = old.enhanced; }
+    lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
+    res.json({ ok: true, id });
+});
+
 // prenos VSEH drzav enega joba v ZIP
 app.get('/api/lipvoice/download-zip/:id', (req, res) => {
     const j = lvJobs.get(req.params.id);

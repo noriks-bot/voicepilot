@@ -8433,6 +8433,15 @@ document.querySelectorAll('#lvLangs .lv-lang input').forEach(cb=>{
   cb.addEventListener('change',sync); sync();
 });
 let _lvPolling = false;
+async function lvRerun(id,lang){
+  if(!confirm('Ponovim '+lang+'? (vmake čiščenje se NE ponovi — uporabi se že očiščen video)'))return;
+  try{
+    const r=await fetch('/api/lipvoice/rerun/'+id+'/'+lang,{method:'POST'});
+    const d=await r.json();
+    if(!d.ok){alert('Napaka: '+(d.error||r.status));return;}
+    lvStartPolling();
+  }catch(e){alert('Napaka: '+e.message);}
+}
 function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvPoll(); }
 async function lvPoll(){
   if(!document.body.classList.contains('page-lipvoice')){ _lvPolling = false; return; }
@@ -8479,6 +8488,8 @@ async function lvPoll(){
         const ico=done?'✓ ':(active?'⏳ ':'');
         const st=done?' končana':(active?' v delu':(sharedActive?'':' čaka'));
         if(done) return '<a href="/api/lipvoice/download/'+j.id+'/'+L+'" style="padding:3px 10px;border-radius:999px;background:#16a34a;color:#fff;font-size:11px;font-weight:700;text-decoration:none">'+(FLAGS[L]||'')+' ✓ '+L+' ⬇</a>';
+        const failed=(j.langErrors&&j.langErrors[L])||((j.status==='done'||j.status==='error')&&!done);
+        if(failed) return '<a href="javascript:void(0)" onclick="lvRerun(\''+j.id+'\',\''+L+'\')" title="'+((j.langErrors&&j.langErrors[L])||'ni izdelana')+'" style="padding:3px 10px;border-radius:999px;background:#f97316;color:#fff;font-size:11px;font-weight:800;text-decoration:none">'+(FLAGS[L]||'')+' ↻ '+L+' PONOVI</a>';
         return '<span style="padding:3px 10px;border-radius:999px;background:'+bg+';color:'+fg+';font-size:11px;font-weight:700">'+(FLAGS[L]||'')+' '+ico+L+st+'</span>';
       }).join(' ');
       const ur=dt?String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'):'';
