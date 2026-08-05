@@ -5980,12 +5980,13 @@ const LV_EL = 'https://api.elevenlabs.io/v1';
 const lvSh = (s) => String(s).replace(/'/g, "'\\''");
 
 // ── 1) STT: ElevenLabs scribe, ob 401 rezerva na OpenAI Whisper ──
-async function lvSTT(audioPath, job) {
+async function lvSTT(audioPath, job, langHint) {
     try {
         const fd = new FormData();
         fd.append('file', new Blob([fs.readFileSync(audioPath)]), 'a.mp3');
         fd.append('model_id', 'scribe_v1');
         fd.append('timestamps_granularity', 'word');
+        if (langHint) fd.append('language_code', String(langHint).toLowerCase());
         const r = await fetch(`${LV_EL}/speech-to-text`, { method: 'POST', headers: { 'xi-api-key': ELEVENLABS_API_KEY }, body: fd });
         if (r.ok) {
             const d = await r.json();
@@ -6002,6 +6003,7 @@ async function lvSTT(audioPath, job) {
     fd.append('model', 'whisper-1');
     fd.append('response_format', 'verbose_json');
     fd.append('timestamp_granularities[]', 'word');
+    if (langHint) fd.append('language', String(langHint).toLowerCase());
     const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST', headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, body: fd });
     if (!r.ok) throw new Error('STT (Whisper) ' + r.status + ': ' + (await r.text()).slice(0, 200));
@@ -6039,9 +6041,9 @@ async function lvClone(audioPath, job) {
 }
 async function lvDeleteVoice(id) { try { await fetch(`${LV_EL}/voices/${id}`, { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }); } catch (e) {} }
 
-// TTS s klonom (ali rezervo)
-async function lvTTS(text, lang, out, voiceId) {
-    if (!voiceId) return generateTTS(text, lang, out, 1.0, 'male');
+// TTS s klonom (ali rezervo — rezerva UPOSTEVA spol govorca iz izvirnika)
+async function lvTTS(text, lang, out, voiceId, gender) {
+    if (!voiceId) return generateTTS(text, lang, out, 1.0, gender === 'female' ? 'female' : 'male');
     const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
         body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', language_code: lang.toLowerCase(),
@@ -6057,9 +6059,16 @@ async function lvTranslate(segs, lang, product, job) {
     const sys = `You are a native ${FULL[lang] || lang} social-media ad copywriter for the brand ${product}.
 RULES:
 1. Replace EVERY brand, company or product name with "${product}". Never keep any other brand.
+   Write the brand EXACTLY as "${product}" — letter for letter. Never respell it (no "X" instead of "KS",
+   no other variant). Grammatical case endings are allowed (e.g. "${product}a"), the stem never changes.
 2. Translate to natural spoken ${FULL[lang] || lang} for a video ad — persuasive, native, not literal.
-3. Keep each numbered line separate, same count/order, and roughly the SAME SPOKEN LENGTH (this is dubbing).
-4. Output ONLY the numbered lines.`;
+3. Keep each numbered line separate, same count and same order (this is dubbing).
+4. LENGTH IS CRITICAL: each line must take the SAME TIME TO SAY OR LESS than the original.
+   ${FULL[lang] || lang} is usually longer than English/German — so COMPRESS: drop filler words,
+   use shorter synonyms, avoid subordinate clauses. Never pad a line to make it longer.
+   Aim for AT MOST the same number of syllables as the source line.
+5. Write it so it can be spoken calmly, at a normal pace, without rushing.
+6. Output ONLY the numbered lines.`;
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
         body: JSON.stringify({ model: 'gpt-4o', temperature: 0.4, messages: [
@@ -6071,12 +6080,142 @@ RULES:
     if (job) { job.cost_gptIn = (job.cost_gptIn||0) + (_gj.usage?.prompt_tokens||0); job.cost_gptOut = (job.cost_gptOut||0) + (_gj.usage?.completion_tokens||0); }
     const lines = (_gj).choices[0].message.content.trim().split('\n')
         .map(l => l.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
-    return segs.map((s, i) => ({ ...s, text: lines[i] || s.text }));
+    // ime znamke vedno v pravi obliki — tudi ce ga je GPT zapisal drugace (NORIX ipd.)
+    return segs.map((s, i) => ({ ...s, text: lvBrandText(lines[i] || s.text, product) }));
 }
 
-// ── 4) VEED-slog podnapisi (krepko, debel obris, poudarjena beseda) ──
-function lvAss(segs, W, H) {
-    const fs_ = Math.round(W * 0.075);           // ~81px pri 1080
+// ── 4z) IME ZNAMKE: vedno tocno "NORIKS" — nikoli NORIX / NORIC / no riks ──
+// STT nad generiranim govorom zapise ime fonetsko, zato ga tu vedno vrnemo na pravo obliko.
+function _lvBrandNorm(s) {
+    return String(s || '').toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z]/g, '')
+        .replace(/cks|kz|gs|qs|x/g, 'ks');
+}
+function lvBrandWord(word, product) {
+    const P = String(product || 'NORIKS').trim();
+    const bn = _lvBrandNorm(P);
+    if (bn.length < 3) return word;
+    const m = String(word == null ? '' : word).match(/^([^\p{L}]*)(\p{L}+)([\s\S]*)$/u);
+    if (!m) return word;
+    const [, pre, letters, post] = m;
+    // dovolimo do 3 znake sklonske koncnice (Noriksa, Noriksu, Noriksom)
+    for (let cut = 0; cut <= 3 && cut < letters.length; cut++) {
+        const head = letters.slice(0, letters.length - cut);
+        if (_lvBrandNorm(head) === bn) {
+            const suf = letters.slice(letters.length - cut);
+            const base = (head === head.toUpperCase() && head.length > 1)
+                ? P.toUpperCase()
+                : P.charAt(0).toUpperCase() + P.slice(1).toLowerCase();
+            return pre + base + suf + post;
+        }
+    }
+    return word;
+}
+function lvBrandText(text, product) {
+    let t = String(text == null ? '' : text);
+    // ime, razbito na dva dela ("no riks", "nori ks")
+    const P = String(product || 'NORIKS').trim();
+    t = t.replace(/(\p{L}+)\s+(\p{L}+)/gu, (m, a, b) =>
+        _lvBrandNorm(a + b) === _lvBrandNorm(P) ? P : m);
+    return t.replace(/[^\s]+/gu, w => lvBrandWord(w, P));
+}
+// isto nad besedami STT — sosednji par zdruzimo v eno besedo s skupnim casom
+function lvBrandWords(words, product) {
+    const P = String(product || 'NORIKS').trim();
+    const bn = _lvBrandNorm(P);
+    const out = [];
+    for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        if (i + 1 < words.length && _lvBrandNorm(w.w + words[i + 1].w) === bn) {
+            out.push({ w: P, s: w.s, e: words[i + 1].e });
+            i++; continue;
+        }
+        out.push(Object.assign({}, w, { w: lvBrandWord(w.w, P) }));
+    }
+    return out;
+}
+
+// ── 4a) besede DEJANSKEGA govora -> kratki napisi (cue-ji) ──
+// Vhod so besede iz STT nad GENERIRANIM zvokom, zato so casi 1:1 z govorom.
+function lvCues(words, opts) {
+    const o = Object.assign({ maxChars: 42, maxWords: 7, maxDur: 3.0, splitPause: 0.5 }, opts || {});
+    const cues = []; let c = null;
+    for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        if (!w || !w.w || !w.w.trim()) continue;
+        const pauseBefore = c ? (w.s - c.words[c.words.length - 1].e) : 0;
+        const wouldChars = c ? (c.text.length + 1 + w.w.length) : w.w.length;
+        const wouldDur = c ? (w.e - c.s) : 0;
+        const mustBreak = c && (
+            wouldChars > o.maxChars ||
+            c.words.length >= o.maxWords ||
+            wouldDur > o.maxDur ||
+            pauseBefore > o.splitPause ||
+            /[.!?]$/.test(c.words[c.words.length - 1].w)
+        );
+        if (mustBreak) { cues.push(c); c = null; }
+        if (!c) c = { s: w.s, e: w.e, text: w.w, words: [w] };
+        else { c.text += (/^[.,!?;:]/.test(w.w) ? '' : ' ') + w.w; c.e = w.e; c.words.push(w); }
+    }
+    if (c) cues.push(c);
+    // rep vsakega napisa malo podaljsaj, da beseda ne izgine tocno ob koncu zvoka
+    for (let i = 0; i < cues.length; i++) {
+        const next = cues[i + 1];
+        const room = next ? Math.max(0, next.s - cues[i].e) : 0.35;
+        cues[i].e += Math.min(0.30, room > 0.06 ? room - 0.04 : 0);
+    }
+    return cues;
+}
+
+// ── 4b) VEED-slog podnapisi: SREDINSKO, samodejno prelomljeno, BREZ utripanja ──
+// Kljucno: vrstice so casovno ZVEZNE (od te besede do zacetka naslednje),
+// zato napis nikoli ne ugasne sredi stavka.
+function lvAss(cues, W, H) {
+    const fs_ = Math.round(W * 0.058);           // ~63px pri 1080 (prej 81 -> je uhajalo z ekrana)
+    const mv = Math.round(H * 0.14);
+    const mh = Math.round(W * 0.08);             // levi/desni rob -> besedilo ostane v kadru
+    const t = (x) => { x = Math.max(0, x); const h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), s = (x % 60).toFixed(2).padStart(5, '0'); return `${h}:${String(m).padStart(2, '0')}:${s}`; };
+    const esc = (x) => String(x || '').replace(/[{}\\]/g, '').replace(/\n/g, ' ');
+    let a = `[Script Info]
+ScriptType: v4.00+
+PlayResX: ${W}
+PlayResY: ${H}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: V,DejaVu Sans,${fs_},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,${Math.round(fs_ * 0.13)},${Math.round(fs_ * 0.06)},2,${mh},${mh},${mv},1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+`;
+    const HL = '&H0000E8FF&';                     // VEED-rumena za trenutno besedo
+    const WH = '&H00FFFFFF&';
+    for (let ci = 0; ci < cues.length; ci++) {
+        const cue = cues[ci];
+        const parts = (cue.words || []).map(w => esc(w.w)).filter(Boolean);
+        if (!parts.length) continue;
+        if (parts.length === 1) {
+            a += `Dialogue: 0,${t(cue.s)},${t(cue.e)},V,,0,0,0,,{\\fad(80,80)}{\\c${HL}}${parts[0]}{\\c${WH}}\n`;
+            continue;
+        }
+        for (let i = 0; i < parts.length; i++) {
+            // ZVEZNO: od te besede do zacetka naslednje (brez lukenj -> brez utripanja)
+            const from = i === 0 ? cue.s : cue.words[i].s;
+            const to = i === parts.length - 1 ? cue.e : cue.words[i + 1].s;
+            if (!(to > from + 0.02)) continue;
+            const line = parts.map((p, k) => k === i ? `{\\c${HL}}${p}{\\c${WH}}` : p).join(' ');
+            const fade = i === 0 ? '{\\fad(80,0)}' : (i === parts.length - 1 ? '{\\fad(0,80)}' : '');
+            a += `Dialogue: 0,${t(from)},${t(to)},V,,0,0,0,,${fade}${line}\n`;
+        }
+    }
+    return a;
+}
+
+function lvAssOld(segs, W, H) {
+    const fs_ = Math.round(W * 0.075);
     const mv = Math.round(H * 0.16);
     const t = (x) => { const h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), s = (x % 60).toFixed(2).padStart(5, '0'); return `${h}:${String(m).padStart(2, '0')}:${s}`; };
     const esc = (x) => String(x || '').replace(/[{}\\]/g, '').replace(/\n/g, ' ');
@@ -6128,11 +6267,59 @@ async function lvHasFace(video, work, job) {
             body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 5, messages: [{ role: 'user', content: [
                 { type: 'text', text: 'Do these video frames show a person whose FACE and MOUTH are clearly visible and talking to camera? Answer only YES or NO.' }, ...imgs] }] })
         });
-        if (!r.ok) return false;
+        if (!r.ok) return { face: false, gender: null };
         const ans = (await r.json()).choices[0].message.content.trim().toUpperCase();
         lvLog(job, 'obraz v kadru: ' + ans);
-        return ans.startsWith('Y');
-    } catch (e) { lvLog(job, 'zaznava obraza ni uspela -> brez lipsynca'); return false; }
+        return { face: ans.startsWith('Y'), gender: null };
+    } catch (e) { lvLog(job, 'zaznava obraza ni uspela -> brez lipsynca'); return { face: false, gender: null }; }
+}
+
+// ── 5b) spol govorca (da rezervni glas ni moski, ko govori zenska, in obratno) ──
+// Posluh: gpt-4o-audio-preview nad izsekom izvirnega zvoka. Ob napaki -> slika, nato 'male'.
+async function lvSpeakerGender(audioPath, work, job) {
+    // a) po zvoku (najbolj zanesljivo — deluje tudi brez obraza v kadru)
+    try {
+        const clip = path.join(work, 'gender.mp3');
+        await execPromise(`ffmpeg -y -i '${lvSh(audioPath)}' -t 12 -ac 1 -ar 16000 -b:a 64k '${lvSh(clip)}' 2>/dev/null`);
+        const b64 = fs.readFileSync(clip).toString('base64');
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+            body: JSON.stringify({
+                model: 'gpt-4o-audio-preview', max_tokens: 4,
+                modalities: ['text'],
+                messages: [{ role: 'user', content: [
+                    { type: 'text', text: 'Listen to the speaker. Is the voice MALE or FEMALE? Answer with one word: MALE or FEMALE.' },
+                    { type: 'input_audio', input_audio: { data: b64, format: 'mp3' } }] }]
+            })
+        });
+        if (r.ok) {
+            const a = (await r.json()).choices[0].message.content.trim().toUpperCase();
+            if (a.includes('FEMALE')) { lvLog(job, 'spol govorca: ZENSKA (po zvoku)'); return 'female'; }
+            if (a.includes('MALE')) { lvLog(job, 'spol govorca: MOSKI (po zvoku)'); return 'male'; }
+        } else { lvLog(job, 'spol po zvoku ' + r.status + ' -> poskusim po sliki'); }
+    } catch (e) { lvLog(job, 'spol po zvoku ni uspel -> poskusim po sliki'); }
+
+    // b) rezerva: po sliki (kadri so ze izluscen v lvHasFace)
+    try {
+        const d = path.join(work, 'fr');
+        const files = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.jpg')).slice(0, 4) : [];
+        if (files.length) {
+            const imgs = files.map(f => ({ type: 'image_url',
+                image_url: { url: 'data:image/jpeg;base64,' + fs.readFileSync(path.join(d, f)).toString('base64'), detail: 'low' } }));
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+                body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 4, messages: [{ role: 'user', content: [
+                    { type: 'text', text: 'Is the person speaking in these frames a MAN or a WOMAN? Answer one word: MALE or FEMALE.' }, ...imgs] }] })
+            });
+            if (r.ok) {
+                const a = (await r.json()).choices[0].message.content.trim().toUpperCase();
+                if (a.includes('FEMALE')) { lvLog(job, 'spol govorca: ZENSKA (po sliki)'); return 'female'; }
+                if (a.includes('MALE')) { lvLog(job, 'spol govorca: MOSKI (po sliki)'); return 'male'; }
+            }
+        }
+    } catch (e) {}
+    lvLog(job, 'spola ne morem zaznati -> privzeto MOSKI');
+    return 'male';
 }
 
 // ── 6) pipeline ──
@@ -6161,41 +6348,97 @@ async function lvRun(job) {
         job.sourceLang = stt.lang; job.sourceText = stt.text;
         lvLog(job, `prepoznano ${segs.length} segmentov (${stt.lang})`);
 
-        job.hasFace = await lvHasFace(job.videoPath, work, job);
+        const fa = await lvHasFace(job.videoPath, work, job);
+        job.hasFace = fa.face;
+        // spol govorca zaznamo VEDNO — rezervni glas mora biti istega spola kot izvirnik
+        job.gender = clonedVoice ? null : await lvSpeakerGender(aud, work, job);
 
         for (const lang of job.langs) {
-            lvLog(job, `[${lang}] prevajam (znamke -> NORIKS)…`);
+            lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
             const tr = await lvTranslate(segs, lang, job.product || "NORIKS", job);
             (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
 
+            // ── govor po segmentih ──
             const parts = [];
             for (let i = 0; i < tr.length; i++) {
                 const mp3 = path.join(work, `${lang}-${i}.mp3`);
-                await lvTTS(tr[i].text, lang, mp3, clonedVoice); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
+                await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
                 const dd = parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(mp3)}'`)).stdout || '0').trim()) || 0;
-                const slot = Math.max(0.5, (i + 1 < tr.length ? tr[i + 1].s : DUR) - tr[i].s);
-                parts.push({ mp3, s: tr[i].s, d: dd, slot });
+                parts.push({ mp3, srcS: tr[i].s, srcE: tr[i].e, d: dd });
                 if ((i + 1) % 3 === 0) lvLog(job, `[${lang}] govor ${i + 1}/${tr.length}`);
             }
+
+            // ── NARAVNA casovnica: segmenti se NIKOLI ne prekrivajo in ne rezejo ──
+            // Premor med segmenti povzamemo po izvirniku, a ga omejimo (brez grdih lukenj).
+            const MIN_PAUSE = 0.10, MAX_PAUSE = 0.50;
+            const starts = [];
+            for (let i = 0; i < parts.length; i++) {
+                if (i === 0) { starts.push(Math.max(0, Math.min(parts[0].srcS, 0.6))); continue; }
+                const srcPause = parts[i].srcS - parts[i - 1].srcE;
+                const pause = Math.min(MAX_PAUSE, Math.max(MIN_PAUSE, isFinite(srcPause) ? srcPause : 0.2));
+                starts.push(starts[i - 1] + parts[i - 1].d + pause);
+            }
+            const rawTotal = parts.length ? starts[parts.length - 1] + parts[parts.length - 1].d : 0;
+
+            // Ce je govor daljsi od videa: NAJVEC 1.12x pohitritev (prej do 1.9x = "prehitro"),
+            // ostanek raje podaljsamo video z zamrznjeno zadnjo sliko.
+            let tempo = 1;
+            if (rawTotal > DUR + 0.05 && DUR > 0) tempo = Math.min(1.12, rawTotal / DUR);
+            const startsF = starts.map(s => s / tempo);
+            const durF = parts.map(p => p.d / tempo);
+            const totalF = parts.length ? startsF[parts.length - 1] + durF[parts.length - 1] : 0;
+            const vidPad = Math.max(0, totalF - DUR);
+            lvLog(job, `[${lang}] govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s` +
+                (tempo > 1.001 ? ` — tempo ${tempo.toFixed(3)}x` : ' — brez pohitritve') +
+                (vidPad > 0.05 ? `, video podaljsan za ${vidPad.toFixed(1)}s` : ''));
+
             const ins = parts.map(p => `-i '${lvSh(p.mp3)}'`).join(' ');
             const filt = parts.map((p, i) => {
-                const r = p.d > p.slot && p.slot > 0 ? Math.min(1.9, p.d / p.slot) : 1;
-                return `[${i}:a]adelay=${Math.round(p.s * 1000)}|${Math.round(p.s * 1000)}${r > 1.02 ? `,atempo=${r.toFixed(3)}` : ''}[a${i}]`;
+                const dly = Math.round(startsF[i] * 1000);
+                const tp = tempo > 1.001 ? `atempo=${tempo.toFixed(3)},` : '';
+                return `[${i}:a]${tp}adelay=${dly}|${dly}[a${i}]`;
             }).join(';');
             const voice = path.join(work, `voice-${lang}.mp3`);
             await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -b:a 192k '${lvSh(voice)}' 2>/dev/null`);
             lvLog(job, `[${lang}] govor sestavljen`);
 
-            // video + nov zvok (lipsync tocka: ce hasFace -> Wav2Lip, sicer preskoci)
-            let base = path.join(work, `base-${lang}.mp4`);
-            await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -map 0:v -map 1:a -c:v copy -c:a aac -shortest '${lvSh(base)}' 2>/dev/null`);
-            if (job.hasFace) lvLog(job, `[${lang}] obraz zaznan -> lipsync (Wav2Lip) se ni namescen, preskocim`);
+            // izvirni zvok gre na 0 — v izhod damo SAMO nas govor (samo 1:a je mapiran spodaj)
+            lvLog(job, `[${lang}] izvirni zvok UTISAN (0%) — slisi se samo ${lang} govor`);
+            if (job.hasFace) lvLog(job, `[${lang}] obraz zaznan — Wav2Lip ni namescen na strezniku, lipsync preskocen`);
 
-            // PODNAPISI NA KONCU
+            // ── PODNAPISI IZ DEJANSKEGA GOVORA ──
+            // STT nad ZE SESTAVLJENIM zvokom -> casi besed so 1:1 z govorom (ne vec iz izvirnika!).
+            let cues = null;
+            try {
+                const vstt = await lvSTT(voice, job, lang);
+                if (vstt.words && vstt.words.length) {
+                    // STT zapise ime fonetsko (NORIX, "no riks") -> vrnemo na tocno obliko
+                    const fixed = lvBrandWords(vstt.words, job.product || 'NORIKS');
+                    cues = lvCues(fixed);
+                    cues.forEach(c => { c.text = lvBrandText(c.text, job.product || 'NORIKS'); });
+                    lvLog(job, `[${lang}] podnapisi iz govora: ${vstt.words.length} besed -> ${cues.length} napisov ✓`);
+                }
+            } catch (e) { lvLog(job, `[${lang}] STT nad govorom ni uspel (${e.message.slice(0, 60)}) -> rezervni casi`); }
+
+            if (!cues) {
+                // rezerva: casi iz DEJANSKIH dolzin TTS (ne iz izvirnika) — besede razporedimo enakomerno
+                cues = [];
+                for (let i = 0; i < parts.length; i++) {
+                    const words = String(tr[i].text || '').split(/\s+/).filter(Boolean);
+                    if (!words.length) continue;
+                    const st = startsF[i], dd = durF[i], per = dd / words.length;
+                    cues.push(...lvCues(words.map((w, k) => ({ w, s: st + k * per, e: st + (k + 1) * per }))));
+                }
+                lvLog(job, `[${lang}] podnapisi iz dolzin TTS (rezerva): ${cues.length} napisov`);
+            }
+
             const ass = path.join(work, `subs-${lang}.ass`);
-            fs.writeFileSync(ass, lvAss(tr, W, H));
+            fs.writeFileSync(ass, lvAss(cues, W, H));
+
+            // en sam prehod: podaljsanje videa + podnapisi + nov zvok
             const out = path.join(work, `${job.name}-${lang}.mp4`);
-            await execPromise(`ffmpeg -y -i '${lvSh(base)}' -vf "ass='${lvSh(ass)}'" -c:v libx264 -preset veryfast -crf 22 -c:a copy '${lvSh(out)}' 2>/dev/null`);
+            const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
+            await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest '${lvSh(out)}' 2>/dev/null`);
             (job.outputs = job.outputs || {})[lang] = out;
             job.progress = Math.round((++job.done) / job.langs.length * 100);
             lvLog(job, `[${lang}] KONCANO ✓`);
@@ -6221,7 +6464,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 app.get('/api/lipvoice/download/:id/:lang', (req, res) => {
