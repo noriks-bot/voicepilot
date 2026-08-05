@@ -5979,6 +5979,109 @@ const lvUpload = multer({
 const LV_EL = 'https://api.elevenlabs.io/v1';
 const lvSh = (s) => String(s).replace(/'/g, "'\\''");
 
+// ═══ KORAK 0: VMAKE — odstrani vzgane podnapise / logotipe / watermarke ═══
+const VM_AK = process.env.VMAKE_AK || '';
+const VM_SK = process.env.VMAKE_SK || '';
+const VM_TASK = process.env.VMAKE_TASK || 'videoscreenclear';   // celozaslonsko ciscenje (Smart pro)
+const VM_PUBLIC = process.env.VMAKE_PUBLIC_BASE || 'https://voicepilot.noriks.com';
+const VM_WAPI = 'https://wapi-skill.vmake.ai';
+const _vmSha = (s) => require('crypto').createHash('sha256').update(s || '', 'utf8').digest('hex');
+
+function vmSignHeaders(method, url, headers, body) {
+    const u = new URL(url);
+    const dt = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    const h = Object.assign({}, headers, { 'X-Sdk-Date': dt, Host: u.host });
+    const signed = Object.keys(h).map(k => k.toLowerCase()).sort();
+    const low = {}; for (const k of Object.keys(h)) low[k.toLowerCase()] = String(h[k]).trim();
+    let uri = u.pathname; if (!uri.endsWith('/')) uri += '/';
+    const qp = [...u.searchParams.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const cq = qp.map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
+    const ch = signed.map(k => `${k}:${low[k]}`).join('\n');
+    const canonical = [method, uri, cq, ch, signed.join(';'), _vmSha(body || '')].join('\n');
+    const sts = `SDK-HMAC-SHA256\n${dt}\n${_vmSha(canonical)}`;
+    const sig = require('crypto').createHmac('sha256', VM_SK).update(sts, 'utf8').digest('hex');
+    h.Authorization = 'Bearer ' + Buffer.from(
+        `SDK-HMAC-SHA256 Access=${VM_AK}, SignedHeaders=${signed.join(';')}, Signature=${sig}`, 'utf8').toString('base64');
+    return h;
+}
+async function vmCall(method, url, bodyObj) {
+    const body = bodyObj === undefined ? '' : JSON.stringify(bodyObj);
+    const base = { 'User-Agent': 'action-web-skill-v1.3.0' };
+    if (body) base['Content-Type'] = 'application/json';
+    const r = await fetch(url, { method, headers: vmSignHeaders(method, url, base, body), body: body || undefined });
+    const txt = await r.text();
+    let json = null; try { json = JSON.parse(txt); } catch (e) {}
+    if (json && json.meta && json.meta.code !== 0 && json.meta.code !== undefined && json.meta.code !== 200)
+        throw new Error('vmake ' + json.meta.code + ': ' + (json.meta.msg || '').slice(0, 120));
+    return json || {};
+}
+
+// ali je na videu sploh kaj za odstraniti (da ne trosimo kreditov po nepotrebnem)
+async function vmNeedsClean(work, job) {
+    try {
+        const d = path.join(work, 'fr');
+        const files = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.jpg')).slice(0, 5) : [];
+        if (!files.length) return true;
+        const imgs = files.map(f => ({ type: 'image_url',
+            image_url: { url: 'data:image/jpeg;base64,' + fs.readFileSync(path.join(d, f)).toString('base64'), detail: 'low' } }));
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 5, messages: [{ role: 'user', content: [
+                { type: 'text', text: 'Do these frames contain any OVERLAID graphics burned into the video — subtitles/captions, on-screen text, a logo, or a watermark? Ignore text that is physically part of the scene (on clothing, packaging, signs). Answer only YES or NO.' },
+                ...imgs] }] })
+        });
+        if (!r.ok) return true;
+        const a = (await r.json()).choices[0].message.content.trim().toUpperCase();
+        lvLog(job, 'vzgani napisi/logotipi na videu: ' + a);
+        return a.startsWith('Y');
+    } catch (e) { return true; }
+}
+
+// celoten vmake potek: config -> token_policy -> consume -> invoke -> poll
+async function vmCleanVideo(job, srcUrl) {
+    const cfg = await vmCall('POST', `${VM_WAPI}/skill/config.json`, { gid: '', version: 'v1.0.0' });
+    const algo = (cfg.response || {}).algorithm || {};
+    const preset = (algo.invoke || {})[VM_TASK];
+    if (!preset) throw new Error(`vmake: naloga "${VM_TASK}" ni na voljo (na voljo: ${Object.keys(algo.invoke || {}).join(', ')})`);
+    const regionHost = Object.values(algo.regions || {})[0] || 'strategy.stariidata.com';
+    const typ = algo.token_policy_type || 'mtai';
+
+    const pol = await vmCall('GET', `https://${regionHost}/ai/token_policy?type=${typ}`);
+    const mt = ((pol.data || {})[typ]) || (pol.data || {}).mtai;
+    const policy = mt.api[mt.api.order[0]];
+
+    const cons = await vmCall('POST', `${VM_WAPI}/skill/consume.json`, { url: srcUrl, task: VM_TASK, gid: '' });
+    const context = (cons.response || {}).context || '';
+    lvLog(job, `vmake: kvota potrjena, posiljam nalogo ${VM_TASK}`);
+
+    const base = String(policy.url).replace(/\/+$/, '');
+    const run = await vmCall('POST', `${base}/${policy.push_path}`, {
+        params: JSON.stringify(preset.params || {}),
+        context, task: preset.task, task_type: preset.task_type || 'mtlab',
+        sync_timeout: policy.sync_timeout, init_images: [{ url: srcUrl }]
+    });
+
+    let data = run.data || {};
+    if (data.status === 9) {
+        const tid = data.result.id;
+        lvLog(job, `vmake: naloga ${tid} tece, cakam…`);
+        const gaps = String((policy.status_query || {}).durations || '3000').split(',').map(Number);
+        for (let i = 0; i < 200; i++) {
+            await new Promise(r => setTimeout(r, gaps[Math.min(i, gaps.length - 1)] || 2000));
+            const st = await vmCall('GET', `${base}/${policy.status_query.path}?task_id=${encodeURIComponent(tid)}`);
+            data = st.data || {};
+            if (data.status !== 9 && data.status !== 1 && data.status !== 0) break;
+            if (i % 10 === 9) lvLog(job, `vmake: se obdeluje (${i + 1})`);
+        }
+    }
+    const res = data.result || {};
+    const url = res.media_url || res.url ||
+        (Array.isArray(res.media_info_list) && res.media_info_list[0] && res.media_info_list[0].media_data) ||
+        (Array.isArray(res.images) && res.images[0] && (res.images[0].url || res.images[0]));
+    if (!url) throw new Error('vmake: brez izhodnega URL (status ' + data.status + ')');
+    return url;
+}
+
 // ── 1) STT: ElevenLabs scribe, ob 401 rezerva na OpenAI Whisper ──
 async function lvSTT(audioPath, job, langHint) {
     try {
@@ -6139,7 +6242,7 @@ function lvBrandWords(words, product) {
 // ── 4a) besede DEJANSKEGA govora -> kratki napisi (cue-ji) ──
 // Vhod so besede iz STT nad GENERIRANIM zvokom, zato so casi 1:1 z govorom.
 function lvCues(words, opts) {
-    const o = Object.assign({ maxChars: 42, maxWords: 7, maxDur: 3.0, splitPause: 0.5 }, opts || {});
+    const o = Object.assign({ maxChars: 30, maxWords: 5, maxDur: 2.6, splitPause: 0.45 }, opts || {});
     const cues = []; let c = null;
     for (let i = 0; i < words.length; i++) {
         const w = words[i];
@@ -6152,7 +6255,9 @@ function lvCues(words, opts) {
             c.words.length >= o.maxWords ||
             wouldDur > o.maxDur ||
             pauseBefore > o.splitPause ||
-            /[.!?]$/.test(c.words[c.words.length - 1].w)
+            /[.!?]$/.test(c.words[c.words.length - 1].w) ||
+            // nov stavek tudi brez pike: premor + velika zacetnica
+            (pauseBefore > 0.22 && c.words.length >= 2 && /^\p{Lu}/u.test(w.w))
         );
         if (mustBreak) { cues.push(c); c = null; }
         if (!c) c = { s: w.s, e: w.e, text: w.w, words: [w] };
@@ -6172,7 +6277,7 @@ function lvCues(words, opts) {
 // Kljucno: vrstice so casovno ZVEZNE (od te besede do zacetka naslednje),
 // zato napis nikoli ne ugasne sredi stavka.
 function lvAss(cues, W, H) {
-    const fs_ = Math.round(W * 0.058);           // ~63px pri 1080 (prej 81 -> je uhajalo z ekrana)
+    const fs_ = Math.round(W * 0.082);           // ~89px pri 1080 — vecja pisava (kratki napisi + prelom jo prenesejo)
     const mv = Math.round(H * 0.14);
     const mh = Math.round(W * 0.08);             // levi/desni rob -> besedilo ostane v kadru
     const t = (x) => { x = Math.max(0, x); const h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), s = (x % 60).toFixed(2).padStart(5, '0'); return `${h}:${String(m).padStart(2, '0')}:${s}`; };
@@ -6256,7 +6361,9 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 async function lvHasFace(video, work, job) {
     try {
         const d = path.join(work, 'fr'); if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-        await execPromise(`ffmpeg -y -i '${lvSh(video)}' -vf "fps=1/3,scale=160:-1" -q:v 5 '${lvSh(d)}/f-%03d.jpg' 2>/dev/null`);
+        // kadre je praviloma ze izluscil korak 0 (iz ocescenega videa) — ponovimo le, ce jih ni
+        if (!fs.readdirSync(d).some(f => f.endsWith('.jpg')))
+            await execPromise(`ffmpeg -y -i '${lvSh(video)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(d)}/f-%03d.jpg' 2>/dev/null`);
         const files = fs.readdirSync(d).filter(f => f.endsWith('.jpg')).slice(0, 12);
         if (!files.length) return false;
         // GPT-4o vision: ali je v kadru govorec z vidnim obrazom
@@ -6329,6 +6436,40 @@ async function lvRun(job) {
         job.status = 'running'; lvSave();
         const work = path.join(LV_OUT, job.id);
         if (!fs.existsSync(work)) fs.mkdirSync(work, { recursive: true });
+
+        // kadri (uporabimo jih za: ali je kaj za odstraniti, obraz, spol)
+        const frDir = path.join(work, 'fr');
+        if (!fs.existsSync(frDir)) fs.mkdirSync(frDir, { recursive: true });
+        try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`); } catch (e) {}
+
+        // ── KORAK 0: ocisti izvirnik (vzgani podnapisi, logotipi, watermarki) ──
+        if (VM_AK && VM_SK && job.clean !== false) {
+            try {
+                if (await vmNeedsClean(work, job)) {
+                    const srcUrl = `${VM_PUBLIC}/api/lipvoice/src/${job.id}`;
+                    lvLog(job, `vmake: ciscenje izvirnika (${VM_TASK})…`);
+                    const outUrl = await vmCleanVideo(job, srcUrl);
+                    const cleaned = path.join(work, 'clean.mp4');
+                    const rr = await fetch(outUrl);
+                    if (!rr.ok) throw new Error('prenos ocescenega videa ' + rr.status);
+                    fs.writeFileSync(cleaned, Buffer.from(await rr.arrayBuffer()));
+                    job.videoPath = cleaned; job.cleaned = true;
+                    lvLog(job, 'vmake: izvirnik ocisten ✓ (nadaljnji koraki tecejo na ocescenem videu)');
+                    // kadri iz OCESCENEGA videa (za obraz/spol)
+                    try {
+                        fs.readdirSync(frDir).forEach(f => { try { fs.unlinkSync(path.join(frDir, f)); } catch (e) {} });
+                        await execPromise(`ffmpeg -y -i '${lvSh(cleaned)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
+                    } catch (e) {}
+                } else {
+                    lvLog(job, 'vmake: na videu ni vzganih napisov -> ciscenje ni potrebno');
+                }
+            } catch (e) {
+                job.cleaned = false;
+                lvLog(job, 'vmake ciscenje ni uspelo (' + String(e.message).slice(0, 120) + ') -> nadaljujem z izvirnikom');
+            }
+        } else if (!VM_AK || !VM_SK) {
+            lvLog(job, 'vmake: kljuca VMAKE_AK/VMAKE_SK nista nastavljena -> ciscenje preskoceno');
+        }
 
         const probe = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -show_entries format=duration -of csv=p=0 '${lvSh(job.videoPath)}'`);
         const nums = String(probe.stdout || probe).match(/[\d.]+/g) || [];
@@ -6456,7 +6597,9 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
     const langs = (req.body.langs || 'HR').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     const id = 'lv-' + Date.now();
     const job = { id, name: (path.parse(req.file.originalname).name.replace(/[^\w-]/g, '_') || 'video'),
-        videoPath: req.file.path, langs, product: (req.body.product||"NORIKS").trim(), status: 'queued', progress: 0, done: 0,
+        videoPath: req.file.path, srcPath: req.file.path, langs, product: (req.body.product||"NORIKS").trim(),
+        clean: String(req.body.clean || '1') !== '0',
+        status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
     lvJobs.set(id, job); lvSave(); setImmediate(() => lvRun(job));
     res.json({ ok: true, id, langs });
@@ -6464,9 +6607,17 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
+// javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
+app.get('/api/lipvoice/src/:id', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    const f = j && (j.srcPath || j.videoPath);
+    if (!f || !fs.existsSync(f)) return res.status(404).send('Ni datoteke');
+    res.type('video/mp4');
+    fs.createReadStream(f).pipe(res);
+});
 app.get('/api/lipvoice/download/:id/:lang', (req, res) => {
     const j = lvJobs.get(req.params.id), L = req.params.lang.toUpperCase();
     const f = j && j.outputs && j.outputs[L];
