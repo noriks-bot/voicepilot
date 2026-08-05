@@ -6836,7 +6836,26 @@ async function lvRun(job) {
         job.status = 'done'; job.progress = 100;
     } catch (e) {
         job.status = 'error'; job.error = e.message; lvLog(job, 'NAPAKA: ' + e.message);
-    } finally { if (clonedVoice) await lvDeleteVoice(clonedVoice); lvSave(); }
+    } finally {
+        if (clonedVoice) await lvDeleteVoice(clonedVoice);
+        // ponovitev: rezultat vgradi nazaj v starsev job (en sam row v UI)
+        if (job.parentId) {
+            const par = lvJobs.get(job.parentId);
+            if (par) {
+                const L = job.parentLang;
+                if (par.rerunning) delete par.rerunning[L];
+                if (job.outputs && job.outputs[L]) {
+                    (par.outputs = par.outputs || {})[L] = job.outputs[L];
+                    if (par.langErrors) delete par.langErrors[L];
+                    if (Object.keys(par.langErrors || {}).length === 0) { par.status = 'done'; par.error = undefined; par.progress = 100; }
+                    (par.log = par.log || []).push('[' + L + '] ponovitev USPESNA ✓');
+                } else {
+                    (par.log = par.log || []).push('[' + L + '] ponovitev NI uspela: ' + String(job.error || 'napaka').slice(0, 120));
+                }
+            }
+        }
+        lvSave();
+    }
 }
 
 // ── 6b) vrsta: naenkrat tece najvec LIPVOICE_CONCURRENCY jobov (privzeto 1) ──
@@ -6870,9 +6889,9 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
     res.json({ ok: true, id, langs });
 });
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
-    [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
+    [...lvJobs.values()].filter(j => !j.hidden).sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 // javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
@@ -6897,9 +6916,12 @@ app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
         langs: [L], product: old.product || 'NORIKS',
         clean: src !== old.srcPath ? false : (old.clean !== false), // ze ocisceni video -> brez vmake
         lipsync: !!old.lipsync,
+        hidden: true, parentId: old.id, parentLang: L,   // tece SKRITO, rezultat gre v starsev row
         status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
         log: ['ponovitev drzave ' + L + ' iz joba ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
     if (src !== old.srcPath) { job.cleaned = old.cleaned; job.enhanced = old.enhanced; }
+    (old.rerunning = old.rerunning || {})[L] = true;
+    (old.log = old.log || []).push('[' + L + '] ponovitev v teku…');
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
     res.json({ ok: true, id });
 });
