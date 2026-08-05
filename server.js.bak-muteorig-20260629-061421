@@ -2968,7 +2968,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // Generate all 7 country videos
 app.post('/api/localizer/generate', async (req, res) => {
     console.log('Generate request:', JSON.stringify(req.body, null, 2));
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, voiceGender } = req.body;
+    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration } = req.body;
     if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
         console.log('Generate 400: videoClean=', videoClean, 'texts=', texts);
         return res.status(400).json({ error: 'Missing data: videoClean=' + !!videoClean + ' texts=' + (texts?.length || 0) });
@@ -3014,7 +3014,6 @@ app.post('/api/localizer/generate', async (req, res) => {
         mode: mode || 'subtitles',
         voiceoverScript: voiceoverScript || null,
         videoDuration: actualVideoDuration || videoDuration || null,
-        voiceGender: (voiceGender === 'female') ? 'female' : 'male', // male=default, female=VOICE_MAP_FEMALE
         status: 'translating',
         completed: 0,
         currentLang: '',
@@ -3513,22 +3512,6 @@ const VOICE_MAP = {
     EN: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }              // English fallback
 };
 
-// Voice IDs for each language - FEMALE narrator voices (ElevenLabs multilingual)
-// Validated working across all target languages via the same model-fallback chain.
-const VOICE_MAP_FEMALE = {
-    SI: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', model: 'eleven_v3' },   // Slovenian (v3 supports sl)
-    HR: { voice_id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte' },                    // Croatian female
-    CZ: { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura' },                        // Czech female
-    PL: { voice_id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice' },                        // Polish female
-    GR: { voice_id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda' },                      // Greek female
-    IT: { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },                      // Italian female
-    HU: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', model: 'eleven_v3' },    // Hungarian (v3 supports hu)
-    SK: { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura' },                        // Slovak female
-    BG: { voice_id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte' },                    // Bulgarian female
-    RO: { voice_id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },                      // Romanian female
-    EN: { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah' }                         // English fallback
-};
-
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
     SI: 'sl', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
@@ -3536,9 +3519,8 @@ const ELEVEN_LANG_CODES = {
 
 // Generate TTS audio with ElevenLabs (with model fallback + language_code retry)
 // speed: 0.7-1.2 (1.0 default). Used by adaptive-speed pipeline to fit segment duration.
-async function generateTTS(text, langCode, outputPath, speed, voiceGender) {
-    const _map = (voiceGender === 'female') ? VOICE_MAP_FEMALE : VOICE_MAP;
-    const voiceConfig = _map[langCode] || _map.HR || VOICE_MAP.HR;
+async function generateTTS(text, langCode, outputPath, speed) {
+    const voiceConfig = VOICE_MAP[langCode] || VOICE_MAP.HR;
     const elevenLang = ELEVEN_LANG_CODES[langCode] || 'en';
     // Clamp speed to ElevenLabs valid range
     let _speed = (typeof speed === 'number' && isFinite(speed)) ? speed : 1.0;
@@ -3901,10 +3883,6 @@ ${inputText}`;
 
 // Generate voiceover video for all countries
 async function generateVoiceoverCountries(job, videoPath) {
-    // Original-audio volume: default 0.05 (lowered under VO), or 0 when user chose "Utišaj zvok"
-    const _origVol = job.muteOriginal ? '0' : '0.05';
-    // Voice gender: 'male' (default) or 'female' — selects VOICE_MAP vs VOICE_MAP_FEMALE
-    const _voiceGender = (job.voiceGender === 'female') ? 'female' : 'male';
     const LANGUAGES = job.countries || ['SI', 'HR', 'CZ', 'PL', 'GR', 'IT', 'HU', 'SK', 'BG', 'RO', 'DE'];
     const LANG_NAMES = {
         SI: 'Slovenian', HR: 'Croatian', CZ: 'Czech', PL: 'Polish', BG: 'Bulgarian', RO: 'Romanian',
@@ -4180,7 +4158,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     HU: 1.15, RO: 1.05, DE: 1.10
                 };
                 const initSpeed = INITIAL_SPEED[lang] || 1.0;
-                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, initSpeed, _voiceGender);
+                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, initSpeed);
                 let usedSpeed = initSpeed;
                 // If audio is too long for the segment, speed up (max 1.2). If much shorter, slow down (min 0.85).
                 const overshoot = ttsResult.duration / segDur;
@@ -4189,14 +4167,14 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     const newSpeed = Math.min(1.2, Math.max(1.05, overshoot * 1.02));
                     console.log(`[${job.id}] [VO] ${lang} seg${i} too long (${ttsResult.duration.toFixed(2)}s vs ${segDur.toFixed(2)}s) -> regen speed=${newSpeed.toFixed(2)}`);
                     try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed, _voiceGender);
+                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed);
                         usedSpeed = newSpeed;
                     } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
                 } else if (overshoot > 1.5) {
                     // Too much overshoot - can't fit even at 1.2. Use 1.2 and let segment extend (FIX #1 handles canvas).
                     console.log(`[${job.id}] [VO] ${lang} seg${i} way too long (${ttsResult.duration.toFixed(2)}s vs ${segDur.toFixed(2)}s) -> regen speed=1.2 (will extend canvas)`);
                     try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, 1.2, _voiceGender);
+                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, 1.2);
                         usedSpeed = 1.2;
                     } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
                 } else if (overshoot < 0.7 && segDur > 2.0) {
@@ -4204,7 +4182,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     const newSpeed = Math.max(0.85, overshoot * 1.05);
                     console.log(`[${job.id}] [VO] ${lang} seg${i} too short -> regen speed=${newSpeed.toFixed(2)}`);
                     try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed, _voiceGender);
+                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed);
                         usedSpeed = newSpeed;
                     } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
                 }
@@ -4397,7 +4375,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=${_origVol},apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             } else {
                 // No original audio - apply gain + loudnorm to voiceover-only path too
                 const _voOnlyFilter = `[1:a]${_voGainFilter}loudnorm=I=-14:TP=-1.5:LRA=11,apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]`;
@@ -4554,7 +4532,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 const hasAudio = probeResult.stdout.trim().length > 0;
                 
                 if (hasAudio) {
-                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=${_origVol}[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
+                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
                 } else {
                     await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
                 }
@@ -4764,7 +4742,6 @@ app.post('/api/localizer/regenerate/:id', async (req, res) => {
         mode: orig.mode,
         voiceoverScript: orig.voiceoverScript,
         videoDuration: orig.videoDuration,
-        voiceGender: orig.voiceGender || 'male',
         status: 'translating',
         completed: 0,
         currentLang: '',
@@ -4865,7 +4842,7 @@ app.post('/api/localizer/resume/:id', async (req, res) => {
 
 // === FIX #4: queue + run endpoints (Voicemaker queues, user clicks RUN in Downloads) ===
 app.post('/api/localizer/queue', async (req, res) => {
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition, muteOriginal, voiceGender } = req.body;
+    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition } = req.body;
     if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
         return res.status(400).json({ error: 'Missing data' });
     }
@@ -4896,8 +4873,6 @@ app.post('/api/localizer/queue', async (req, res) => {
         mode: mode || 'subtitles', voiceoverScript: voiceoverScript || null,
         videoDuration: actualVideoDuration || videoDuration || null,
         textPosition: textPosition || 'center',
-        muteOriginal: muteOriginal === true,
-        voiceGender: (voiceGender === 'female') ? 'female' : 'male',
         status: 'queued', completed: 0, currentLang: '', outputs: {},
         created: new Date().toISOString()
     };
@@ -5051,47 +5026,6 @@ app.get('/api/localizer/generated/:id/zip', (req, res) => {
         archive.finalize();
     } catch (e) {
         console.error('[generated/zip]', e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// Bulk ZIP: prenesi vec jobov naenkrat v en ZIP (max 10). Body: { ids: [jobId, ...] }
-app.post('/api/localizer/bulk-zip', express.json(), (req, res) => {
-    try {
-        let ids = (req.body && req.body.ids) || [];
-        if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
-        // sanitize + dedup + limit 10
-        ids = [...new Set(ids.map(x => String(x).trim()).filter(Boolean))].slice(0, 10);
-        if (ids.length === 0) return res.status(400).json({ error: 'No job ids provided' });
-
-        const baseDir = path.join(__dirname, 'uploads', 'generated');
-        const jobs = [];
-        for (const id of ids) {
-            // path traversal guard
-            if (id.includes('/') || id.includes('..')) continue;
-            const dir = path.join(baseDir, id);
-            if (!dir.startsWith(baseDir)) continue;
-            if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
-            const files = fs.readdirSync(dir).filter(f => /\.(mp4|mov|webm|mkv|mp3|wav|srt|ass)$/i.test(f));
-            if (files.length) jobs.push({ id, dir, files });
-        }
-        if (jobs.length === 0) return res.status(404).json({ error: 'No downloadable files found for selected jobs' });
-
-        const stamp = new Date().toISOString().slice(0,10);
-        res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', 'attachment; filename="voicepilot_' + jobs.length + 'jobs_' + stamp + '.zip"');
-        const archive = archiver('zip', { zlib: { level: 5 } });
-        archive.on('error', err => { console.error('[bulk-zip]', err); try { res.status(500).end(); } catch(_){} });
-        archive.pipe(res);
-        for (const j of jobs) {
-            for (const f of j.files) {
-                // vsak job v svojo podmapo, da se imena ne prepletajo
-                archive.file(path.join(j.dir, f), { name: j.id + '/' + f });
-            }
-        }
-        archive.finalize();
-    } catch (e) {
-        console.error('[bulk-zip]', e);
         res.status(500).json({ error: e.message });
     }
 });
@@ -5953,286 +5887,6 @@ function getProductTypeFromCode(code, name) {
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// ═══════════════════════════════════════════════════════════════════════════
-// LipVoiceMaker (v2)  —  EN -> HR (test)
-// 1 zvok iz videa  2 klon glasu govorca (ali rezerva)  3 STT z besednimi casi
-// 4 GPT: znamke -> NORIKS + prevod  5 TTS s klonom  6 obraz? -> lipsync
-// 7 VEED-slog podnapisi (NA KONCU)
-// Voiceover Maker se NE dotakne — vse je pod /api/lipvoice/*
-// ═══════════════════════════════════════════════════════════════════════════
-const LV_DIR = path.join(__dirname, 'lipvoice');
-const LV_UP = path.join(LV_DIR, 'uploads'), LV_OUT = path.join(LV_DIR, 'out');
-[LV_DIR, LV_UP, LV_OUT].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
-
-const lvJobs = new Map();
-const LV_STATE = path.join(LV_DIR, 'jobs.json');
-try { if (fs.existsSync(LV_STATE)) JSON.parse(fs.readFileSync(LV_STATE, 'utf8')).forEach(j => lvJobs.set(j.id, j)); } catch (e) {}
-function lvSave() { try { fs.writeFileSync(LV_STATE, JSON.stringify([...lvJobs.values()].slice(-40), null, 1)); } catch (e) {} }
-function lvLog(j, m) { (j.log = j.log || []).push(m); console.log(`[LV ${j.id}] ${m}`); lvSave(); }
-const lvUpload = multer({
-    storage: multer.diskStorage({
-        destination: (q, f, cb) => cb(null, LV_UP),
-        filename: (q, f, cb) => cb(null, Date.now() + '-' + f.originalname.replace(/[^\w.-]/g, '_'))
-    }), limits: { fileSize: 500 * 1024 * 1024 }
-});
-const LV_EL = 'https://api.elevenlabs.io/v1';
-const lvSh = (s) => String(s).replace(/'/g, "'\\''");
-
-// ── 1) STT: ElevenLabs scribe, ob 401 rezerva na OpenAI Whisper ──
-async function lvSTT(audioPath, job) {
-    try {
-        const fd = new FormData();
-        fd.append('file', new Blob([fs.readFileSync(audioPath)]), 'a.mp3');
-        fd.append('model_id', 'scribe_v1');
-        fd.append('timestamps_granularity', 'word');
-        const r = await fetch(`${LV_EL}/speech-to-text`, { method: 'POST', headers: { 'xi-api-key': ELEVENLABS_API_KEY }, body: fd });
-        if (r.ok) {
-            const d = await r.json();
-            lvLog(job, 'STT: ElevenLabs scribe ✓');
-            return { text: d.text || '', lang: d.language_code || 'en',
-                words: (d.words || []).filter(w => w.type !== 'spacing' && (w.text || '').trim())
-                    .map(w => ({ w: w.text, s: w.start, e: w.end })) };
-        }
-        lvLog(job, 'STT: ElevenLabs ' + r.status + ' -> rezerva Whisper');
-    } catch (e) { lvLog(job, 'STT ElevenLabs napaka -> rezerva Whisper'); }
-
-    const fd = new FormData();
-    fd.append('file', new Blob([fs.readFileSync(audioPath)]), 'a.mp3');
-    fd.append('model', 'whisper-1');
-    fd.append('response_format', 'verbose_json');
-    fd.append('timestamp_granularities[]', 'word');
-    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST', headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, body: fd });
-    if (!r.ok) throw new Error('STT (Whisper) ' + r.status + ': ' + (await r.text()).slice(0, 200));
-    const d = await r.json();
-    lvLog(job, 'STT: OpenAI Whisper ✓');
-    return { text: d.text || '', lang: d.language || 'en',
-        words: (d.words || []).map(w => ({ w: w.word, s: w.start, e: w.end })) };
-}
-
-// besede -> stavcni segmenti
-function lvSegs(words, fallbackText) {
-    if (!words.length) return fallbackText ? [{ s: 0, e: 4, text: fallbackText, words: [] }] : [];
-    const out = []; let c = null;
-    for (const w of words) {
-        if (!c) c = { s: w.s, e: w.e, text: w.w, words: [w] };
-        else { c.text += (/^[.,!?;:]/.test(w.w) ? '' : ' ') + w.w; c.e = w.e; c.words.push(w); }
-        if (/[.!?]$/.test(w.w) || (c.e - c.s) >= 6 || c.text.length >= 80) { out.push(c); c = null; }
-    }
-    if (c) out.push(c);
-    return out;
-}
-
-// ── 2) klon glasu govorca (ob napaki rezervni glas) ──
-async function lvClone(audioPath, job) {
-    try {
-        const fd = new FormData();
-        fd.append('name', 'LV-' + job.id);
-        fd.append('files', new Blob([fs.readFileSync(audioPath)]), 'voice.mp3');
-        fd.append('description', 'LipVoiceMaker klon govorca');
-        const r = await fetch(`${LV_EL}/voices/add`, { method: 'POST', headers: { 'xi-api-key': ELEVENLABS_API_KEY }, body: fd });
-        if (r.ok) { const v = (await r.json()).voice_id; lvLog(job, 'KLON GLASU ✓ (' + v + ')'); return v; }
-        lvLog(job, 'klon glasu ' + r.status + ' (manjka create_instant_voice_clone) -> rezervni glas');
-    } catch (e) { lvLog(job, 'klon glasu napaka -> rezervni glas'); }
-    return null;
-}
-async function lvDeleteVoice(id) { try { await fetch(`${LV_EL}/voices/${id}`, { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }); } catch (e) {} }
-
-// TTS s klonom (ali rezervo)
-async function lvTTS(text, lang, out, voiceId) {
-    if (!voiceId) return generateTTS(text, lang, out, 1.0, 'male');
-    const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-        body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', language_code: lang.toLowerCase(),
-            voice_settings: { stability: 0.5, similarity_boost: 0.85, style: 0.25, use_speaker_boost: true } })
-    });
-    if (!r.ok) { const e = await r.text(); throw new Error('TTS ' + r.status + ': ' + e.slice(0, 150)); }
-    fs.writeFileSync(out, Buffer.from(await r.arrayBuffer()));
-}
-
-// ── 3) GPT: znamke -> NORIKS + prevod ──
-async function lvTranslate(segs, lang, product, job) {
-    const FULL = { HR: 'Croatian', SK: 'Slovak', SI: 'Slovenian', CZ: 'Czech', PL: 'Polish', HU: 'Hungarian', RO: 'Romanian', GR: 'Greek', DE: 'German' };
-    const sys = `You are a native ${FULL[lang] || lang} social-media ad copywriter for the brand ${product}.
-RULES:
-1. Replace EVERY brand, company or product name with "${product}". Never keep any other brand.
-2. Translate to natural spoken ${FULL[lang] || lang} for a video ad — persuasive, native, not literal.
-3. Keep each numbered line separate, same count/order, and roughly the SAME SPOKEN LENGTH (this is dubbing).
-4. Output ONLY the numbered lines.`;
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
-        body: JSON.stringify({ model: 'gpt-4o', temperature: 0.4, messages: [
-            { role: 'system', content: sys },
-            { role: 'user', content: segs.map((s, i) => `${i + 1}. ${s.text}`).join('\n') }] })
-    });
-    if (!r.ok) throw new Error('GPT ' + r.status);
-    const _gj = await r.json();
-    if (job) { job.cost_gptIn = (job.cost_gptIn||0) + (_gj.usage?.prompt_tokens||0); job.cost_gptOut = (job.cost_gptOut||0) + (_gj.usage?.completion_tokens||0); }
-    const lines = (_gj).choices[0].message.content.trim().split('\n')
-        .map(l => l.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
-    return segs.map((s, i) => ({ ...s, text: lines[i] || s.text }));
-}
-
-// ── 4) VEED-slog podnapisi (krepko, debel obris, poudarjena beseda) ──
-function lvAss(segs, W, H) {
-    const fs_ = Math.round(W * 0.075);           // ~81px pri 1080
-    const mv = Math.round(H * 0.16);
-    const t = (x) => { const h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), s = (x % 60).toFixed(2).padStart(5, '0'); return `${h}:${String(m).padStart(2, '0')}:${s}`; };
-    const esc = (x) => String(x || '').replace(/[{}\\]/g, '').replace(/\n/g, ' ');
-    let a = `[Script Info]
-ScriptType: v4.00+
-PlayResX: ${W}
-PlayResY: ${H}
-WrapStyle: 2
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-Style: V,DejaVu Sans,${fs_},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,${Math.round(fs_*0.11)},0,2,${Math.round(W*0.07)},${Math.round(W*0.07)},${mv},1
-
-[Events]
-Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
-`;
-    const HL = '&H0000E8FF&';                     // VEED-rumena za trenutno besedo
-    for (const s of segs) {
-        const txt = esc(s.text);
-        if (!txt) continue;
-        const ws = (s.words || []).filter(w => w.w);
-        if (ws.length >= 2 && ws.length <= 14) {
-            // poudarek po besedah (karaoke) — kot VEED
-            const parts = ws.map(w => esc(w.w));
-            for (let i = 0; i < ws.length; i++) {
-                const line = parts.map((p, k) => k === i ? `{\\c${HL}}${p}{\\c&H00FFFFFF&}` : p).join(' ');
-                a += `Dialogue: 0,${t(ws[i].s)},${t(ws[i].e)},V,,0,0,0,,{\\fad(60,60)}${line}\n`;
-            }
-        } else {
-            a += `Dialogue: 0,${t(s.s)},${t(s.e)},V,,0,0,0,,{\\fad(120,120)}${txt}\n`;
-        }
-    }
-    return a;
-}
-
-// ── 5) zaznava obraza (ffmpeg vzorci + preprosta hevristika kože) ──
-async function lvHasFace(video, work, job) {
-    try {
-        const d = path.join(work, 'fr'); if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-        await execPromise(`ffmpeg -y -i '${lvSh(video)}' -vf "fps=1/3,scale=160:-1" -q:v 5 '${lvSh(d)}/f-%03d.jpg' 2>/dev/null`);
-        const files = fs.readdirSync(d).filter(f => f.endsWith('.jpg')).slice(0, 12);
-        if (!files.length) return false;
-        // GPT-4o vision: ali je v kadru govorec z vidnim obrazom
-        const imgs = files.slice(0, 6).map(f => ({ type: 'image_url',
-            image_url: { url: 'data:image/jpeg;base64,' + fs.readFileSync(path.join(d, f)).toString('base64'), detail: 'low' } }));
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
-            body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 5, messages: [{ role: 'user', content: [
-                { type: 'text', text: 'Do these video frames show a person whose FACE and MOUTH are clearly visible and talking to camera? Answer only YES or NO.' }, ...imgs] }] })
-        });
-        if (!r.ok) return false;
-        const ans = (await r.json()).choices[0].message.content.trim().toUpperCase();
-        lvLog(job, 'obraz v kadru: ' + ans);
-        return ans.startsWith('Y');
-    } catch (e) { lvLog(job, 'zaznava obraza ni uspela -> brez lipsynca'); return false; }
-}
-
-// ── 6) pipeline ──
-async function lvRun(job) {
-    let clonedVoice = null;
-    try {
-        job.status = 'running'; lvSave();
-        const work = path.join(LV_OUT, job.id);
-        if (!fs.existsSync(work)) fs.mkdirSync(work, { recursive: true });
-
-        const probe = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -show_entries format=duration -of csv=p=0 '${lvSh(job.videoPath)}'`);
-        const nums = String(probe.stdout || probe).match(/[\d.]+/g) || [];
-        const W = parseInt(nums[0]) || 1080, H = parseInt(nums[1]) || 1920, DUR = parseFloat(nums[2]) || 60;
-        job.meta = { W, H, DUR }; job.cost_sttMin = DUR/60; lvLog(job, `video ${W}x${H}, ${DUR.toFixed(1)}s`);
-
-        const aud = path.join(work, 'src.mp3');
-        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`);
-        lvLog(job, 'zvok izlocen');
-
-        clonedVoice = await lvClone(aud, job);
-        job.cloned = !!clonedVoice;
-
-        const stt = await lvSTT(aud, job);
-        const segs = lvSegs(stt.words, stt.text);
-        if (!segs.length) throw new Error('V videu ni zaznanega govora');
-        job.sourceLang = stt.lang; job.sourceText = stt.text;
-        lvLog(job, `prepoznano ${segs.length} segmentov (${stt.lang})`);
-
-        job.hasFace = await lvHasFace(job.videoPath, work, job);
-
-        for (const lang of job.langs) {
-            lvLog(job, `[${lang}] prevajam (znamke -> NORIKS)…`);
-            const tr = await lvTranslate(segs, lang, job.product || "NORIKS", job);
-            (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
-
-            const parts = [];
-            for (let i = 0; i < tr.length; i++) {
-                const mp3 = path.join(work, `${lang}-${i}.mp3`);
-                await lvTTS(tr[i].text, lang, mp3, clonedVoice); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
-                const dd = parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(mp3)}'`)).stdout || '0').trim()) || 0;
-                const slot = Math.max(0.5, (i + 1 < tr.length ? tr[i + 1].s : DUR) - tr[i].s);
-                parts.push({ mp3, s: tr[i].s, d: dd, slot });
-                if ((i + 1) % 3 === 0) lvLog(job, `[${lang}] govor ${i + 1}/${tr.length}`);
-            }
-            const ins = parts.map(p => `-i '${lvSh(p.mp3)}'`).join(' ');
-            const filt = parts.map((p, i) => {
-                const r = p.d > p.slot && p.slot > 0 ? Math.min(1.9, p.d / p.slot) : 1;
-                return `[${i}:a]adelay=${Math.round(p.s * 1000)}|${Math.round(p.s * 1000)}${r > 1.02 ? `,atempo=${r.toFixed(3)}` : ''}[a${i}]`;
-            }).join(';');
-            const voice = path.join(work, `voice-${lang}.mp3`);
-            await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -b:a 192k '${lvSh(voice)}' 2>/dev/null`);
-            lvLog(job, `[${lang}] govor sestavljen`);
-
-            // video + nov zvok (lipsync tocka: ce hasFace -> Wav2Lip, sicer preskoci)
-            let base = path.join(work, `base-${lang}.mp4`);
-            await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -map 0:v -map 1:a -c:v copy -c:a aac -shortest '${lvSh(base)}' 2>/dev/null`);
-            if (job.hasFace) lvLog(job, `[${lang}] obraz zaznan -> lipsync (Wav2Lip) se ni namescen, preskocim`);
-
-            // PODNAPISI NA KONCU
-            const ass = path.join(work, `subs-${lang}.ass`);
-            fs.writeFileSync(ass, lvAss(tr, W, H));
-            const out = path.join(work, `${job.name}-${lang}.mp4`);
-            await execPromise(`ffmpeg -y -i '${lvSh(base)}' -vf "ass='${lvSh(ass)}'" -c:v libx264 -preset veryfast -crf 22 -c:a copy '${lvSh(out)}' 2>/dev/null`);
-            (job.outputs = job.outputs || {})[lang] = out;
-            job.progress = Math.round((++job.done) / job.langs.length * 100);
-            lvLog(job, `[${lang}] KONCANO ✓`);
-        }
-        job.cost = Math.round(((job.cost_sttMin||0)*0.006 + (job.cost_gptIn||0)*2.5e-6 + (job.cost_gptOut||0)*1e-5 + ((job.cost_ttsChars||0)/1000)*0.30)*10000)/10000;
-        job.status = 'done'; job.progress = 100;
-    } catch (e) {
-        job.status = 'error'; job.error = e.message; lvLog(job, 'NAPAKA: ' + e.message);
-    } finally { if (clonedVoice) await lvDeleteVoice(clonedVoice); lvSave(); }
-}
-
-// ── 7) routes ──
-app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'Ni videa' });
-    const langs = (req.body.langs || 'HR').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-    const id = 'lv-' + Date.now();
-    const job = { id, name: (path.parse(req.file.originalname).name.replace(/[^\w-]/g, '_') || 'video'),
-        videoPath: req.file.path, langs, product: (req.body.product||"NORIKS").trim(), status: 'queued', progress: 0, done: 0,
-        created: new Date().toISOString(), log: [] };
-    lvJobs.set(id, job); lvSave(); setImmediate(() => lvRun(job));
-    res.json({ ok: true, id, langs });
-});
-app.get('/api/lipvoice/jobs', (req, res) => res.json(
-    [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
-        id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
-        sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
-        log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
-app.get('/api/lipvoice/download/:id/:lang', (req, res) => {
-    const j = lvJobs.get(req.params.id), L = req.params.lang.toUpperCase();
-    const f = j && j.outputs && j.outputs[L];
-    if (!f || !fs.existsSync(f)) return res.status(404).send('Ni datoteke');
-    res.download(f, `${j.name}-${L}.mp4`);
-});
-// ═══════════════════ END LipVoiceMaker (v2) ═══════════════════
-
-
 
 app.listen(PORT, () => {
     console.log(`🚀 Launches server running on port ${PORT}`);

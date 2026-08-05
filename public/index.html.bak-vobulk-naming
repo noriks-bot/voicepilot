@@ -2172,8 +2172,8 @@
             <a class="nav-item active" data-page="voiceover" onclick="switchPage('voiceover')">
                 <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
             </a>
-            <a class="nav-item" data-page="lipvoice" onclick="switchPage('lipvoice')">
-                <span class="icon">💋</span><span class="label">LipVoiceMaker (v2)</span>
+            <a class="nav-item" data-page="creatives" onclick="switchPage('creatives')">
+                <span class="icon">🎬</span><span class="label">All Creatives</span>
             </a>
 
             <div class="sidebar-section-label">Account</div>
@@ -2219,7 +2219,7 @@
                     <a class="quick-card" onclick="switchPage('creatives')">
                         <div class="quick-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
                         <div class="quick-body">
-                            
+                            <div class="quick-title">All Creatives</div>
                             <div class="quick-desc">Pregled vseh kreativ + status lokalizacij.</div>
                         </div>
                         <div class="quick-arrow">&rarr;</div>
@@ -2632,7 +2632,6 @@
                         <p>Generirani videoposnetki - klikni za prenos.</p>
                     </div>
                     <div class="page-actions">
-                        <button id="btn-bulk-dl" onclick="window.bulkDownloadSelected()" disabled style="font-weight:600; padding:8px 16px; background:#0A59D2; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin-right:8px; opacity:0.5;">↓ Prenesi izbrane (<span id="bulk-dl-count">0</span>)</button>
                         <button class="btn-refresh" onclick="loadDownloadsPage()" id="btn-refresh-downloads">Osvezi</button>
                     </div>
                 </div>
@@ -2641,7 +2640,6 @@
                     <table class="activity-table downloads-table">
                         <thead>
                             <tr>
-                                <th style="width:34px; text-align:center;"><input type="checkbox" id="dl-select-all" onclick="window.toggleSelectAllDownloads(this)" title="Izberi vse (do 10)" style="cursor:pointer; width:16px; height:16px;"></th>
                                 <th>Ime</th>
                                 <th>Tip</th>
                                 <th>Jeziki</th>
@@ -2651,7 +2649,7 @@
                             </tr>
                         </thead>
                         <tbody id="downloads-tbody">
-                            <tr class="empty-row"><td colspan="7"><span class="spinner"></span>Nalagam ...</td></tr>
+                            <tr class="empty-row"><td colspan="6"><span class="spinner"></span>Nalagam ...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3068,7 +3066,7 @@
             var nextId = 1;
 
             function makeRow() {
-                return { id: nextId++, videoFile: null, videoFileOrig: null, videoDuration: 0, srt: '', position: 'bottom', muteOriginal: false, voiceGender: 'male', uploading: false };
+                return { id: nextId++, videoFile: null, videoDuration: 0, srt: '', position: 'bottom', uploading: false };
             }
 
             function renderRows() {
@@ -3099,28 +3097,6 @@
                         +         '</label>'
                         +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.position === 'bottom' ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.position === 'bottom' ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
                         +           '<input type="radio" name="vo-pos-' + row.id + '" data-pos="' + row.id + '" value="bottom" ' + (row.position === 'bottom' ? 'checked' : '') + '> ⬇️ Spodaj'
-                        +         '</label>'
-                        +       '</div>'
-                        +     '</div>'
-                        +     '<div style="margin-top:10px;">'
-                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">🔊 Zvok originala</div>'
-                        +       '<div style="display:flex; gap:6px;">'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (!row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (!row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="default" ' + (!row.muteOriginal ? 'checked' : '') + '> 🔉 Privzeto'
-                        +         '</label>'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.muteOriginal ? '#0A59D2' : '#E7E5E4') + '; background:' + (row.muteOriginal ? '#EFF6FF' : '#fff') + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-mute-' + row.id + '" data-mute="' + row.id + '" value="mute" ' + (row.muteOriginal ? 'checked' : '') + '> 🔇 Utišaj zvok'
-                        +         '</label>'
-                        +       '</div>'
-                        +     '</div>'
-                        +     '<div style="margin-top:10px;">'
-                        +       '<div style="font-size:11px; font-weight:600; color:#57534E; margin-bottom:6px;">🎙️ Glas govorca</div>'
-                        +       '<div style="display:flex; gap:6px;">'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.voiceGender !== "female" ? "#0A59D2" : "#E7E5E4") + '; background:' + (row.voiceGender !== "female" ? "#EFF6FF" : "#fff") + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-gender-' + row.id + '" data-gender="' + row.id + '" value="male" ' + (row.voiceGender !== "female" ? "checked" : "") + '> 👨 Moški'
-                        +         '</label>'
-                        +         '<label style="flex:1; padding:8px 10px; border:2px solid ' + (row.voiceGender === "female" ? "#0A59D2" : "#E7E5E4") + '; background:' + (row.voiceGender === "female" ? "#EFF6FF" : "#fff") + '; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px;">'
-                        +           '<input type="radio" name="vo-gender-' + row.id + '" data-gender="' + row.id + '" value="female" ' + (row.voiceGender === "female" ? "checked" : "") + '> 👩 Ženska'
                         +         '</label>'
                         +       '</div>'
                         +     '</div>'
@@ -3181,22 +3157,6 @@
                         if (row && rad.checked) { row.position = rad.value; renderRows(); }
                     });
                 });
-                // Original audio mute radios
-                document.querySelectorAll('[data-mute]').forEach(function(rad) {
-                    rad.addEventListener('change', function() {
-                        var id = parseInt(rad.getAttribute('data-mute'), 10);
-                        var row = rows.find(function(r){return r.id === id;});
-                        if (row && rad.checked) { row.muteOriginal = (rad.value === 'mute'); renderRows(); }
-                    });
-                });
-                // Voice gender radios (male=default / female)
-                document.querySelectorAll('[data-gender]').forEach(function(rad) {
-                    rad.addEventListener('change', function() {
-                        var id = parseInt(rad.getAttribute('data-gender'), 10);
-                        var row = rows.find(function(r){return r.id === id;});
-                        if (row && rad.checked) { row.voiceGender = rad.value; renderRows(); }
-                    });
-                });
                 // Remove buttons
                 document.querySelectorAll('[data-remove]').forEach(function(btn) {
                     btn.addEventListener('click', function() {
@@ -3212,7 +3172,6 @@
                 var row = rows.find(function(r){return r.id === id;});
                 if (!row) return;
                 row.uploading = true;
-                row.videoFileOrig = file.name;
                 setStatus(id, '⏳ nalagam...', '#0A59D2');
                 var fd = new FormData();
                 fd.append('video', file);
@@ -3296,11 +3255,8 @@
                     var row = item.row;
                     var segs = item.segs;
                     var videoDuration = row.videoDuration || (segs[segs.length-1].end + 1);
-                    var origFile = row.videoFileOrig || (row.videoFile ? String(row.videoFile).split('/').pop() : '');
-                    var origBase = origFile.replace(/\.[a-z0-9]+$/i, '');
-                    var extractedId = (origFile.match(/ID\d+/i) || [])[0];
-                    var voId = extractedId ? extractedId.toUpperCase() : ('ID' + String(Date.now()).slice(-6) + '-' + (item.idx + 1));
-                    var name = origBase || (voId + '_' + nowDate + '_tshirt_VO_BULK');
+                    var voId = String(Date.now()).slice(-6) + '-' + (item.idx + 1);
+                    var name = voId + '_' + nowDate + '_tshirt_VO_BULK';
                     setStatus(row.id, '⏳ pošiljam...', '#0A59D2');
                     plog('Vrstica ' + (item.idx+1) + ': pošiljam (' + segs.length + ' segmentov, ' + videoDuration.toFixed(1) + 's)...');
                     try {
@@ -3316,9 +3272,7 @@
                             source: 'library',
                             style: 'white',
                             fontSize: 90,
-                            textPosition: row.position,
-                            muteOriginal: row.muteOriginal,
-                            voiceGender: row.voiceGender || 'male'
+                            textPosition: row.position
                         });
                         ok++;
                         setStatus(row.id, '✅ v Jobs', '#10b981');
@@ -3365,7 +3319,6 @@
                         rows.push(target);
                     }
                     target.uploading = true;
-                    target.videoFileOrig = file.name;
                     assignments.push({ id: target.id, file: file });
                 });
                 renderRows();
@@ -8072,7 +8025,7 @@
                 }
                 rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                 if (rows.length === 0) {
-                    tbody.innerHTML = '<tr class="empty-row"><td colspan="7"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
+                    tbody.innerHTML = '<tr class="empty-row"><td colspan="6"><div style="padding:40px; text-align:center; color:#9ca3af;">Se ni job-ov. Generiraj prvi video iz Voiceover Maker.</div></td></tr>';
                     return;
                 }
                 // Group rows by day for chronological section headers
@@ -8082,7 +8035,7 @@
                     let sectionHtml = '';
                     if (dk !== lastDayKey) {
                         lastDayKey = dk;
-                        sectionHtml = '<tr class="day-section"><td colspan="7" style="background:#F8FAFC; padding:14px 16px 8px 16px; font-size:12px; font-weight:700; color:#0F172A; letter-spacing:0.3px; text-transform:uppercase; border-top:2px solid #E2E8F0;">' + _dayLabel(r.timestamp) + '</td></tr>';
+                        sectionHtml = '<tr class="day-section"><td colspan="6" style="background:#F8FAFC; padding:14px 16px 8px 16px; font-size:12px; font-weight:700; color:#0F172A; letter-spacing:0.3px; text-transform:uppercase; border-top:2px solid #E2E8F0;">' + _dayLabel(r.timestamp) + '</td></tr>';
                     }
                     const rowHtml = (() => {
                     // Languages chips with status indicator
@@ -8153,13 +8106,7 @@
                             '</div>' +
                             '<div style="font-size:10px; color:#6B7280; margin-top:3px;">' + doneN + '/' + r.totalCount + ' jezikov &middot; ' + pct + '%' + (r.currentLang ? ' &middot; ' + r.currentLang + ' ...' : '') + '</div>';
                     }
-                    // Checkbox za bulk prenos — samo ce ima job prenosljive datoteke
-                    const _hasFiles = (r.filesByLang && Object.keys(r.filesByLang).length > 0);
-                    const _cbCell = _hasFiles
-                        ? '<td style="text-align:center;"><input type="checkbox" class="dl-row-cb" data-job-id="' + String(r.id).replace(/"/g,'&quot;') + '" onclick="window.onDownloadRowCbClick(event)" style="cursor:pointer; width:16px; height:16px;"></td>'
-                        : '<td></td>';
                     return '<tr data-job-status="' + String(r.status || '') + '">' +
-                        _cbCell +
                         '<td>' + creativeIdHtml + '<span class="activity-source" style="font-weight:600;">' + String(r.name) + '</span>' +
                         '<div style="color:#9ca3af; font-size:11px; margin-top:2px; font-family:JetBrains Mono,monospace;">' + String(r.id) + progress + '</div>' + progressBarHtml + '</td>' +
                         '<td>' + typePill + '</td>' +
@@ -8171,93 +8118,13 @@
                     })();
                     return sectionHtml + rowHtml;
                 }).join('');
-                // reset bulk-download izbor po vsakem renderju (checkboxi so novi/prazni)
-                const _selAll = document.getElementById('dl-select-all');
-                if (_selAll) _selAll.checked = false;
-                if (window.updateBulkDlUI) window.updateBulkDlUI();
             } catch (e) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Napaka: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Napaka: ' + e.message + '</td></tr>';
             } finally {
                 if (btn) btn.disabled = false;
             }
         }
         // Delete a job (works for completed + in-progress)
-        // ===== BULK DOWNLOAD (checkbox multi-select, max 10) =====
-        window.MAX_BULK_DL = 10;
-        window.onDownloadRowCbClick = function(ev) {
-            const cb = ev.target;
-            const selected = document.querySelectorAll('.dl-row-cb:checked');
-            if (cb.checked && selected.length > window.MAX_BULK_DL) {
-                cb.checked = false;
-                alert('Naenkrat lahko izbereš največ ' + window.MAX_BULK_DL + ' jobov.');
-                return;
-            }
-            window.updateBulkDlUI();
-        };
-        window.toggleSelectAllDownloads = function(masterCb) {
-            const all = Array.from(document.querySelectorAll('.dl-row-cb'));
-            if (masterCb.checked) {
-                // izberi prvih MAX (do 10), ostale pusti
-                all.forEach((cb, i) => { cb.checked = i < window.MAX_BULK_DL; });
-                if (all.length > window.MAX_BULK_DL) {
-                    masterCb.checked = false; // ni res "vse" ker jih je vec kot 10
-                }
-            } else {
-                all.forEach(cb => { cb.checked = false; });
-            }
-            window.updateBulkDlUI();
-        };
-        window.updateBulkDlUI = function() {
-            const n = document.querySelectorAll('.dl-row-cb:checked').length;
-            const btn = document.getElementById('btn-bulk-dl');
-            const cnt = document.getElementById('bulk-dl-count');
-            if (cnt) cnt.textContent = String(n);
-            if (btn) {
-                btn.disabled = (n === 0);
-                btn.style.opacity = (n === 0) ? '0.5' : '1';
-                btn.style.cursor = (n === 0) ? 'default' : 'pointer';
-            }
-        };
-        window.bulkDownloadSelected = async function() {
-            const ids = Array.from(document.querySelectorAll('.dl-row-cb:checked')).map(cb => cb.getAttribute('data-job-id')).filter(Boolean);
-            if (ids.length === 0) { alert('Nič ni izbrano.'); return; }
-            if (ids.length > window.MAX_BULK_DL) { alert('Največ ' + window.MAX_BULK_DL + ' naenkrat.'); return; }
-            const btn = document.getElementById('btn-bulk-dl');
-            const origHtml = btn ? btn.innerHTML : '';
-            if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.innerHTML = '⏳ Pripravljam ZIP ...'; }
-            try {
-                const resp = await fetch('/api/localizer/bulk-zip', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids })
-                });
-                if (!resp.ok) {
-                    let msg = 'HTTP ' + resp.status;
-                    try { const j = await resp.json(); if (j.error) msg = j.error; } catch(_) {}
-                    throw new Error(msg);
-                }
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const stamp = new Date().toISOString().slice(0,10);
-                a.download = 'voicepilot_' + ids.length + 'jobs_' + stamp + '.zip';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                setTimeout(() => URL.revokeObjectURL(url), 4000);
-                // po prenosu odkljukaj vse
-                document.querySelectorAll('.dl-row-cb:checked').forEach(cb => { cb.checked = false; });
-                const master = document.getElementById('dl-select-all');
-                if (master) master.checked = false;
-                window.updateBulkDlUI();
-            } catch (e) {
-                alert('Napaka pri prenosu: ' + e.message);
-            } finally {
-                if (btn) { btn.innerHTML = origHtml; btn.style.opacity = '1'; window.updateBulkDlUI(); }
-            }
-        };
-
         window.deleteJobRow = async function(jobId) {
             if (!confirm('Izbrišem job ' + jobId + '?\n\nVideo + audio + script datoteke bodo trajno izbrisani.')) return;
             try {
@@ -8331,72 +8198,5 @@ window._regenJob = async function(jobId) {
     } catch (e) { alert('Napaka pri regeneraciji: ' + (e.message || e)); }
 };
 </script>
-<div class="page" id="page-lipvoice" style="display:none">
-  <div class="container">
-    <h1 style="margin-bottom:4px">💋 LipVoiceMaker (v2)</h1>
-    <p style="color:#64748b;margin-bottom:20px">Naloži video → klon glasu govorca → prevod (blagovne znamke → tvoj izdelek) → govor v ciljnem jeziku → podnapisi.</p>
-
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px">
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🎬 Video (angleški ali drug jezik)</div>
-      <input type="file" id="lvFile" accept="video/mp4,video/quicktime,video/*" style="width:100%;padding:10px;border:1.5px dashed #cbd5e1;border-radius:8px;margin-bottom:14px">
-
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🏷️ Ime tvojega izdelka (zamenja vse tuje znamke)</div>
-      <input type="text" id="lvProduct" value="NORIKS" placeholder="npr. NORIKS BUNION" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;margin-bottom:14px;font-weight:600">
-
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🌍 Jeziki</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="lvLangs">
-        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1.5px solid #3b82f6;background:#eff6ff;border-radius:8px;cursor:pointer;font-weight:600"><input type="checkbox" value="HR" checked> 🇭🇷 HR</label>
-        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer"><input type="checkbox" value="SK"> 🇸🇰 SK</label>
-      </div>
-
-      <button onclick="lvStart()" id="lvBtn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🚀 Generiraj</button>
-      <div id="lvMsg" style="margin-top:10px;font-size:12px"></div>
-    </div>
-
-    <div id="lvJobs"></div>
-  </div>
-</div>
-<script>
-async function lvStart(){
-  const f=document.getElementById('lvFile').files[0];
-  if(!f){alert('Izberi video');return;}
-  const langs=[...document.querySelectorAll('#lvLangs input:checked')].map(x=>x.value);
-  if(!langs.length){alert('Izberi vsaj en jezik');return;}
-  const b=document.getElementById('lvBtn'); b.disabled=true; b.textContent='⏳ Nalagam…';
-  const fd=new FormData();
-  fd.append('video',f); fd.append('langs',langs.join(','));
-  fd.append('product',document.getElementById('lvProduct').value.trim()||'NORIKS');
-  try{
-    const r=await fetch('/api/lipvoice/upload',{method:'POST',body:fd});
-    const d=await r.json();
-    document.getElementById('lvMsg').innerHTML = d.ok
-      ? '<span style="color:#16a34a">✓ Zagnano ('+d.id+') — spremljaj spodaj</span>'
-      : '<span style="color:#dc2626">✗ '+(d.error||'napaka')+'</span>';
-    lvPoll();
-  }catch(e){document.getElementById('lvMsg').innerHTML='<span style="color:#dc2626">✗ '+e.message+'</span>';}
-  b.disabled=false; b.textContent='🚀 Generiraj';
-}
-async function lvPoll(){
-  if(!document.body.classList.contains('page-lipvoice'))return;
-  try{
-    const jobs=await (await fetch('/api/lipvoice/jobs')).json();
-    document.getElementById('lvJobs').innerHTML = jobs.map(j=>{
-      const col=j.status==='done'?'#16a34a':j.status==='error'?'#dc2626':'#3b82f6';
-      const outs=(j.outputs||[]).map(l=>'<a href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;margin:4px 6px 0 0;padding:7px 14px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:12px">⬇ '+l+'.mp4</a>').join('');
-      const cost=j.cost!=null?('<span style="margin-left:10px;padding:2px 8px;background:#fef3c7;border-radius:6px;font-size:11px;font-weight:700">💰 '+j.cost.toFixed(4)+' €</span>'):'';
-      const info=[j.sourceLang?('jezik: '+j.sourceLang):'',j.cloned?'klon glasu ✓':'rezervni glas',j.hasFace===true?'obraz ✓ (lipsync)':j.hasFace===false?'ni obraza':''].filter(Boolean).join(' · ');
-      return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:12px">'
-       +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><strong>'+j.name+'</strong>'
-       +'<span style="color:'+col+';font-weight:700;font-size:12px">'+j.status.toUpperCase()+' '+j.progress+'%</span>'+cost+'</div>'
-       +(info?'<div style="font-size:11px;color:#64748b;margin-top:4px">'+info+'</div>':'')
-       +'<div style="height:5px;background:#f1f5f9;border-radius:3px;margin:8px 0"><div style="height:100%;width:'+j.progress+'%;background:'+col+';border-radius:3px;transition:.3s"></div></div>'
-       +(j.error?'<div style="color:#dc2626;font-size:12px">✗ '+j.error+'</div>':'')
-       +'<div style="font-family:monospace;font-size:10px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px;max-height:110px;overflow:auto">'+(j.log||[]).join('<br>')+'</div>'
-       +outs+'</div>';
-    }).join('') || '<div style="color:#94a3b8;text-align:center;padding:30px">Ni opravil</div>';
-  }catch(e){}
-  setTimeout(lvPoll,3000);
-}
-
 </body>
 </html>
