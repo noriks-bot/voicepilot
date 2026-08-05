@@ -8454,6 +8454,16 @@ async function lvPoll(){
       const outs=(j.outputs||[]).map(l=>'<a href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:6px 10px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap">⬇ '+l+'</a>').join('');
       const cost=j.cost!=null?('<span style="margin-left:8px;padding:2px 8px;background:#fef3c7;border-radius:6px;font-size:11px;font-weight:700">💰 '+j.cost.toFixed(4)+' €</span>'):'';
       const info=[j.sourceLang?('jezik: '+j.sourceLang):'',j.gender?('govorec: '+(j.gender==='female'?'ženska':'moški')):'',j.cloned?'klon glasu ✓':(j.cloned===false?'rezervni glas':''),j.cleaned?'očiščen ✓':'',j.enhanced?'HD ✓':'',j.hasFace===true?'obraz ✓ (lipsync)':j.hasFace===false?'ni obraza':''].filter(Boolean).join(' · ');
+      // status po drzavah: ✓ koncana / ⏳ v delu / · caka
+      const lastLog=(j.log&&j.log.length?j.log[j.log.length-1]:'');
+      const langChips=(j.langs||[]).map(L=>{
+        const done=(j.outputs||[]).includes(L);
+        const active=!done && j.status==='running' && lastLog.indexOf('['+L+']')===0;
+        const bg=done?'#dcfce7':(active?'#dbeafe':'#f1f5f9');
+        const fg=done?'#166534':(active?'#1d4ed8':'#94a3b8');
+        const ico=done?'✓ ':(active?'⏳ ':'· ');
+        return '<span style="padding:3px 10px;border-radius:999px;background:'+bg+';color:'+fg+';font-size:11px;font-weight:700">'+ico+L+(done?' končana':(active?' v delu':' čaka'))+'</span>';
+      }).join(' ');
       const ur=dt?String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'):'';
       // ena vrstica na video; drzave (prenosi) desno v enem rowu
       html+='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;gap:16px;align-items:flex-start">'
@@ -8462,6 +8472,7 @@ async function lvPoll(){
        +(ur?'<span style="font-size:11px;color:#94a3b8">'+ur+'</span>':'')
        +'<span style="color:'+col+';font-weight:700;font-size:12px">'+(j.status==='queued'?'V VRSTI':j.status.toUpperCase()+' '+j.progress+'%')+'</span>'+cost+'</div>'
        +(info?'<div style="font-size:11px;color:#64748b;margin-top:4px">'+info+'</div>':'')
+       +(langChips?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+langChips+'</div>':'')
        +'<div style="height:5px;background:#f1f5f9;border-radius:3px;margin:8px 0"><div style="height:100%;width:'+j.progress+'%;background:'+col+';border-radius:3px;transition:.3s"></div></div>'
        +(j.error?'<div style="color:#dc2626;font-size:12px">✗ '+j.error+'</div>':'')
        +'<details'+(j.status==='running'?' open':'')+' style="margin-top:4px"><summary style="cursor:pointer;font-size:11px;color:#64748b;user-select:none">log</summary>'
