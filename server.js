@@ -6049,13 +6049,18 @@ function _vmGidWrite(g) { try { fs.writeFileSync(VM_GID_FILE, g); } catch (e) {}
 
 // celoten vmake potek: config -> token_policy -> consume -> invoke -> poll
 // taskName: 'videoscreenclear' (ciscenje) ali 'hdvideoallinone' (izboljsava kvalitete)
-async function vmRunTask(job, srcUrl, taskName) {
+async function vmRunTask(job, srcUrl, taskName, paramsOverride) {
     let gid = _vmGidRead();
     const cfg = await vmCall('POST', `${VM_WAPI}/skill/config.json`, { gid, version: 'v1.0.0' });
     if ((cfg.response || {}).gid && cfg.response.gid !== gid) { gid = cfg.response.gid; _vmGidWrite(gid); }
     const algo = (cfg.response || {}).algorithm || {};
-    const preset = (algo.invoke || {})[taskName];
-    if (!preset) throw new Error(`vmake: naloga "${taskName}" ni na voljo (na voljo: ${Object.keys(algo.invoke || {}).join(', ')})`);
+    const presetRaw = (algo.invoke || {})[taskName];
+    if (!presetRaw) throw new Error(`vmake: naloga "${taskName}" ni na voljo (na voljo: ${Object.keys(algo.invoke || {}).join(', ')})`);
+    const preset = JSON.parse(JSON.stringify(presetRaw));
+    if (paramsOverride) {
+        preset.params = preset.params || {};
+        preset.params.parameter = Object.assign({}, preset.params.parameter || {}, paramsOverride.parameter || {});
+    }
     const regionHost = Object.values(algo.regions || {})[0] || 'strategy.stariidata.com';
     const typ = algo.token_policy_type || 'mtai';
 
@@ -6081,14 +6086,17 @@ async function vmRunTask(job, srcUrl, taskName) {
     if (data.status === 9) {
         const tid = data.result.id;
         lvLog(job, `vmake: naloga ${tid} tece, cakam…`);
-        const gaps = String((policy.status_query || {}).durations || '3000').split(',').map(Number);
-        for (let i = 0; i < 200; i++) {
-            await new Promise(r => setTimeout(r, gaps[Math.min(i, gaps.length - 1)] || 2000));
+        // casovno omejeno (30 min), NE po stevilu poskusov — daljsi videi rabijo 10+ min
+        const t0 = Date.now(), MAX_MS = 30 * 60 * 1000;
+        while (Date.now() - t0 < MAX_MS) {
+            await new Promise(r => setTimeout(r, 3000));
             const st = await vmCall('GET', `${base}/${policy.status_query.path}?task_id=${encodeURIComponent(tid)}`);
             data = st.data || {};
             if (data.status !== 9 && data.status !== 1 && data.status !== 0) break;
-            if (i % 10 === 9) lvLog(job, `vmake: se obdeluje (${i + 1})`);
+            const min = (Date.now() - t0) / 60000;
+            if (Math.floor(min * 2) !== Math.floor((min - 0.05) * 2)) lvLog(job, `vmake: ${taskName} se obdeluje… ${min.toFixed(1)} min`);
         }
+        if (data.status === 9 || data.status === 1 || data.status === 0) throw new Error(`vmake: casovna omejitev 30 min (status ${data.status})`);
     }
     const res = data.result || {};
     const url = res.media_url || res.url ||
@@ -6413,17 +6421,18 @@ function lvLipsyncReady() {
         fs.existsSync(path.join(W2L_DIR, 'inference.py')) &&
         fs.existsSync(path.join(W2L_DIR, 'checkpoints', 'wav2lip_gan.pth'));
 }
-async function lvLipsync(videoIn, audioIn, outPath, job, lang) {
-    lvLog(job, `[${lang}] lipsync (Wav2Lip, CPU) 0% — zaganjam…`);
+async function lvLipsync(videoIn, audioIn, outPath, job, lang, resizeFactor) {
+    const rf = resizeFactor || 1;
+    lvLog(job, `[${lang}] lipsync (Wav2Lip, CPU${rf > 1 ? `, resize ${rf}x` : ', polna locljivost'}) 0% — zaganjam…`);
     const t0 = Date.now();
     const logf = outPath + '.progress.log';
-    // resize_factor 2: obdelava na polovicni locljivosti (obraz se vedno oster), ~4x hitreje
+    // resize_factor pomeni tudi NIZJO locljivost izhoda! -> 1 za videe do 768px, 2 za vecje
     const p = execPromise(
         `cd '${lvSh(W2L_DIR)}' && OMP_NUM_THREADS=3 nice -n 10 '${lvSh(W2L_PY)}' inference.py ` +
         `--checkpoint_path checkpoints/wav2lip_gan.pth ` +
         `--face '${lvSh(videoIn)}' --audio '${lvSh(audioIn)}' --outfile '${lvSh(outPath)}' ` +
-        `--resize_factor 2 --wav2lip_batch_size 64 --face_det_batch_size 4 > '${lvSh(logf)}' 2>&1`,
-        { timeout: 45 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }
+        `--resize_factor ${rf} --pads 0 15 0 0 --wav2lip_batch_size 32 --face_det_batch_size 2 > '${lvSh(logf)}' 2>&1`,
+        { timeout: 90 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }
     );
     // ZIV NAPREDEK: tqdm izpis -> odstotek v zadnji log vrstici (UI jo osvezuje)
     const iv = setInterval(() => {
@@ -6528,14 +6537,39 @@ async function lvRun(job) {
             try {
                 if (await vmNeedsClean(work, job)) {
                     const srcUrl = `${VM_PUBLIC}/api/lipvoice/src/${job.id}`;
-                    lvLog(job, `vmake: ciscenje izvirnika (${VM_TASK})…`);
-                    const outUrl = await vmRunTask(job, srcUrl, VM_TASK);
-                    const cleaned = path.join(work, 'clean.mp4');
-                    const rr = await fetch(outUrl);
-                    if (!rr.ok) throw new Error('prenos ocescenega videa ' + rr.status);
-                    fs.writeFileSync(cleaned, Buffer.from(await rr.arrayBuffer()));
-                    job.videoPath = cleaned; job.cleaned = true;
-                    lvLog(job, 'vmake: izvirnik ocisten ✓');
+                    // KASKADA metod + PREVERBA po vsaki: napisi morajo RES izginiti
+                    const metode = [
+                        { task: VM_TASK, override: null, label: VM_TASK },
+                        { task: 'eraser_watermark', override: { parameter: { target: 'smart_pro' } }, label: 'eraser smart_pro' },
+                        { task: 'eraser_watermark', override: { parameter: { target: 'watermark_subtitle' } }, label: 'eraser watermark+subtitle' },
+                    ];
+                    const regenFrames = async () => {
+                        fs.readdirSync(frDir).forEach(f => { try { fs.unlinkSync(path.join(frDir, f)); } catch (e) {} });
+                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
+                    };
+                    for (let mi = 0; mi < metode.length; mi++) {
+                        const m = metode[mi];
+                        try {
+                            lvLog(job, `vmake: ciscenje (${m.label})…`);
+                            const outUrl = await vmRunTask(job, srcUrl, m.task, m.override);
+                            const cleaned = path.join(work, `clean-${mi}.mp4`);
+                            const rr = await fetch(outUrl);
+                            if (!rr.ok) throw new Error('prenos ocescenega videa ' + rr.status);
+                            fs.writeFileSync(cleaned, Buffer.from(await rr.arrayBuffer()));
+                            job.videoPath = cleaned; job.cleaned = true;
+                            // PREVERBA: ali je na ocescenem videu se vedno kaj vzganega?
+                            await regenFrames();
+                            if (await vmNeedsClean(work, job)) {
+                                lvLog(job, `vmake: po metodi "${m.label}" so napisi SE VEDNO vidni -> poskusim naslednjo metodo`);
+                                continue; // naslednja metoda tece na ze delno ocescenem videu
+                            }
+                            lvLog(job, `vmake: izvirnik ocisten in PREVERJEN ✓ (${m.label})`);
+                            break;
+                        } catch (e) {
+                            lvLog(job, `vmake metoda "${m.label}" ni uspela (${String(e.message).slice(0, 90)})`);
+                        }
+                    }
+                    if (!job.cleaned) throw new Error('nobena metoda ciscenja ni uspela');
 
                     // ── KORAK 0b: izboljsava kvalitete ocescenega videa (da izgleda, kot da ne bi nic brisali) ──
                     if (VM_ENHANCE) {
@@ -6546,7 +6580,7 @@ async function lvRun(job) {
                             const re = await fetch(enhUrl);
                             if (!re.ok) throw new Error('prenos izboljsanega videa ' + re.status);
                             fs.writeFileSync(enhanced, Buffer.from(await re.arrayBuffer()));
-                            const szC = fs.statSync(cleaned).size, szE = fs.statSync(enhanced).size;
+                            const szC = fs.statSync(job.videoPath).size, szE = fs.statSync(enhanced).size;
                             job.videoPath = enhanced; job.enhanced = true;
                             lvLog(job, `vmake: kvaliteta izboljsana ✓ (${Math.round(szC/1e6)}MB -> ${Math.round(szE/1e6)}MB)`);
                         } catch (e) {
@@ -6677,7 +6711,8 @@ async function lvRun(job) {
                         await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)}" -an -c:v libx264 -preset veryfast -crf 20 '${lvSh(lsIn)}' 2>/dev/null`);
                     }
                     const lsOut = path.join(work, `lipsync-${lang}.mp4`);
-                    await lvLipsync(lsIn, voice, lsOut, job, lang);
+                    const rf = Math.min(W, H) <= 768 ? 1 : 2;   // do 768px polna locljivost (ostrejse ustnice)
+                    await lvLipsync(lsIn, voice, lsOut, job, lang, rf);
                     lipVideo = lsOut;
                 } catch (e) {
                     lvLog(job, `[${lang}] lipsync ni uspel (${String(e.message).slice(0, 90)}) -> nadaljujem brez lipsynca`);
@@ -6718,7 +6753,7 @@ async function lvRun(job) {
             // koncni izris: (lipsync video ze vsebuje nas zvok) ali (original + podaljsanje + nas zvok)
             const out = path.join(work, `${job.name}-${lang}.mp4`);
             if (lipVideo) {
-                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "ass='${lvSh(ass)}'" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
             } else {
                 const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
                 await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest '${lvSh(out)}' 2>/dev/null`);
