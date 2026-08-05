@@ -6176,15 +6176,28 @@ async function lvClone(audioPath, job) {
 async function lvDeleteVoice(id) { try { await fetch(`${LV_EL}/voices/${id}`, { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }); } catch (e) {} }
 
 // TTS s klonom (ali rezervo — rezerva UPOSTEVA spol govorca iz izvirnika)
+// PRAVILNA koda jezika (SI -> "sl"!) + veriga modelov: SI rabi eleven_v3 (v2 slovenscine ne podpira)
 async function lvTTS(text, lang, out, voiceId, gender) {
     if (!voiceId) return generateTTS(text, lang, out, 1.0, gender === 'female' ? 'female' : 'male');
-    const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-        body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', language_code: lang.toLowerCase(),
-            voice_settings: { stability: 0.5, similarity_boost: 0.85, style: 0.25, use_speaker_boost: true } })
-    });
-    if (!r.ok) { const e = await r.text(); throw new Error('TTS ' + r.status + ': ' + e.slice(0, 150)); }
-    fs.writeFileSync(out, Buffer.from(await r.arrayBuffer()));
+    const code = ELEVEN_LANG_CODES[lang] || String(lang).toLowerCase();
+    const models = lang === 'SI' ? ['eleven_v3', 'eleven_multilingual_v2'] : ['eleven_multilingual_v2', 'eleven_v3'];
+    let lastErr = '';
+    for (const model of models) {
+        const body = { text, model_id: model };
+        if (model === 'eleven_multilingual_v2') {
+            body.language_code = code;
+            body.voice_settings = { stability: 0.5, similarity_boost: 0.85, style: 0.25, use_speaker_boost: true };
+        }
+        const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
+            body: JSON.stringify(body)
+        });
+        if (r.ok) { fs.writeFileSync(out, Buffer.from(await r.arrayBuffer())); return; }
+        lastErr = 'TTS(' + model + ') ' + r.status + ': ' + (await r.text()).slice(0, 150);
+    }
+    // zadnja rezerva: privzeti glas trga (VOICE_MAP za SI ze pravilno uporablja eleven_v3)
+    console.log('[LV] klon TTS ni sel (' + lastErr + ') -> rezervni glas trga');
+    return generateTTS(text, lang, out, 1.0, gender === 'female' ? 'female' : 'male');
 }
 
 // ── 3) GPT: znamke -> NORIKS + prevod ──
@@ -6860,6 +6873,18 @@ app.get('/api/lipvoice/src/:id', (req, res) => {
     if (!f || !fs.existsSync(f)) return res.status(404).send('Ni datoteke');
     res.type('video/mp4');
     fs.createReadStream(f).pipe(res);
+});
+// prenos VSEH drzav enega joba v ZIP
+app.get('/api/lipvoice/download-zip/:id', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    const outs = Object.entries((j && j.outputs) || {}).filter(([L, f]) => fs.existsSync(f));
+    if (!outs.length) return res.status(404).send('Ni datotek');
+    res.attachment(`${j.name}-ALL.zip`);
+    const archive = archiver('zip', { zlib: { level: 5 } });
+    archive.on('error', () => { try { res.end(); } catch (e) {} });
+    archive.pipe(res);
+    for (const [L, f] of outs) archive.file(f, { name: `${j.name}-${L}.mp4` });
+    archive.finalize();
 });
 app.get('/api/lipvoice/download/:id/:lang', (req, res) => {
     const j = lvJobs.get(req.params.id), L = req.params.lang.toUpperCase();
