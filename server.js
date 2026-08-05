@@ -30,59 +30,8 @@ const app = express();
 const PORT = process.env.PORT || 3006;
 const DATA_FILE = path.join(__dirname, 'data.json');
 
-// === Global TTS concurrency limiter (ElevenLabs allows ~5 concurrent) ===
-function _makeLimiter(max) {
-    let active = 0; const queue = [];
-    const next = () => {
-        if (active >= max || !queue.length) return;
-        active++;
-        const { fn, resolve, reject } = queue.shift();
-        Promise.resolve().then(fn).then(
-            v => { active--; resolve(v); next(); },
-            e => { active--; reject(e); next(); });
-    };
-    return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); next(); });
-}
-const TTS_SEMAPHORE = _makeLimiter(4);
-
-// === Global JOB concurrency limit (max 1 aktiven localizer job) ===
-// FIX 2026-05-29: preprecuje da bi vec bulk video jobov hkrati sprozilo CPU thrashing.
-// Vsi POST-i takoj sprejeti, dejansko delo (generator) ceka v FIFO queue.
-const JOB_SEMAPHORE = _makeLimiter(1);
-
-// === FFMPEG heavy encode limit (max 2 paralelna libx264 -preset fast) ===
-// 4-core CPU prenese 2 hkratna H.264 encoda. Ostali ffmpeg klici (probe, frame extract,
-// silence gen, concat audio) ostajajo brez limita ker so I/O bound.
-const FFMPEG_HEAVY = _makeLimiter(2);
-
-// Wrapper okrog execPromise za heavy ffmpeg encode klice.
-async function _ffmpegHeavyExec(cmd, opts) {
-    return FFMPEG_HEAVY(() => execPromise(cmd, opts));
-}
-
-// Server startup timestamp za watchdog startup guard
-const SERVER_STARTUP_TS = Date.now();
-
-
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Catch malformed JSON request bodies so they don't crash the process
-app.use((err, req, res, next) => {
-    if (err && err.type === 'entity.parse.failed') {
-        console.warn(`[bad-json] ${req.method} ${req.path} from ${req.ip}: ${err.message}`);
-        return res.status(400).json({ error: 'invalid JSON body', detail: err.message });
-    }
-    return next(err);
-});
-
-// Global handlers to prevent process exit on unhandled async errors
-process.on('uncaughtException', (e) => {
-    console.error('[uncaughtException]', e && e.stack || e);
-});
-process.on('unhandledRejection', (reason) => {
-    console.error('[unhandledRejection]', reason && reason.stack || reason);
-});
 
 // ========== DROPBOX CREATIVES API ==========
 const DROPBOX_APP_KEY = process.env.DROPBOX_APP_KEY || '';
@@ -91,51 +40,12 @@ const DROPBOX_REFRESH_TOKEN = process.env.DROPBOX_REFRESH_TOKEN || '';
 const DROPBOX_ROOT = process.env.DROPBOX_ROOT || '';
 const DROPBOX_FOLDERS = [
     '/NORIKS Team Folder/TEJA - KREATIVE/FINAL CREATIVES 🔥',
-    '/NORIKS Team Folder/TEJA - KREATIVE/Final creatives_without_text 🎉',
     '/NORIKS Team Folder/FLORES',
     '/NORIKS Team Folder/TEJA - KREATIVE/Extra',
     '/NORIKS Team Folder/Faraz',
     '/NORIKS Team Folder/Wasif',
     '/NORIKS Team Folder/NORIKS_GP/TRANSLATED CREATIVES',
 ];
-
-// Helper: format today as DD-MM-YYYY for output filenames
-function todayDDMMYYYY() {
-    const d = new Date();
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    return dd + '-' + mm + '-' + d.getFullYear();
-}
-// Helper: build VO output filename per user spec: ID_DD-MM-YYYY_LANG_Product_Type_Author
-function buildVoFilename(np, lang, origName) {
-    // Build VO output filename from original video name + today's date + target language.
-    // Pattern: ID###_DD-MM-YYYY_LANG_<rest from original>
-    // Example: original "ID980_26-05-2026_EN_Shirts_New_TK.mp4" + lang GR
-    //       => "ID980_<today>_GR_Shirts_New_TK"
-    const dateStr = todayDDMMYYYY();
-    const langU = (lang || '').toUpperCase();
-    const COUNTRY_CODES = ['EN','SI','HR','SK','CZ','HU','PL','RO','GR','IT','DE','BG','AT'];
-    // Strip extension, split by underscore
-    const base = String(origName || '').replace(/\.[a-z0-9]+$/i, '');
-    const parts = base.split('_').filter(Boolean);
-    if (parts.length === 0) {
-        // Fallback to namingParts if no original name
-        if (!np) return null;
-        const id = (np.id || 'ID000').toUpperCase();
-        return id + '_' + dateStr + '_' + langU;
-    }
-    // First part = ID (must start with ID or ID###<suffix>)
-    const idPart = parts[0].toUpperCase();
-    let restStart = 1;
-    // Skip date if present
-    if (parts[1] && /^\d{2}-\d{2}-\d{2,4}$/.test(parts[1])) restStart = 2;
-    // Skip country code if present at next position
-    if (parts[restStart] && COUNTRY_CODES.includes(parts[restStart].toUpperCase())) restStart++;
-    const rest = parts.slice(restStart).join('_');
-    return rest
-        ? idPart + '_' + dateStr + '_' + langU + '_' + rest
-        : idPart + '_' + dateStr + '_' + langU;
-}
 
 let _dbxToken = null;
 let _dbxTokenExp = 0;
@@ -193,20 +103,12 @@ function parseCreativeFilename(name) {
     else if (/BOXER|BOKSER/i.test(upper)) productType = 'boxers';
     else if (/STARTER/i.test(upper)) productType = 'starter';
     else if (/KOMPLET|2P5|BUNDLE/i.test(upper)) productType = 'komplet';
-    // Match DD-MM-YYYY or DD-MM-YY (must come BEFORE shorter pattern to catch full year)
-    let fileDate = null;
-    const m4 = name.match(/(\d{2})-(\d{2})-(\d{4})/);
-    if (m4) {
-        fileDate = m4[3] + '-' + m4[2] + '-' + m4[1];
-    } else {
-        const m2 = name.match(/(\d{2})-(\d{2})-(\d{2})(?!\d)/);
-        if (m2) fileDate = '20' + m2[3] + '-' + m2[2] + '-' + m2[1];
-    }
+    const dateMatch = name.match(/(\d{2})-(\d{2})-(\d{2})/);
     return {
         creativeId: idMatch ? ('ID' + idMatch[1]) : null,
         country: country || null,
         productType,
-        fileDate: fileDate,
+        fileDate: dateMatch ? ('20' + dateMatch[1] + '-' + dateMatch[2] + '-' + dateMatch[3]) : null,
     };
 }
 
@@ -330,27 +232,7 @@ function readCreativesFromDb() {
                 videoCount: 0,
                 imageCount: 0,
                 latestModified: null,
-                hasWT: false,
-                authors: new Set(),
             };
-        }
-        // Detect AVTOR from filename / path
-        const nUp = (r.name || '').toUpperCase();
-        const pUp = (r.path || '').toUpperCase();
-        // ID###FA_ prefix => FA (Faraz)
-        if (/ID\d+FA_/.test(nUp) || /\/FARAZ\//.test(pUp)) groups[id].authors.add('FA');
-        // ID###WR_ prefix => WR (Wasif)
-        if (/ID\d+WR_/.test(nUp) || /\/WASIF\//.test(pUp)) groups[id].authors.add('WR');
-        // _TK suffix variants
-        if (/_TK[._\-]/.test(nUp) || /_TK$/.test(nUp.replace(/\.[A-Z0-9]+$/,''))) groups[id].authors.add('TK');
-        // _GP suffix or NORIKS_GP folder
-        if (/_GP[._\-]/.test(nUp) || /_GP$/.test(nUp.replace(/\.[A-Z0-9]+$/,'')) || /NORIKS_GP/.test(pUp)) groups[id].authors.add('GP');
-        // _SRB suffix or Srbija folder
-        if (/_SRB[._\-]/.test(nUp) || /_SRB$/.test(nUp.replace(/\.[A-Z0-9]+$/,'')) || /SRBIJA|SERBIA/.test(pUp)) groups[id].authors.add('SRB');
-        // Detect WITHOUT TEXT variant from filename
-        const nameUpper = (r.name || '').toUpperCase();
-        if (/WITHOUT[\s_]*TEXT/.test(nameUpper) || /WITH[\s_]+OUT[\s_]*TEXT/.test(nameUpper) || /_WT_/.test(nameUpper) || /_WT\./.test(nameUpper)) {
-            groups[id].hasWT = true;
         }
         const g = groups[id];
         const ccKey = r.country || 'EN';
@@ -372,13 +254,9 @@ function readCreativesFromDb() {
         else g.imageCount++;
         if (r.modified && (!g.latestModified || r.modified > g.latestModified)) g.latestModified = r.modified;
         if ((!g.productType || g.productType === 'other') && r.product_type) g.productType = r.product_type;
-        if (r.file_date) {
-            // Ignore future-dated files (typos in filename like 2027 when current is 2026)
-            const futureCutoff = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
-            if (r.file_date <= futureCutoff && (!g.fileDate || r.file_date > g.fileDate)) g.fileDate = r.file_date;
-        }
+        if (!g.fileDate && r.file_date) g.fileDate = r.file_date;
     }
-    const arr = Object.values(groups).filter(g => g.videoCount > 0).map(g => ({
+    const arr = Object.values(groups).map(g => ({
         creativeId: g.creativeId,
         productType: g.productType,
         fileDate: g.fileDate,
@@ -389,15 +267,8 @@ function readCreativesFromDb() {
         videoCount: g.videoCount,
         imageCount: g.imageCount,
         latestModified: g.latestModified,
-        hasWT: !!g.hasWT,
-        authors: [...(g.authors||[])].sort(),
     }));
     arr.sort((a, b) => {
-        // Sort by fileDate (parsed from video filename) — newest first
-        if (a.fileDate && b.fileDate) {
-            if (a.fileDate !== b.fileDate) return b.fileDate.localeCompare(a.fileDate);
-        } else if (a.fileDate) return -1;
-        else if (b.fileDate) return 1;
         if (a.latestModified && b.latestModified) return b.latestModified.localeCompare(a.latestModified);
         const an = parseInt((a.creativeId || '').replace(/\D/g, '')) || 0;
         const bn = parseInt((b.creativeId || '').replace(/\D/g, '')) || 0;
@@ -574,17 +445,19 @@ app.get('/api/dropbox/share-link', async (req, res) => {
 });
 // ===== END Dropbox share link =====
 
-function scheduleSync() {
-    // Sync every 3 hours
-    const THREE_HOURS = 3 * 60 * 60 * 1000;
-    const nextRun = new Date(Date.now() + THREE_HOURS);
-    console.log('[creatives:sync] next sync at', nextRun.toISOString(), '(every 3h)');
-    setInterval(() => {
-        console.log('[creatives:sync] running scheduled sync (3h interval)...');
-        syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] scheduled failed:', e));
-    }, THREE_HOURS);
+function scheduleDailySync() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(3, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delay = next.getTime() - now.getTime();
+    console.log('[creatives:sync] next daily sync at', next.toISOString());
+    setTimeout(() => {
+        syncCreativesFromDropbox().catch(e => console.error('[creatives:sync] daily failed:', e));
+        scheduleDailySync();
+    }, delay);
 }
-scheduleSync();
+scheduleDailySync();
 
 
 
@@ -1773,42 +1646,6 @@ function formatAssTime(seconds) {
     return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`;
 }
 
-// Split a long text into short subtitle chunks (3-5 words each)
-// with proportional timing based on word count, so chunks appear in sync with speech.
-function splitTextIntoSubtitleChunks(text, startSec, endSec, opts) {
-    opts = opts || {};
-    const wordsPerChunk = opts.wordsPerChunk || 4; // ~3-5 words
-    const totalDur = Math.max(0.5, endSec - startSec);
-    // Split on whitespace but keep punctuation attached to previous word
-    const words = String(text || '').split(/\s+/).filter(w => w.length > 0);
-    if (words.length === 0) return [];
-    // Build chunks. Prefer breaking on punctuation boundaries when possible.
-    const chunks = [];
-    let cur = [];
-    for (let i = 0; i < words.length; i++) {
-        cur.push(words[i]);
-        const endsPunct = /[.,!?:;\u2014\-]$/.test(words[i]);
-        const reachedMax = cur.length >= (wordsPerChunk + 1);
-        const reachedSoft = cur.length >= wordsPerChunk;
-        if (reachedMax || (reachedSoft && endsPunct)) {
-            chunks.push(cur.join(' '));
-            cur = [];
-        }
-    }
-    if (cur.length) chunks.push(cur.join(' '));
-    // Assign timestamps proportionally to word count of each chunk
-    const totalWords = words.length;
-    let acc = 0;
-    return chunks.map(chunk => {
-        const w = chunk.split(/\s+/).length;
-        const dur = (w / totalWords) * totalDur;
-        const s = startSec + acc;
-        acc += dur;
-        const e = startSec + acc;
-        return { text: chunk, start: s, end: e };
-    });
-}
-
 // ============================================
 // VIDEO LOCALIZER V2 API
 // ============================================
@@ -1847,128 +1684,6 @@ function persistJobs() {
     const jobs = Array.from(localizerJobs.values());
     saveJobs(jobs);
 }
-
-// === STARTUP RESCUE: jobs left "in flight" when process was killed get marked failed_stale ===
-const IN_FLIGHT_STATUSES = ['translating', 'generating', 'analyzing'];
-const STALE_TIMEOUT_MS = 8 * 60 * 1000; // 8 min without progress = stale
-let _rescued = 0;
-for (const j of localizerJobs.values()) {
-    if (IN_FLIGHT_STATUSES.includes(j.status)) {
-        j.status = 'failed_stale';
-        j.statusReason = `Process restarted while job in '${j.status||'?'}' (auto-rescued on boot)`;
-        _rescued++;
-    }
-}
-if (_rescued > 0) { persistJobs(); console.log(`[startup] rescued ${_rescued} stale localizer job(s)`); }
-
-// === WATCHDOG: every 60s mark jobs stuck >8min as failed_stale + AUTO-RESUME partial/failed ===
-const AUTO_RESUME_STATUSES = ['partial', 'failed_tts', 'failed_stale', 'error'];
-const MAX_AUTO_RESUMES = 3;
-const AUTO_RESUME_COOLDOWN_MS = 60 * 1000; // čakaj vsaj 60s preden auto-resume
-
-setInterval(() => {
-    const now = Date.now();
-    let changed = 0;
-    // FAZA 1: označi stale
-    for (const j of localizerJobs.values()) {
-        if (!IN_FLIGHT_STATUSES.includes(j.status)) continue;
-        const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
-        if (now - last > STALE_TIMEOUT_MS) {
-            const prevStatus = j.status;
-            j.status = 'failed_stale';
-            j.statusReason = `No progress for ${Math.round((now-last)/60000)}min in '${prevStatus}' (watchdog)`;
-            changed++;
-            console.warn(`[watchdog] ${j.id} stuck in ${prevStatus}, marking failed_stale`);
-        }
-    }
-    if (changed) persistJobs();
-
-    // FAZA 2: auto-resume partial/failed jobov (skipni že-resumane child jobe)
-    for (const j of Array.from(localizerJobs.values())) {
-        if (!AUTO_RESUME_STATUSES.includes(j.status)) continue;
-        if (j._autoResumeTriggered) continue; // že obravnavan
-        if (j.autoResumedTo) continue; // že ima child resume
-        const attempts = j.resumeAttempts || 0;
-        if (attempts >= MAX_AUTO_RESUMES) continue;
-        const last = j.lastProgressAt || (j.created ? new Date(j.created).getTime() : now);
-        if (now - last < AUTO_RESUME_COOLDOWN_MS) continue; // počakaj cooldown
-
-        // GUARD: če je ta job resume child (ima resumedFrom), preveri root parent
-        // — če root parent že ima vse outputs ali je done, NE resumaj (sirote)
-        if (j.resumedFrom) {
-            // Sledi chain do root
-            let cur = j;
-            const seen = new Set();
-            while (cur.resumedFrom && !seen.has(cur.id)) {
-                seen.add(cur.id);
-                const p = localizerJobs.get(cur.resumedFrom);
-                if (!p) { cur = null; break; }
-                cur = p;
-            }
-            if (cur) {
-                const rootAllC = cur.countries || [];
-                const rootOuts = Object.keys(cur.outputs || {}).filter(k => (cur.outputs || {})[k]);
-                if (cur.status === 'done' || rootOuts.length >= rootAllC.length) {
-                    // Root parent že komplet → ta child je sirota, ne resumaj
-                    console.log(`[watchdog] SKIP ${j.id} — root parent ${cur.id} already complete (${rootOuts.length}/${rootAllC.length})`);
-                    j._autoResumeTriggered = true;
-                    j.status = 'done';
-                    j.statusReason = `Skipped resume — root parent ${cur.id} already complete`;
-                    j.resolvedVia = cur.id;
-                    persistJobs();
-                    continue;
-                }
-            }
-        }
-
-        // Preveri da je še kaj za narediti
-        const allC = j.countries || [];
-        const doneC = Object.keys(j.outputs || {}).filter(k => (j.outputs || {})[k]);
-        const failedC = Object.keys(j.ttsErrors || {});
-        const stillTodo = allC.filter(c => !doneC.includes(c) || failedC.includes(c));
-        if (stillTodo.length === 0) continue;
-
-        // FIX 2026-05-29: ne auto-resume v prvih 5 min po server startu —
-        // ce je server padel zaradi paralelnih jobov, restart ne sme takoj sprozit spet vseh hkrati.
-        if (Date.now() - SERVER_STARTUP_TS < 5 * 60 * 1000) {
-            console.log(`[watchdog] STARTUP GUARD: skip auto-resume ${j.id} (server up <5min)`);
-            continue;
-        }
-
-        j._autoResumeTriggered = true;
-        console.log(`[watchdog] AUTO-RESUME ${j.id} (status=${j.status}, attempt ${attempts + 1}/${MAX_AUTO_RESUMES}, todo=${stillTodo.length})`);
-        try {
-            const r = _doResumeJob(j, { auto: true });
-            if (!r.ok) {
-                console.warn(`[watchdog] auto-resume ${j.id} failed: ${r.error}`);
-                j._autoResumeTriggered = false; // dovoli ponoven poskus naslednjič
-            } else {
-                j.autoResumedTo = r.jobId;
-                persistJobs();
-            }
-        } catch (e) {
-            console.error(`[watchdog] auto-resume ${j.id} threw:`, e.message);
-            j._autoResumeTriggered = false;
-        }
-    }
-}, 60 * 1000);
-
-// Graceful shutdown: persist before dying so jobs aren't lost
-function _gracefulExit(sig) {
-    try {
-        for (const j of localizerJobs.values()) {
-            if (IN_FLIGHT_STATUSES.includes(j.status)) {
-                j.status = 'failed_stale';
-                j.statusReason = `Server received ${sig} while job in progress`;
-            }
-        }
-        persistJobs();
-        console.log(`[shutdown] persisted jobs on ${sig}`);
-    } catch (e) { console.error('[shutdown] persist error:', e); }
-    process.exit(0);
-}
-process.on('SIGINT', () => _gracefulExit('SIGINT'));
-process.on('SIGTERM', () => _gracefulExit('SIGTERM'));
 
 const FFMPEG = '/usr/local/bin/ffmpeg';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -2937,9 +2652,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 fc += `;${lastLabel}[${idx + 1}:v]overlay=${p.x}:${p.y}:enable='between(t\\,${p.start}\\,${p.end})'${outLabel}`;
                 lastLabel = outLabel;
             });
-            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>&1`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>&1`);
         } else {
-            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>/dev/null`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outputVideo}" 2>/dev/null`);
         }
         
         res.json({ 
@@ -3009,18 +2724,16 @@ app.post('/api/localizer/generate', async (req, res) => {
         created: new Date().toISOString()
     };
     
-    job.lastProgressAt = Date.now();
     localizerJobs.set(jobId, job);
     persistJobs();
-
-    // Start async generation - any thrown error captured into job state
+    
+    // Start async generation
     const generator = (mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    JOB_SEMAPHORE(() => generator(job, videoPath)).catch(e => {
+    generator(job, videoPath).catch(e => {
         job.status = 'error';
-        job.statusReason = `Job crashed: ${e.message}`;
         job.error = e.message;
         persistJobs();
-        console.error(`[${jobId}] Error:`, e && e.stack || e);
+        console.error(`[${jobId}] Error:`, e);
     });
     
     res.json({ jobId, status: 'started' });
@@ -3371,8 +3084,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         // Generate video with naming convention
         let videoName;
         if (job.namingParts) {
-            // User-required format: ID980_26-05-2026_GR_Shirts_New_TK (today's date, DD-MM-YYYY)
-            videoName = buildVoFilename(job.namingParts, lang, job.name) || `${job.name}-${lang}`;
+            const { id, date, product, type, author } = job.namingParts;
+            videoName = `${id}_${date}_${lang}_${product}_${type}_${author}`;
         } else {
             videoName = `${job.name}-${lang}`;
         }
@@ -3388,9 +3101,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 fc += `;${lastLabel}[${idx + 1}:v]overlay=${p.x}:${p.y}:enable='between(t\\,${p.start}\\,${p.end})'${outLabel}`;
                 lastLabel = outLabel;
             });
-            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>&1`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" ${pngInputs} -filter_complex "${fc}" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>&1`);
         } else {
-            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>/dev/null`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outVideo}" 2>/dev/null`);
         }
         
         job.outputs[lang] = outVideo;
@@ -3429,100 +3142,51 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 // === VOICEOVER: ElevenLabs TTS + Subtitle generation ===
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 
-// Voice IDs for each language - native male voice actors (ElevenLabs Voice Library)
-// Selected: professional narrator / storytelling voices, middle-aged male, native accent
+// Voice IDs for each language - natural male voices
 const VOICE_MAP = {
-    SI: { voice_id: 'aJsqu0q7bXgzYrPDRSFx', name: 'Uros Novak', model: 'eleven_v3' }, // Slovenian native (v3 model)
-    HR: { voice_id: 'FXFcxnjikw0naYO1PPrU', name: 'Adnan' },              // Croatian male, 30s, news/narration
-    CZ: { voice_id: 'KIDKfqJyZ6ASuyzsKfh5', name: 'Jan - Kind Educator' },// Czech 35yo, audiobooks/narration
-    PL: { voice_id: 'gFl0NeqphJUaoBLtWrqM', name: 'Piotr' },              // Polish mature, warm/pleasant
-    GR: { voice_id: '9xjHNaV3YwyHqzzgRuXl', name: 'KonstantinosN' },      // Greek mid-40s, anchorman delivery
-    IT: { voice_id: 'W71zT1VwIFFx3mMGH2uZ', name: 'MarcoTrox' },          // Italian pro voice actor, narration
-    HU: { voice_id: '7B7mSWflzRSaO1yGeJH6', name: 'Gabor' },              // Hungarian warm/confident, narration
-    SK: { voice_id: 'T4CPtAHlrClEH8iCFo2h', name: 'Richard Vavrena' },    // Slovak middle-aged male
-    BG: { voice_id: '31jwlwrRwpOA5yGuVAby', name: 'Georgi' },             // Bulgarian studio quality, soft
-    RO: { voice_id: 't4BC7dZYcd5rQUJlgolT', name: 'Andrei (Audiobook)' }, // Romanian audiobook narrator
-    EN: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }              // English fallback
+    HR: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },  // Male
+    CZ: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    PL: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    GR: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    IT: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    HU: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    SK: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    BG: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
+    RO: { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' }
 };
 
 // Language codes for ElevenLabs
 const ELEVEN_LANG_CODES = {
-    SI: 'sl', HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
+    HR: 'hr', CZ: 'cs', PL: 'pl', GR: 'el', IT: 'it', HU: 'hu', SK: 'sk', BG: 'bg', RO: 'ro'
 };
 
-// Generate TTS audio with ElevenLabs (with model fallback + language_code retry)
-// speed: 0.7-1.2 (1.0 default). Used by adaptive-speed pipeline to fit segment duration.
-async function generateTTS(text, langCode, outputPath, speed) {
+// Generate TTS audio with ElevenLabs
+async function generateTTS(text, langCode, outputPath) {
     const voiceConfig = VOICE_MAP[langCode] || VOICE_MAP.HR;
     const elevenLang = ELEVEN_LANG_CODES[langCode] || 'en';
-    // Clamp speed to ElevenLabs valid range
-    let _speed = (typeof speed === 'number' && isFinite(speed)) ? speed : 1.0;
-    if (_speed < 0.7) _speed = 0.7;
-    if (_speed > 1.2) _speed = 1.2;
-    // Per-voice model override: some voices (e.g. SI Uros Novak) are v3-only.
-    // For overridden voices, try v3 first, then fall back to v2 attempts in case of API issue.
-    // For non-overridden voices, use existing v2 → v2-noLang → turbo_v2_5 chain.
-    const overrideModel = voiceConfig.model;
-    const ATTEMPTS = overrideModel
-        ? [
-            { model_id: overrideModel, language_code: elevenLang },
-            { model_id: overrideModel },
-            { model_id: 'eleven_multilingual_v2', language_code: elevenLang },
-            { model_id: 'eleven_multilingual_v2' }
-        ]
-        : [
-            { model_id: 'eleven_multilingual_v2', language_code: elevenLang },
-            { model_id: 'eleven_multilingual_v2' },
-            { model_id: 'eleven_turbo_v2_5', language_code: elevenLang }
-        ];
-
-    let response = null;
-    let lastErr = '';
-    const RATE_DELAYS = [3000, 7000, 15000, 30000, 60000]; // backoff za 429
-    const _doFetch = (b) => TTS_SEMAPHORE(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceConfig.voice_id}`, {
+    
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceConfig.voice_id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
-        body: JSON.stringify(b)
-    }));
-    outerAttempts:
-    for (const attempt of ATTEMPTS) {
-        const body = {
+        headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': ELEVENLABS_API_KEY
+        },
+        body: JSON.stringify({
             text: text,
-            model_id: attempt.model_id,
+            model_id: 'eleven_multilingual_v2',
+            language_code: elevenLang,
             voice_settings: {
                 stability: 0.5,
                 similarity_boost: 0.75,
                 style: 0.3,
-                use_speaker_boost: true,
-                speed: _speed
+                use_speaker_boost: true
             }
-        };
-        if (attempt.language_code) body.language_code = attempt.language_code;
-
-        response = await _doFetch(body);
-        if (response.ok) break;
-        lastErr = await response.text();
-
-        // 429 / concurrent_limit → exponential backoff retry na ISTEM attempt
-        if (response.status === 429 || /concurrent_limit|rate_limit|too_many/i.test(lastErr)) {
-            for (const w of RATE_DELAYS) {
-                console.warn(`[TTS] 429 ${attempt.model_id}, backoff ${w}ms`);
-                await new Promise(r => setTimeout(r, w));
-                response = await _doFetch(body);
-                if (response.ok) break outerAttempts;
-                lastErr = await response.text();
-                if (!(response.status === 429 || /concurrent_limit|rate_limit|too_many/i.test(lastErr))) break;
-            }
-            if (response.ok) break;
-        }
-
-        // unsupported_language → naslednji model; ostalo → bail
-        if (!/unsupported_language|invalid_parameters/i.test(lastErr)) break;
-        console.warn(`[TTS] ${attempt.model_id}${attempt.language_code?'+'+attempt.language_code:''} rejected, trying next...`);
-    }
-
+        })
+    });
+    
     if (!response.ok) {
-        throw new Error(`ElevenLabs TTS error: ${response.status} - ${lastErr}`);
+        const err = await response.text();
+        throw new Error(`ElevenLabs TTS error: ${response.status} - ${err}`);
     }
     
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -3672,8 +3336,10 @@ app.post('/api/srt/generate', async (req, res) => {
     if (lines.length === 0) return res.status(400).json({ error: 'No lines after trim' });
 
     const isFixed = (mode === 'fixed' || mode === 'from-creative') && Number.isFinite(Number(duration));
+    // from-creative: trust actual video duration (no 120s cap, only min 1s)
     const fixedDur = isFixed ? (mode === 'from-creative' ? Math.max(1, Number(duration)) : Math.max(10, Math.min(120, Number(duration)))) : null;
 
+    // Helper: format seconds → "HH:MM:SS,mmm"
     function fmtTs(sec) {
         if (sec < 0) sec = 0;
         const h = Math.floor(sec / 3600);
@@ -3684,6 +3350,7 @@ app.post('/api/srt/generate', async (req, res) => {
         return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms,3)}`;
     }
 
+    // Helper: build SRT string from segments [{text,start,end},...]
     function toSrt(segs) {
         return segs.map((s, i) =>
             `${i+1}\n${fmtTs(s.start)} --> ${fmtTs(s.end)}\n${s.text}`
@@ -3691,98 +3358,72 @@ app.post('/api/srt/generate', async (req, res) => {
     }
 
     try {
-        const inputText = lines.join(' ');
+        let segments;
 
-        // SINGLE-SEGMENT NARRATIVE MODE
-        // AI builds ONE flowing voiceover paragraph. Pauses/breaths happen naturally at punctuation.
-        // No segment splitting - ElevenLabs handles natural pauses via commas/periods/!/?
-        const durConstraint = isFixed
-            ? `Video traja TOČNO ${fixedDur} sekund. Tekst mora biti TAKO DOLG, da ga govorec naravno prebere v ${fixedDur} sekundah (~2.8-3.2 besed/sek). Če je input prekratek, ga rahlo razširi z vezniki/dopolnili. Če je predolg, ga skrči.`
-            : `Naravna dolžina glede na input (~2.8-3.2 besed/sek). Ne dodajaj besed po nepotrebnem.`;
+        if (isFixed) {
+            // FIXED mode: ask AI to rewrite/adjust the lines to fit exactly fixedDur seconds.
+            // Use OpenAI to redistribute timing AND optionally trim/rephrase lines so all fit.
+            const prompt = `Imam scenarij za reklamno video (en stavek na vrstico). Video traja TOČNO ${fixedDur} sekund.
 
-        const prompt = `Imam tekst za reklamni voiceover. Predelaj ga v EN POVEZAN GOVOR — kot da profesionalni govorec pripoveduje zgodbo v eni sapi.
+Razdeli ČAS med vrstice tako, da skupaj zapolnijo ${fixedDur}s. Če je vrstic preveč ali pretežke za branje, jih prilagodi (skrajšaj / združi / prerazporedi) — ampak SAMO če je nujno. Branje naj bo naravno (povprečno 3 besede/sekundo, min 1.2s na segment, max 6s).
 
-${durConstraint}
+Vrne JSON: [{"text": "vrstica", "start": 0.0, "end": 2.5}, ...]
+- start vedno > prejšnji end (lahko +0.1 do +0.4s premor)
+- zadnji end MORA biti = ${fixedDur}
+- SAMO JSON, brez razlage
 
-PRAVILA:
-1. Vrni EN SAM segment (en blok teksta), brez razbijanja na vrstice
-2. Tekst mora biti GLADEK, KOT GOVOR — uporabljaj ločila (vejice, pike, klicaji, vprašaji) kjer naj govorec naravno naredi pavzo ali vdihne
-3. Združi vse input vrstice v tekoč narrative — odstrani nepotrebne prelome, dodaj veznike (in, ampak, zato, pa, ali) kjer izboljša tekočost
-4. Lahko RAHLO PREFORMULIRAŠ za boljšo tekočost, ampak NE spreminjaj sporočila in NE izpusti ključnih informacij (NORIKS, ponudb, številk, %, garancij)
-5. Brez markdown, brez "Segment 1:", brez oznak — samo gol tekst voiceoverja
-6. NE dodaj nobenih emojijev. Če so v inputu emojiji, jih ODSTRANI iz outputa. Output mora biti SAMO čisti tekst (črke, številke, ločila), brez ikon, emoji simbolov, ali decorativnih znakov.
-7. Tekst naj zveni naravno za TTS govorca (ElevenLabs eleven_multilingual_v2)
+Vrstice:
+${lines.map((l, i) => `${i+1}. ${l}`).join('\n')}`;
 
-Vrni SAMO JSON v tej obliki (brez razlage, brez markdown ograj):
-{"text": "celoten govor v enem kosu, z ločili za naravne pavze."}
-
-INPUT TEKST:
-${inputText}`;
-
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-            body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 2000,
-                temperature: 0.7
-            })
-        });
-        const data = await r.json();
-        let content = data.choices?.[0]?.message?.content || '';
-        content = content.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim();
-        const match = content.match(/\{[\s\S]*\}/);
-        let narrativeText = inputText;
-        if (match) {
-            try {
-                const parsed = JSON.parse(match[0]);
-                if (parsed && typeof parsed.text === 'string' && parsed.text.trim()) {
-                    narrativeText = parsed.text.trim();
-                }
-            } catch (e) {
-                console.warn('[srt/generate] JSON parse failed, using raw input:', e.message);
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+                body: JSON.stringify({
+                    model: 'gpt-4o',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 4000
+                })
+            });
+            const data = await r.json();
+            const content = data.choices?.[0]?.message?.content || '[]';
+            const match = content.match(/\[[\s\S]*\]/);
+            segments = match ? JSON.parse(match[0]) : [];
+            if (!Array.isArray(segments) || segments.length === 0) {
+                throw new Error('AI did not return valid segments');
+            }
+        } else {
+            // AUTO mode: timing per line based on word count.
+            // ~3.0 words per second reading rate, min 1.2s, max 5.5s, +0.3s gap.
+            const WPS = 3.0;
+            const MIN = 1.2;
+            const MAX = 5.5;
+            const GAP = 0.3;
+            segments = [];
+            let cursor = 0;
+            for (const line of lines) {
+                const wc = line.split(/\s+/).filter(Boolean).length;
+                let dur = wc / WPS;
+                if (dur < MIN) dur = MIN;
+                if (dur > MAX) dur = MAX;
+                segments.push({ text: line, start: +cursor.toFixed(2), end: +(cursor + dur).toFixed(2) });
+                cursor += dur + GAP;
             }
         }
 
-        // Strip emojis & pictographic symbols from narrative (TTS reads them awkwardly, subtitles look noisy)
-        narrativeText = narrativeText
-            .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')      // misc symbols & pictographs, emoticons, transport, etc.
-            .replace(/[\u{2600}-\u{27BF}]/gu, '')        // misc symbols & dingbats (incl. arrows, stars)
-            .replace(/[\u{1F000}-\u{1F02F}]/gu, '')      // mahjong/dominoes
-            .replace(/[\u{1F0A0}-\u{1F0FF}]/gu, '')      // playing cards
-            .replace(/[\u{1F100}-\u{1F1FF}]/gu, '')      // enclosed alphanumerics
-            .replace(/[\u{1F200}-\u{1F2FF}]/gu, '')      // enclosed ideographic
-            .replace(/[\uFE00-\uFE0F]/g, '')            // variation selectors
-            .replace(/[\u200D]/g, '')                    // ZWJ
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        // Compute duration
-        let totalDuration;
-        if (isFixed) {
-            totalDuration = fixedDur;
-        } else {
-            const wordCount = narrativeText.split(/\s+/).filter(w => w.length > 0).length;
-            totalDuration = Math.max(3, wordCount / 3.0); // ~3 words/sec
+        // Sanitize: ensure monotonic, end > start
+        for (let i = 0; i < segments.length; i++) {
+            if (typeof segments[i].start !== 'number') segments[i].start = i === 0 ? 0 : segments[i-1].end + 0.3;
+            if (typeof segments[i].end !== 'number' || segments[i].end <= segments[i].start) segments[i].end = segments[i].start + 2.0;
         }
 
-        const segments = [{ text: narrativeText, start: 0, end: totalDuration }];
         const srt = toSrt(segments);
-
-        // Also produce a split version (~4 words per chunk) for on-screen subtitles
-        const segmentsSplit = splitTextIntoSubtitleChunks(narrativeText, 0, totalDuration, { wordsPerChunk: 4 });
-        const srtSplit = toSrt(segmentsSplit);
-
-        res.json({ srt, segments, srtSplit, segmentsSplit, videoDuration: +totalDuration.toFixed(2), mode: isFixed ? 'fixed' : 'auto', requested: isFixed ? fixedDur : null });
+        const totalDuration = segments[segments.length - 1].end;
+        res.json({ srt, segments, videoDuration: +totalDuration.toFixed(2), mode: isFixed ? 'fixed' : 'auto', requested: isFixed ? fixedDur : null });
     } catch (e) {
         console.error('[srt/generate] error:', e);
         res.status(500).json({ error: e.message });
     }
 });
-
-
-
 // ========== END SRT MAKER ==========
 
 
@@ -3797,167 +3438,57 @@ async function generateVoiceoverCountries(job, videoPath) {
     const outputDir = path.join(__dirname, 'uploads', 'generated', job.id);
     fs.mkdirSync(outputDir, { recursive: true });
     
-    // FIX 10s-cap: split long segments into sentence chunks so ElevenLabs
-    // doesn't truncate (~250 char limit) and so timestamps cover whole video.
-    // A single 22s blob was producing only ~10s of audio.
-    const MAX_CHARS_PER_SEG = 180;
-    const MAX_SEC_PER_SEG = 7;
-    function _splitSegmentBySentences(seg) {
-        const txt = (seg.text || '').trim();
-        const dur = (seg.end || 0) - (seg.start || 0);
-        if (txt.length <= MAX_CHARS_PER_SEG && dur <= MAX_SEC_PER_SEG) return [seg];
-        // Split on sentence boundaries first (. ! ?), keeping delimiter
-        let sentences = txt.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [txt];
-        sentences = sentences.map(s => s.trim()).filter(Boolean);
-        // Merge tiny sentences forward, split overly long ones on commas
-        const chunks = [];
-        let buf = '';
-        for (const s of sentences) {
-            if ((buf + ' ' + s).trim().length <= MAX_CHARS_PER_SEG) {
-                buf = (buf ? buf + ' ' : '') + s;
-            } else {
-                if (buf) chunks.push(buf);
-                if (s.length <= MAX_CHARS_PER_SEG) {
-                    buf = s;
-                } else {
-                    // split on commas
-                    const parts = s.split(/,\s*/);
-                    let inner = '';
-                    for (const p of parts) {
-                        if ((inner + ', ' + p).trim().length <= MAX_CHARS_PER_SEG) {
-                            inner = (inner ? inner + ', ' : '') + p;
-                        } else {
-                            if (inner) chunks.push(inner);
-                            inner = p;
-                        }
-                    }
-                    buf = inner;
-                }
-            }
-        }
-        if (buf) chunks.push(buf);
-        // Distribute timestamps proportionally to char length
-        const totalLen = chunks.reduce((n, c) => n + c.length, 0) || 1;
-        let cursor = seg.start || 0;
-        return chunks.map((c, i) => {
-            const portion = c.length / totalLen;
-            const segDur = dur * portion;
-            const start = cursor;
-            const end = (i === chunks.length - 1) ? (seg.end || (start + segDur)) : (start + segDur);
-            cursor = end;
-            return { ...seg, text: c, start, end };
-        });
-    }
-    if (Array.isArray(job.voiceoverScript) && job.voiceoverScript.length) {
-        const expanded = [];
-        for (const s of job.voiceoverScript) {
-            const parts = _splitSegmentBySentences(s);
-            expanded.push(...parts);
-        }
-        if (expanded.length !== job.voiceoverScript.length) {
-            console.log(`[${job.id}] [VO] Split ${job.voiceoverScript.length} segments -> ${expanded.length} sub-segments (10s-cap fix)`);
-            job.voiceoverScript = expanded;
-        }
+    // Step 1: Translate voiceover script
+    console.log(`[${job.id}] [VO] Translating voiceover script to ${LANGUAGES.length} languages...`);
+    
+    const langList = LANGUAGES.map(l => LANG_NAMES[l]).join(', ');
+    const jsonFormat = LANGUAGES.map(l => `"${l}":"..."`).join(',');
+    const textsToTranslate = job.voiceoverScript.map(s => s.text);
+    
+    const transResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+        body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [{
+                role: 'system',
+                content: `You are a professional marketing translator with NATIVE-SPEAKER fluency in ${langList}.
+
+CRITICAL RULES:
+1. These are VOICE-OVER scripts - they must sound NATURAL when spoken aloud
+2. Use conversational, everyday language
+3. Keep the same casual, friendly tone as the original
+4. Sentences should be SHORT and easy to speak (2-4 seconds each)
+5. Brand name "NORIKS" stays unchanged
+6. Think: how would a local friend recommend this product?
+7. CRITICAL: T-shirt = casual round-neck. Use: HR=majica, CZ=tričko, PL=koszulka, IT=maglietta, HU=póló, SK=tričko, BG=тениска, RO=tricou. NEVER use dress shirt words (košulja/košile/koszula/camicia/ing/košeľa/риза/cămașă).
+8. CRITICAL LANGUAGE WARNING: SK = SLOVAK (slovenčina/slovenský jazyk, spoken in SLOVAKIA). The source is SLOVENIAN (slovenščina, Slovenia). These are DIFFERENT languages! Translate INTO Slovak for SK. Do NOT copy Slovenian as Slovak.`
+            }, {
+                role: 'user',
+                content: `Translate these Slovenian voice-over sentences. They will be READ ALOUD, so make them sound natural:
+
+${textsToTranslate.map((t, i) => `${i+1}. "${t}"`).join('\n')}
+
+Return ONLY valid JSON array:
+[{${jsonFormat}}, ...]`
+            }],
+            max_tokens: 8000
+        })
+    });
+    
+    const transData = await transResponse.json();
+    let transContent = transData.choices?.[0]?.message?.content || '[]';
+    // Strip markdown code fences if present
+    transContent = transContent.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim();
+    const transMatch = transContent.match(/\[[\s\S]*\]/);
+    let translations = [];
+    try {
+        translations = transMatch ? JSON.parse(transMatch[0]) : [];
+    } catch (e) {
+        console.error(`[${job.id}] [VO] Failed to parse translations:`, e.message);
     }
     
-    // Step 1: Translate voiceover script PER LANGUAGE (one GPT call per language, in parallel).
-    // Previous single-call mixed languages (left segments in English when there were >1 chunks).
-    console.log(`[${job.id}] [VO] Translating voiceover script to ${LANGUAGES.length} languages (per-lang)...`);
-    const textsToTranslate = job.voiceoverScript.map(s => s.text);
-    const N = textsToTranslate.length;
-    let translations = textsToTranslate.map(() => ({}));
-
-    // === FIX A: Token budgeting — empirical chars-per-second when spoken at speed=1.0 ===
-    // Calibrated from production logs. Used as HARD per-segment char budget in GPT prompt
-    // so pass-1 TTS already fits the slot (avoids 30-50% of regen calls).
-    const CHARS_PER_SEC = {
-        SI: 14.5, HR: 14.8, CZ: 14.0, SK: 14.2,
-        PL: 14.5, IT: 15.2, GR: 13.8,
-        HU: 12.8, RO: 14.3,
-        DE: 12.5
-    };
-    const segDurations = job.voiceoverScript.map(s => Math.max(0.5, (s.end || 0) - (s.start || 0)));
-    function _charBudgetFor(lang, durSec) {
-        const cps = CHARS_PER_SEC[lang] || 14.0;
-        // 10% safety margin so pass-1 has slack.
-        return Math.max(20, Math.floor(cps * durSec * 0.90));
-    }
-
-    const _tshirtWord = { SI:'majica', HR:'majica', CZ:'tričko', SK:'tričko', PL:'koszulka', IT:'maglietta', HU:'póló', BG:'тениска', RO:'tricou', GR:'μπλουζάκι', DE:'T-Shirt' };
-    const _langFull = {
-        SI:'Slovenian (slovenščina, Slovenia)',
-        HR:'Croatian (hrvatski, Croatia)',
-        CZ:'Czech (čeština, Czech Republic)',
-        SK:'Slovak (slovenčina, Slovakia - NOT Slovenian!)',
-        PL:'Polish (polski, Poland)',
-        IT:'Italian (italiano, Italy)',
-        HU:'Hungarian (magyar, Hungary)',
-        BG:'Bulgarian (български, Bulgaria)',
-        RO:'Romanian (română, Romania)',
-        GR:'Greek (ελληνικά, Greece)',
-        DE:'German (Deutsch, Germany)'
-    };
-
-    async function _translateOne(lang) {
-        const fullLang = _langFull[lang] || lang;
-        const tshirt = _tshirtWord[lang] || 't-shirt';
-        // Languages with longer words / slower speech cadence — push for tighter phrasing
-        const isVerbose = ['SK','CZ','PL','HU','RO','GR','DE'].includes(lang);
-        // FIX A: per-segment hard char budget so TTS fits at speed=1.0
-        const budgets = segDurations.map(d => _charBudgetFor(lang, d));
-        const tightnessRule = isVerbose
-            ? `
-7. CRITICAL TIMING: ${fullLang} tends to be LONGER than English when spoken. Use the SHORTEST natural phrasing. Prefer short common words over compound/formal ones. Drop redundant words.`
-            : `
-7. Keep each sentence short and punchy.`;
-        const sysMsg = `You are a NATIVE ${fullLang} marketing copywriter. Translate the user's voice-over sentences into ${fullLang}.
-
-ABSOLUTE RULES:
-1. EVERY output sentence MUST be in ${fullLang}. NEVER leave English, Slovenian, or any other language.
-2. Sound natural when spoken aloud — conversational, friendly, casual.
-3. Brand name "NORIKS" stays unchanged.
-4. For "t-shirt" / "T-shirt" / "shirt" use the casual word: ${tshirt}. NEVER dress-shirt words.
-5. Keep meaning faithful. Do NOT skip, merge, or reorder sentences.
-6. Output ONLY a JSON array of exactly ${N} strings, in the same order as input. No comments, no markdown fences.${tightnessRule}
-8. CHARACTER BUDGET (HARD CONSTRAINT): each sentence must fit within its character budget below. Going over makes the voice-over too long for the video slot. If needed, drop adjectives, articles, fillers — keep the core meaning and emotion.`;
-        const userMsg = `Translate these ${N} sentences into ${fullLang}. Each sentence has a MAX CHARACTER BUDGET (count including spaces and punctuation). Stay at or under the budget.
-
-${textsToTranslate.map((t, i) => `${i+1}. [budget: ${budgets[i]} chars] ${t}`).join('\n')}
-
-Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay within each char budget.`;
-        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-            body: JSON.stringify({
-                model: 'gpt-4o',
-                temperature: 0.3,
-                messages: [{ role: 'system', content: sysMsg }, { role: 'user', content: userMsg }],
-                max_tokens: 3000
-            })
-        });
-        const data = await resp.json();
-        let content = (data.choices?.[0]?.message?.content || '').trim();
-        content = content.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim();
-        const m = content.match(/\[[\s\S]*\]/);
-        if (!m) throw new Error('no JSON array in response: ' + content.slice(0, 200));
-        const arr = JSON.parse(m[0]);
-        if (!Array.isArray(arr)) throw new Error('not an array');
-        const out = [];
-        for (let i = 0; i < N; i++) out.push(typeof arr[i] === 'string' && arr[i].trim() ? arr[i] : textsToTranslate[i]);
-        return out;
-    }
-
-    const _results = await Promise.allSettled(LANGUAGES.map(l => _translateOne(l)));
-    LANGUAGES.forEach((lang, li) => {
-        const r = _results[li];
-        if (r.status === 'fulfilled') {
-            r.value.forEach((txt, i) => { translations[i][lang] = txt; });
-            console.log(`[${job.id}] [VO] Translated ${lang}: ${r.value.length} segments`);
-        } else {
-            console.error(`[${job.id}] [VO] Translate failed for ${lang}:`, r.reason?.message || r.reason);
-            textsToTranslate.forEach((t, i) => { translations[i][lang] = t; });
-        }
-    });
+    console.log(`[${job.id}] [VO] Parsed ${translations.length} translations`);
     
     if (job.cancelled) {
         job.status = 'cancelled';
@@ -3977,8 +3508,6 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
         
         const lang = LANGUAGES[langIdx];
         job.currentLang = lang;
-        job.lastProgressAt = Date.now();
-        persistJobs();
         console.log(`[${job.id}] [VO] Generating ${lang}...`);
         
         // NATIVE SPEAKER PROOFREAD for voiceover
@@ -4006,7 +3535,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
             return { ...s, translatedText: translated };
         });
         
-        // Generate TTS for each sentence (ADAPTIVE SPEED: probe, then regenerate slower/faster to fit segment duration)
+        // Generate TTS for each sentence
         const ttsDir = path.join(outputDir, `tts-${lang}`);
         fs.mkdirSync(ttsDir, { recursive: true });
         
@@ -4014,60 +3543,19 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
         for (let i = 0; i < langTexts.length; i++) {
             const segment = langTexts[i];
             const ttsPath = path.join(ttsDir, `segment-${i}.mp3`);
-            const segDur = Math.max(0.5, (segment.end || 0) - (segment.start || 0));
             
             try {
                 console.log(`[${job.id}] [VO] TTS ${lang} segment ${i}: "${segment.translatedText.substring(0, 40)}..."`);
-                // FIX C: Per-language initial speed bias — empirical from prod logs.
-                // SI/HR usually overshoot ~15% at 1.0 → start at 1.10. HU/DE worst → start at 1.15.
-                // IT naturally fast → start at 0.95. This cuts ~60% of regen calls.
-                const INITIAL_SPEED = {
-                    SI: 1.10, HR: 1.10, CZ: 1.05, SK: 1.05,
-                    PL: 1.05, IT: 0.95, GR: 1.05,
-                    HU: 1.15, RO: 1.05, DE: 1.10
-                };
-                const initSpeed = INITIAL_SPEED[lang] || 1.0;
-                let ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, initSpeed);
-                let usedSpeed = initSpeed;
-                // If audio is too long for the segment, speed up (max 1.2). If much shorter, slow down (min 0.85).
-                const overshoot = ttsResult.duration / segDur;
-                if (overshoot > 1.05 && overshoot <= 1.5) {
-                    // Need to speed up. Cap at 1.2 (ElevenLabs max).
-                    const newSpeed = Math.min(1.2, Math.max(1.05, overshoot * 1.02));
-                    console.log(`[${job.id}] [VO] ${lang} seg${i} too long (${ttsResult.duration.toFixed(2)}s vs ${segDur.toFixed(2)}s) -> regen speed=${newSpeed.toFixed(2)}`);
-                    try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed);
-                        usedSpeed = newSpeed;
-                    } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
-                } else if (overshoot > 1.5) {
-                    // Too much overshoot - can't fit even at 1.2. Use 1.2 and let segment extend (FIX #1 handles canvas).
-                    console.log(`[${job.id}] [VO] ${lang} seg${i} way too long (${ttsResult.duration.toFixed(2)}s vs ${segDur.toFixed(2)}s) -> regen speed=1.2 (will extend canvas)`);
-                    try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, 1.2);
-                        usedSpeed = 1.2;
-                    } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
-                } else if (overshoot < 0.7 && segDur > 2.0) {
-                    // Audio much shorter than segment - slow down for nicer pacing.
-                    const newSpeed = Math.max(0.85, overshoot * 1.05);
-                    console.log(`[${job.id}] [VO] ${lang} seg${i} too short -> regen speed=${newSpeed.toFixed(2)}`);
-                    try {
-                        ttsResult = await generateTTS(segment.translatedText, lang, ttsPath, newSpeed);
-                        usedSpeed = newSpeed;
-                    } catch (re) { console.warn(`[${job.id}] [VO] regen failed:`, re.message); }
-                }
+                const ttsResult = await generateTTS(segment.translatedText, lang, ttsPath);
                 ttsSegments.push({
                     text: segment.translatedText,
                     audioPath: ttsResult.path,
                     audioDuration: ttsResult.duration,
                     start: segment.start,
-                    end: segment.end,
-                    speed: usedSpeed
+                    end: segment.end
                 });
             } catch (e) {
                 console.error(`[${job.id}] [VO] TTS error for ${lang} segment ${i}:`, e.message);
-                job.ttsErrors = job.ttsErrors || {};
-                job.ttsErrors[lang] = (job.ttsErrors[lang] || 0) + 1;
-                if (/quota_exceeded/i.test(e.message||'')) job.ttsQuotaExceeded = true;
                 // Skip this segment if TTS fails
                 ttsSegments.push({
                     text: segment.translatedText,
@@ -4077,37 +3565,6 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                     end: segment.end
                 });
             }
-        }
-        
-        // FIX G: SMART REFLOW with elastic pause budget — keep canvas at video duration.
-        // Old behavior: cumulative cursor → canvas drifts (HU/DE end up 2-3s longer).
-        // New behavior: total audio must fit in (videoDuration - originalFirstStart). Pauses
-        // between segments shrink (down to MIN_GAP=0.08s) before we resort to extending canvas.
-        // Result: ~95% of jobs keep original canvas length; CTA frame stays anchored.
-        const MIN_GAP = 0.08;
-        const TARGET_GAP = 0.25;
-        if (ttsSegments.length > 0) {
-            const originalFirstStart = ttsSegments[0].start || 0;
-            const videoDur = job.videoDuration || 30;
-            const availableTime = Math.max(1.0, videoDur - originalFirstStart);
-            const totalAudioDur = ttsSegments.reduce((sum, s) => sum + (s.audioDuration || (s.end - s.start) || 1.0), 0);
-            const nGaps = Math.max(0, ttsSegments.length - 1);
-            // Compute gap that keeps us within available time, clamped to [MIN_GAP, TARGET_GAP].
-            let gap = TARGET_GAP;
-            if (nGaps > 0) {
-                const idealGap = (availableTime - totalAudioDur) / nGaps;
-                gap = Math.max(MIN_GAP, Math.min(TARGET_GAP, idealGap));
-            }
-            const willOverflow = totalAudioDur + nGaps * MIN_GAP > availableTime;
-            let cursor = originalFirstStart;
-            for (let si = 0; si < ttsSegments.length; si++) {
-                const s = ttsSegments[si];
-                const dur = s.audioDuration || (s.end - s.start) || 1.0;
-                s.start = cursor;
-                s.end = cursor + dur;
-                cursor = s.end + (si < ttsSegments.length - 1 ? gap : 0);
-            }
-            console.log(`[${job.id}] [VO] ${lang} reflowed (gap=${gap.toFixed(2)}s, audio=${totalAudioDur.toFixed(2)}s, canvas=${cursor.toFixed(2)}s vs target=${videoDur}s${willOverflow ? ', OVERFLOW' : ''})`);
         }
         
         // Create concat file for TTS audio with silence gaps
@@ -4120,15 +3577,8 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
         // Build full audio: place each TTS segment at its start time
         // Use amerge approach: create a full-length silent track, then overlay each segment
         const videoDuration = job.videoDuration || 30;
-        // FIX #1: extend audio canvas to fit longest TTS segment (avoids truncation mid-speech)
-        let audioCanvasDur = videoDuration;
-        for (const s of ttsSegments) {
-            const segEnd = (s.start || 0) + (s.audioDuration || (s.end - s.start));
-            if (segEnd > audioCanvasDur) audioCanvasDur = segEnd;
-        }
-        audioCanvasDur = audioCanvasDur + 0.5; // small tail
         const fullSilencePath = path.join(ttsDir, 'full-silence.mp3');
-        await execPromise(`${FFMPEG} -y -f lavfi -i anullsrc=r=44100:cl=mono -t ${audioCanvasDur} -q:a 9 "${fullSilencePath}" 2>/dev/null`);
+        await execPromise(`${FFMPEG} -y -f lavfi -i anullsrc=r=44100:cl=mono -t ${videoDuration} -q:a 9 "${fullSilencePath}" 2>/dev/null`);
         
         // Build filter complex to overlay each TTS segment at its timestamp
         let filterParts = [];
@@ -4151,8 +3601,8 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
                 fc += `[d${idx}]`;
             });
             fc += `amix=inputs=${validSegments.length + 1}:duration=first:dropout_transition=0[aout]`;
-            
-            await execPromise(`${FFMPEG} -y ${inputs.join(' ')} -filter_complex "${fc}" -map "[aout]" -t ${audioCanvasDur} "${combinedAudioPath}" 2>/dev/null`);
+
+            await execPromise(`${FFMPEG} -y ${inputs.join(' ')} -filter_complex "${fc}" -map "[aout]" "${combinedAudioPath}" 2>/dev/null`);
         } else {
             // No valid TTS - use silence
             fs.copyFileSync(fullSilencePath, combinedAudioPath);
@@ -4176,7 +3626,7 @@ Output a JSON array of exactly ${N} ${fullLang} strings (same order). Stay withi
         // ASS Alignment: 5=middle-center, 2=bottom-center
         // For 1080x1920 vertical: middle = Align 5 + MarginV 200; bottom 25% = Align 2 + MarginV 480 (25% of 1920)
         const _vpos = (job.textPosition === 'bottom') ? { align: 2, marginV: 480 } : { align: 5, marginV: 200 };
-        const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,3,8,0,${_vpos.align},30,30,${_vpos.marginV},1`;
+        const subsStyle = `Style: Default,Noto Sans,${job.fontSize || 90},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,${_vpos.align},30,30,${_vpos.marginV},1`;
         
         let ass = `[Script Info]
 Title: ${job.name} ${lang} VO
@@ -4194,15 +3644,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
         
         ttsSegments.forEach(seg => {
-            // Use the actual TTS audio duration (or planned duration) as the visible window
-            const segEnd = Math.min(seg.start + (seg.audioDuration || (seg.end - seg.start)), seg.end + 0.5);
-            // Split into 3-5 word chunks so subtitles appear in sync with speech
-            const chunks = splitTextIntoSubtitleChunks(seg.text, seg.start, segEnd, { wordsPerChunk: 4 });
-            chunks.forEach(ch => {
-                const start = formatAssTime(ch.start);
-                const end = formatAssTime(ch.end);
-                ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(120,120)}${ch.text}\n`;
-            });
+            const start = formatAssTime(seg.start);
+            const end = formatAssTime(Math.min(seg.start + seg.audioDuration, seg.end + 0.5));
+            ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(200,200)}${seg.text}\n`;
         });
         
         const assPath = path.join(outputDir, `vo-subs-${lang}.ass`);
@@ -4211,8 +3655,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         // Final: combine video + TTS audio + subtitles
         let videoName;
         if (job.namingParts) {
-            // User-required format: ID980_26-05-2026_GR_Shirts_New_TK (today's date, DD-MM-YYYY)
-            videoName = buildVoFilename(job.namingParts, lang, job.name) || `${job.name}-${lang}`;
+            const { id, date, product, type, author } = job.namingParts;
+            videoName = `${id}_${date}_${lang}_${product}_${type}_${author}`;
         } else {
             videoName = `${job.name}-${lang}`;
         }
@@ -4220,29 +3664,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         // Mix original audio (if exists) with voiceover, or just use voiceover
         // Lower original audio volume, add voiceover on top
-        // PER-LANG GAIN: some voices (HU Gabor, RO Andrei — audiobook narrators) are naturally
-        // quieter than dramatic news voices (DE/IT). Boost them BEFORE loudnorm so the
-        // normalizer has headroom to bring them up to -14 LUFS without distortion.
-        const PRE_GAIN_DB = { HU: 3.5, RO: 3.5, GR: 1.5, BG: 2.0 };
-        const _gainDb = PRE_GAIN_DB[lang] || 0;
-        const _voGainFilter = _gainDb > 0 ? `volume=${_gainDb}dB,` : '';
         try {
             // Check if video has audio
             const probeResult = await execPromise(`${FFMPEG} -i "${videoPath}" 2>&1 | grep "Audio:"`);
             const hasAudio = probeResult.stdout.trim().length > 0;
-
+            
             if (hasAudio) {
                 // Mix: original at 30% volume + voiceover at 100%
-                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]${_voGainFilter}volume=2.0,loudnorm=I=-14:TP=-1.5:LRA=11,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:a]volume=0.05,apad[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15,apad[vo];[orig][vo]amix=inputs=2:duration=longest:normalize=0[amix];[amix]atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout];[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             } else {
-                // No original audio - apply gain + loudnorm to voiceover-only path too
-                const _voOnlyFilter = `[1:a]${_voGainFilter}loudnorm=I=-14:TP=-1.5:LRA=11,apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]`;
-                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];${_voOnlyFilter}" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+                // No original audio - just voiceover
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
             }
         } catch (e) {
             // Fallback: no audio mix, just subtitles
             console.error(`[${job.id}] [VO] Audio mix error for ${lang}:`, e.message);
-            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudioPath}" -filter_complex "[0:v]tpad=stop_mode=clone:stop_duration=${(Math.max(0, targetDur - probedVideoDur) + 0.5).toFixed(2)},trim=duration=${targetDur},setpts=PTS-STARTPTS,ass='${assPath}':fontsdir=/usr/share/fonts[vout];[1:a]apad,atrim=duration=${targetDur},asetpts=PTS-STARTPTS[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${targetDur.toFixed(3)} "${outVideo}" 2>&1`);
         }
         
         job.outputs[lang] = outVideo;
@@ -4252,40 +3689,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         console.log(`[${job.id}] [VO] ${lang} done (${job.completed}/${LANGUAGES.length})`);
     }
     
-    // Determine final status based on TTS errors
-    const errCounts = job.ttsErrors || {};
-    const totalErrs = Object.values(errCounts).reduce((s,n)=>s+n, 0);
-    const totalSegs = (job.voiceoverScript||[]).length * LANGUAGES.length;
-    if (totalErrs > 0 && totalErrs >= totalSegs * 0.5) {
-        job.status = 'failed_tts';
-        job.statusReason = job.ttsQuotaExceeded ? 'ElevenLabs quota exceeded' : 'TTS errors';
-    } else if (totalErrs > 0) {
-        job.status = 'partial';
-        job.statusReason = `TTS failed for ${totalErrs} segments (${job.ttsQuotaExceeded ? 'quota exceeded' : 'errors'})`;
-    } else {
-        job.status = 'done';
-    }
+    job.status = 'done';
     job.currentLang = '';
     job.completedAt = new Date().toISOString();
-
-    // Če je to bil resume child job in je done → propagiraj nazaj na parent
-    if (job.status === 'done' && job.resumedFrom) {
-        const parent = localizerJobs.get(job.resumedFrom);
-        if (parent) {
-            // Marker da je parent rešen preko child resume
-            parent.status = 'done';
-            parent.statusReason = `Resolved via auto-resume → ${job.id}`;
-            parent.resolvedVia = job.id;
-            parent.completedAt = job.completedAt;
-            // Skopiraj outputs iz childa nazaj v parent (za UI ZIP download)
-            parent.outputs = { ...(parent.outputs || {}), ...(job.outputs || {}) };
-            delete parent.ttsErrors;
-            console.log(`[${job.id}] propagated done → parent ${parent.id} (was partial)`);
-        }
-    }
-
     persistJobs();
-    console.log(`[${job.id}] [VO] All done! status=${job.status} ttsErrors=${totalErrs}`);
+    console.log(`[${job.id}] [VO] All done!`);
 }
 // === END VOICEOVER ===
 // List all jobs
@@ -4312,7 +3720,7 @@ app.post('/api/localizer/vo-preview', async (req, res) => {
     
     // Create ASS subtitle file
     const _pp = (textPosition === 'bottom') ? { align: 2, marginV: 480 } : { align: 5, marginV: 200 };
-    const subsStyle = `Style: Default,Noto Sans,90,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,3,8,0,${_pp.align},30,30,${_pp.marginV},1`;
+    const subsStyle = `Style: Default,Noto Sans,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,1,${_pp.align},30,30,${_pp.marginV},1`;
     
     let ass = `[Script Info]
 Title: VO Preview SLO
@@ -4330,13 +3738,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
     
     script.forEach(seg => {
-        // Split long segments into 3-5 word chunks for sync-with-speech subtitles
-        const chunks = splitTextIntoSubtitleChunks(seg.text, seg.start, seg.end, { wordsPerChunk: 4 });
-        chunks.forEach(ch => {
-            const start = formatAssTime(ch.start);
-            const end = formatAssTime(ch.end);
-            ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(120,120)}${ch.text}\n`;
-        });
+        const start = formatAssTime(seg.start);
+        const end = formatAssTime(seg.end);
+        ass += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\fad(200,200)}${seg.text}\n`;
     });
     
     const assPath = path.join(previewDir, `${previewId}.ass`);
@@ -4380,9 +3784,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             fc += '[0:a]';
             validSegments.forEach((_, idx) => { fc += `[d${idx}]`; });
             fc += `amix=inputs=${validSegments.length + 1}:duration=first:dropout_transition=0[voaudio]`;
-            
+
             const combinedAudio = path.join(ttsDir, 'combined.mp3');
-            await execPromise(`${FFMPEG} -y ${inputs.join(' ')} -filter_complex "${fc}" -map "[voaudio]" -t ${vDuration} "${combinedAudio}" 2>/dev/null`);
+            await execPromise(`${FFMPEG} -y ${inputs.join(' ')} -filter_complex "${fc}" -map "[voaudio]" "${combinedAudio}" 2>/dev/null`);
             
             // Combine: video + subtitles + lowered original audio + voiceover
             try {
@@ -4390,17 +3794,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 const hasAudio = probeResult.stdout.trim().length > 0;
                 
                 if (hasAudio) {
-                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
+                    await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=1.8,dynaudnorm=f=150:g=15[vo];[orig][vo]amix=inputs=2:duration=first:normalize=0[aout];[0:v]ass='${assPath}':fontsdir=/usr/share/fonts[vout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -t ${vDuration} "${outPath}" 2>&1`);
                 } else {
-                    await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
+                    await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
                 }
             } catch (e) {
                 // Fallback: just subtitles + voiceover, no original audio mix
-                await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
+                await execPromise(`${FFMPEG} -y -i "${videoPath}" -i "${combinedAudio}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -map 0:v -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 192k -shortest "${outPath}" 2>&1`);
             }
         } else {
             // No TTS succeeded - just subtitles
-            await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>/dev/null`);
+            await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "ass='${assPath}':fontsdir=/usr/share/fonts" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>/dev/null`);
         }
         
         console.log(`[vo-preview] Done: ${outPath}`);
@@ -4427,7 +3831,7 @@ app.post('/api/localizer/burn-srt', upload.single('srt'), async (req, res) => {
     const outPath = path.join(outDir, outId + '.mp4');
     
     try {
-        await _ffmpegHeavyExec(`${FFMPEG} -y -i "${videoPath}" -vf "subtitles='${srtFile.path}'" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>&1`);
+        await execPromise(`${FFMPEG} -y -i "${videoPath}" -vf "subtitles='${srtFile.path}'" -c:v libx264 -preset fast -crf 23 -c:a copy "${outPath}" 2>&1`);
         res.json({ previewUrl: '/uploads/vo-previews/' + outId + '.mp4' });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -4479,81 +3883,50 @@ app.get('/api/localizer/job/:id/zip', (req, res) => {
     const job = localizerJobs.get(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (job.status !== 'done') return res.status(400).json({ error: 'Job not complete' });
-
-    // ID extraction: 1) namingParts.id, 2) prvi underscore-segment iz job.name (npr. ID102 iz 'ID102_19-05-2026_EN_...'), 3) fallback job.name
-    let zipBase = '';
-    try {
-        if (job.namingParts && job.namingParts.id) {
-            zipBase = String(job.namingParts.id).toUpperCase();
-        } else if (job.name) {
-            const first = String(job.name).replace(/\.[a-z0-9]+$/i, '').split('_')[0];
-            if (first && /^ID\d+/i.test(first)) zipBase = first.toUpperCase();
-        }
-    } catch(e) {}
-    if (!zipBase) zipBase = (job.name || 'localized').replace(/\.[a-z0-9]+$/i, '');
-
+    
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${zipBase}.zip"`);
-
+    res.setHeader('Content-Disposition', `attachment; filename="${job.name}-all-countries.zip"`);
+    
     const archive = archiver('zip', { zlib: { level: 5 } });
     archive.pipe(res);
-
+    
     for (const [lang, videoPath] of Object.entries(job.outputs)) {
         if (fs.existsSync(videoPath)) {
-            // Per-video ime znotraj zipa: ID###_DD-MM-YYYY_LANG_<rest> (isti pattern kot ostali endpointi)
-            let videoName;
-            try { videoName = buildVoFilename(job.namingParts, lang, job.name); } catch(e) { videoName = null; }
-            if (!videoName) videoName = `${zipBase}_${lang}`;
-            archive.file(videoPath, { name: `${videoName}.mp4` });
+            archive.file(videoPath, { name: `${job.name}-${lang}.mp4` });
         }
     }
-
+    
     archive.finalize();
 });
 
 // Delete a job (only if author matches)
 app.delete('/api/localizer/job/:id', (req, res) => {
-    const { author } = req.body || {};
-    const jobId = req.params.id;
-    const job = localizerJobs.get(jobId);
-
-    // Permission check (only if we have a job with an author)
-    if (job) {
-        const jobAuthor = job.namingParts?.author?.toUpperCase() || '';
-        const requestAuthor = (author || '').toUpperCase();
-        if (jobAuthor && requestAuthor && jobAuthor !== requestAuthor) {
-            return res.status(403).json({ error: 'Lahko brišeš samo svoje kreative' });
-        }
-        // Mark cancelled so any running pipeline stops asap
-        job.cancelled = true;
+    const { author } = req.body; // Username of the person trying to delete
+    const job = localizerJobs.get(req.params.id);
+    
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    
+    // Check if author matches (case insensitive)
+    const jobAuthor = job.namingParts?.author?.toUpperCase() || '';
+    const requestAuthor = (author || '').toUpperCase();
+    
+    if (jobAuthor && requestAuthor && jobAuthor !== requestAuthor) {
+        return res.status(403).json({ error: 'Lahko brišeš samo svoje kreative' });
     }
-
-    // Delete generated folder if it exists (works even if job is not in memory)
-    const outputDir = path.join(__dirname, 'uploads', 'generated', jobId);
-    let removedFiles = false;
+    
+    // Delete video files
+    const outputDir = path.join(__dirname, 'uploads', 'generated', job.id);
     if (fs.existsSync(outputDir)) {
-        try {
-            fs.rmSync(outputDir, { recursive: true, force: true });
-            removedFiles = true;
-            console.log(`Deleted video folder: ${outputDir}`);
-        } catch (e) {
-            console.error(`Failed to remove ${outputDir}:`, e.message);
-        }
+        fs.rmSync(outputDir, { recursive: true, force: true });
+        console.log(`Deleted video folder: ${outputDir}`);
     }
-
-    // Remove from map & persist (only if it was there)
-    const removedFromMap = localizerJobs.has(jobId);
-    if (removedFromMap) {
-        localizerJobs.delete(jobId);
-        persistJobs();
-    }
-
-    if (!removedFromMap && !removedFiles) {
-        return res.status(404).json({ error: 'Job not found' });
-    }
-
-    console.log(`Job ${jobId} deleted by ${author || 'unknown'} (map=${removedFromMap}, files=${removedFiles})`);
-    res.json({ success: true, removedFromMap, removedFiles });
+    
+    // Remove from map and persist
+    localizerJobs.delete(req.params.id);
+    persistJobs();
+    
+    console.log(`Job ${req.params.id} deleted by ${author}`);
+    res.json({ success: true });
 });
 
 // Cancel a generating job
@@ -4572,216 +3945,6 @@ app.post('/api/localizer/job/:id/cancel', (req, res) => {
     console.log(`Job ${req.params.id} cancelled`);
     res.json({ success: true, message: 'Job will be cancelled' });
 });
-
-// Regenerate a job — clones original params and starts new generation
-app.post('/api/localizer/regenerate/:id', async (req, res) => {
-    const orig = localizerJobs.get(req.params.id);
-    if (!orig) return res.status(404).json({ error: 'Job not found' });
-    if (!orig.videoClean) return res.status(400).json({ error: 'Missing videoClean on original job' });
-
-    const videoPath = path.join(__dirname, 'uploads', orig.videoClean);
-    if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'Source video not found on disk' });
-
-    const newJobId = `gen-${Date.now()}`;
-    const newJob = {
-        id: newJobId,
-        name: orig.name,
-        namingParts: orig.namingParts,
-        videoClean: orig.videoClean,
-        texts: orig.texts,
-        style: orig.style,
-        fontSize: orig.fontSize,
-        hookStyle: orig.hookStyle,
-        ctaStyle: orig.ctaStyle,
-        perTextStyles: orig.perTextStyles,
-        uppercase: orig.uppercase,
-        countries: orig.countries,
-        source: orig.source,
-        mode: orig.mode,
-        voiceoverScript: orig.voiceoverScript,
-        videoDuration: orig.videoDuration,
-        status: 'translating',
-        completed: 0,
-        currentLang: '',
-        outputs: {},
-        regeneratedFrom: orig.id,
-        created: new Date().toISOString()
-    };
-
-    localizerJobs.set(newJobId, newJob);
-    persistJobs();
-
-    const generator = (newJob.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    generator(newJob, videoPath).catch(e => {
-        newJob.status = 'error';
-        newJob.error = e.message;
-        persistJobs();
-        console.error(`[${newJobId}] Regen error:`, e);
-    });
-
-    console.log(`Regenerated job ${orig.id} -> ${newJobId}`);
-    res.json({ jobId: newJobId, status: 'started', regeneratedFrom: orig.id });
-});
-
-// === RESUME helper (uses by both endpoint + auto-resume watchdog) ===
-function _doResumeJob(orig, opts = {}) {
-    if (!orig) return { ok: false, status: 404, error: 'Job not found' };
-    if (!orig.videoClean) return { ok: false, status: 400, error: 'Missing videoClean' };
-
-    const videoPath = path.join(__dirname, 'uploads', orig.videoClean);
-    if (!fs.existsSync(videoPath)) return { ok: false, status: 404, error: 'Source video not found on disk' };
-
-    const allCountries = orig.countries || [];
-    const doneOutputs = orig.outputs || {};
-    const doneCountries = Object.keys(doneOutputs).filter(k => doneOutputs[k]);
-    // Pri partial/failed_tts: ponovno generiraj VSE jezike pri katerih je bil ttsError (tudi če output exists)
-    const ttsErrLangs = Object.keys(orig.ttsErrors || {});
-    const failedDone = ttsErrLangs.filter(l => doneCountries.includes(l));
-    const effectiveDone = doneCountries.filter(c => !failedDone.includes(c));
-    const remaining = allCountries.filter(c => !effectiveDone.includes(c));
-
-    if (remaining.length === 0) {
-        return { ok: false, status: 400, error: 'Nothing to resume — all countries already generated' };
-    }
-
-    const newJobId = `gen-${Date.now()}`;
-    const newOutputDir = path.join(__dirname, 'uploads', 'generated', newJobId);
-    fs.mkdirSync(newOutputDir, { recursive: true });
-
-    // Copy already-generated files into new job dir so the final ZIP has everything
-    const carriedOutputs = {};
-    for (const lang of effectiveDone) {
-        const srcPath = doneOutputs[lang];
-        if (srcPath && fs.existsSync(srcPath)) {
-            const destPath = path.join(newOutputDir, path.basename(srcPath));
-            try {
-                fs.copyFileSync(srcPath, destPath);
-                carriedOutputs[lang] = destPath;
-            } catch (e) {
-                console.warn(`[resume ${newJobId}] failed to copy ${lang}: ${e.message}`);
-            }
-        }
-    }
-
-    const newJob = {
-        id: newJobId,
-        name: orig.name,
-        namingParts: orig.namingParts,
-        videoClean: orig.videoClean,
-        texts: orig.texts,
-        style: orig.style,
-        fontSize: orig.fontSize,
-        hookStyle: orig.hookStyle,
-        ctaStyle: orig.ctaStyle,
-        perTextStyles: orig.perTextStyles,
-        uppercase: orig.uppercase,
-        countries: remaining,
-        source: orig.source,
-        mode: orig.mode,
-        voiceoverScript: orig.voiceoverScript,
-        videoDuration: orig.videoDuration,
-        textPosition: orig.textPosition,
-        status: 'translating',
-        completed: Object.keys(carriedOutputs).length,
-        currentLang: '',
-        outputs: carriedOutputs,
-        resumedFrom: orig.id,
-        carriedCountries: effectiveDone,
-        resumeAttempts: (orig.resumeAttempts || 0) + 1,
-        autoResumed: !!opts.auto,
-        created: new Date().toISOString()
-    };
-
-    localizerJobs.set(newJobId, newJob);
-    persistJobs();
-
-    const generator = (newJob.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    generator(newJob, videoPath).catch(e => {
-        newJob.status = 'error';
-        newJob.error = e.message;
-        persistJobs();
-        console.error(`[${newJobId}] Resume error:`, e);
-    });
-
-    console.log(`Resumed job ${orig.id} -> ${newJobId} (carried ${effectiveDone.length}, remaining ${remaining.length}: ${remaining.join(',')})${opts.auto ? ' [AUTO]' : ''}`);
-    return { ok: true, jobId: newJobId, status: 'started', resumedFrom: orig.id, carriedCountries: effectiveDone, remainingCountries: remaining };
-}
-
-app.post('/api/localizer/resume/:id', async (req, res) => {
-    const orig = localizerJobs.get(req.params.id);
-    const r = _doResumeJob(orig, { auto: false });
-    if (!r.ok) return res.status(r.status).json({ error: r.error });
-    res.json(r);
-});
-
-// === FIX #4: queue + run endpoints (Voicemaker queues, user clicks RUN in Downloads) ===
-app.post('/api/localizer/queue', async (req, res) => {
-    const { videoClean, name, texts, style, fontSize = 72, namingParts, hookStyle, ctaStyle, perTextStyles, countries, source, uppercase, mode, voiceoverScript, videoDuration, textPosition } = req.body;
-    if (!videoClean || (!texts?.length && !voiceoverScript?.length)) {
-        return res.status(400).json({ error: 'Missing data' });
-    }
-    const videoPath = path.join(__dirname, 'uploads', videoClean);
-    if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'Video not found' });
-
-    const ALL_COUNTRIES = ['SI','HR','CZ','PL','GR','IT','HU','SK','BG','RO','DE'];
-    const selectedCountries = (countries && Array.isArray(countries) && countries.length > 0)
-        ? countries.filter(c => ALL_COUNTRIES.includes(c))
-        : ALL_COUNTRIES;
-
-    let actualVideoDuration = videoDuration;
-    if (mode === 'voiceover' && !actualVideoDuration) {
-        try {
-            const durResult = await execPromise(`${FFMPEG} -i "${videoPath}" 2>&1 | grep Duration | awk '{print }' | tr -d ','`);
-            const parts = durResult.stdout.trim().split(':');
-            actualVideoDuration = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
-        } catch(e) { actualVideoDuration = 30; }
-    }
-
-    const jobId = `gen-${Date.now()}`;
-    const job = {
-        id: jobId, name, namingParts, videoClean, texts,
-        style: style || 'white', fontSize: fontSize || 72,
-        hookStyle: hookStyle || null, ctaStyle: ctaStyle || null,
-        perTextStyles: perTextStyles || false, uppercase: uppercase || false,
-        countries: selectedCountries, source: source || 'library',
-        mode: mode || 'subtitles', voiceoverScript: voiceoverScript || null,
-        videoDuration: actualVideoDuration || videoDuration || null,
-        textPosition: textPosition || 'center',
-        status: 'queued', completed: 0, currentLang: '', outputs: {},
-        created: new Date().toISOString()
-    };
-    localizerJobs.set(jobId, job);
-    persistJobs();
-    console.log(`[${jobId}] Queued (mode=${job.mode}, countries=${selectedCountries.join(',')})`);
-    res.json({ jobId, status: 'queued' });
-});
-
-app.post('/api/localizer/run/:id', async (req, res) => {
-    const job = localizerJobs.get(req.params.id);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-    if (job.status !== 'queued') return res.status(400).json({ error: `Job not in queued state (status=${job.status})` });
-    if (!job.videoClean) return res.status(400).json({ error: 'Missing videoClean' });
-
-    const videoPath = path.join(__dirname, 'uploads', job.videoClean);
-    if (!fs.existsSync(videoPath)) return res.status(404).json({ error: 'Source video not found on disk' });
-
-    job.status = 'translating';
-    job.lastProgressAt = Date.now();
-    persistJobs();
-
-    const generator = (job.mode === 'voiceover') ? generateVoiceoverCountries : generateAllCountries;
-    JOB_SEMAPHORE(() => generator(job, videoPath)).catch(e => {
-        job.status = 'error';
-        job.statusReason = `Job crashed: ${e.message}`;
-        job.error = e.message;
-        persistJobs();
-        console.error(`[${job.id}] Error:`, e && e.stack || e);
-    });
-
-    console.log(`[${job.id}] RUN triggered from queue`);
-    res.json({ jobId: job.id, status: 'started' });
-});
-
 
 // List all generated videos
 app.get('/api/localizer/generated-videos', (req, res) => {
@@ -4828,45 +3991,11 @@ app.get('/api/localizer/generated-videos', (req, res) => {
                 else if (/_SRT(_|\.|$)/i.test(firstName)) mode = 'subtitles';
                 else mode = 'localizer';
             }
-            // Include real status from job tracker
-            let status = 'done', statusReason = null, ttsErrors = null;
-            if (jobInfo) {
-                status = jobInfo.status || 'done';
-                statusReason = jobInfo.statusReason || null;
-                ttsErrors = jobInfo.ttsErrors || null;
-                // Detect stale jobs (translating/generating without recent update)
-                const isStale = ['translating','generating','analyzing'].includes(status);
-                if (isStale) {
-                    const lastTs = new Date(jobInfo.completedAt || jobInfo.startedAt || jobInfo.createdAt || 0).getTime();
-                    const folderTs = parseInt((folder.match(/\d+/)||['0'])[0]);
-                    const refTs = lastTs || folderTs;
-                    if (refTs && (Date.now() - refTs) > 10*60*1000) {
-                        status = 'failed_stale';
-                        statusReason = 'Job se je obtičal v fazi: ' + (jobInfo.status||'?');
-                    }
-                }
-                // Validate: if status=done but expected videos missing, mark partial
-                // SKIP če je job resolved via auto-resume (parent ima outputs map na child folder)
-                const expectedLangs = (jobInfo.countries||[]).length || 0;
-                if (status === 'done' && expectedLangs > 0 && !jobInfo.resolvedVia) {
-                    const mp4Count = videos.filter(v => v.name && v.name.toLowerCase().endsWith('.mp4')).length;
-                    const outputsCount = Object.keys(jobInfo.outputs || {}).length;
-                    // Preveri MP4 v parent folderju IN outputs map (resume child folder)
-                    if (mp4Count < expectedLangs && outputsCount < expectedLangs) {
-                        status = 'partial';
-                        statusReason = `Manjkajo videji: ${Math.max(mp4Count, outputsCount)}/${expectedLangs}`;
-                    }
-                }
-            }
             return {
                 id: folder,
                 timestamp,
                 videos,
-                mode,
-                status,
-                statusReason,
-                ttsErrors,
-                dropboxUploaded: (jobInfo && jobInfo.dropboxUploaded) || null
+                mode
             };
         });
         
