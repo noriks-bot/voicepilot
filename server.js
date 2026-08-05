@@ -6596,6 +6596,7 @@ async function lvRun(job) {
         // spol govorca zaznamo VEDNO — rezervni glas mora biti istega spola kot izvirnik
         // spol zaznamo VEDNO (tudi ob klonu — za preverbo klona in za rezervo)
         job.gender = await lvSpeakerGender(aud, work, job);
+        lvLog(job, `>>> SPOL GOVORCA: ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} <<<`);
 
         // ── PREVERBA KLONA: kratek testni TTS -> ali klon zveni kot pravi spol govorca? ──
         if (clonedVoice && job.gender) {
