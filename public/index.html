@@ -52,7 +52,8 @@
         
         .mode-content { display: none !important; }
         /* LipVoiceSubMaker v2 — lastna ovojnica, da je switchPage ne skrije skupaj z legacy .container */
-        #page-lipvoice .lv-container { max-width: 1500px; margin: 0; }
+        body.page-lipvoice .main-area { max-width: none; }
+        #page-lipvoice .lv-container { max-width: none; margin: 0; }
         #page-lipvoice .lv-container input[type="text"] { color: #0f172a; background: #fff; }
 
         /* mode-content shown only on voiceover page, controlled by JS in switchPage */
@@ -8346,7 +8347,6 @@
         <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="RO"> 🇷🇴 RO</label>
         <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="BG"> 🇧🇬 BG</label>
         <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="DE"> 🇩🇪 DE</label>
-        <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="EN"> 🇬🇧 EN</label>
       </div>
 
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;font-weight:600;cursor:pointer">
