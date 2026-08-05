@@ -6181,7 +6181,7 @@ async function lvDeleteVoice(id) { try { await fetch(`${LV_EL}/voices/${id}`, { 
 async function lvTTS(text, lang, out, voiceId, gender) {
     if (!voiceId) return generateTTS(text, lang, out, 1.0, gender === 'female' ? 'female' : 'male');
     const code = ELEVEN_LANG_CODES[lang] || String(lang).toLowerCase();
-    const models = lang === 'SI' ? ['eleven_v3', 'eleven_multilingual_v2'] : ['eleven_multilingual_v2', 'eleven_v3'];
+    const models = ['eleven_v3', 'eleven_multilingual_v2'];  // v3 = najbolj native prosodija (HR/SI!), v2 rezerva
     let lastErr = '';
     for (const model of models) {
         const body = { text, model_id: model };
@@ -6209,7 +6209,11 @@ RULES:
 1. Replace EVERY brand, company or product name with "${product}". Never keep any other brand.
    Write the brand EXACTLY as "${product}" — letter for letter. Never respell it (no "X" instead of "KS",
    no other variant). Grammatical case endings are allowed (e.g. "${product}a"), the stem never changes.
-2. Translate to natural spoken ${FULL[lang] || lang} for a video ad — persuasive, native, not literal.
+2. Translate the way a NATIVE ${FULL[lang] || lang} speaker actually TALKS in everyday speech —
+   natural word order, colloquial phrasing, correct diacritics. Never a literal/textbook translation.
+   If a phrase would sound odd spoken aloud, rephrase it the way a local ad would say it.
+2b. This text will be READ ALOUD by TTS: write out ALL numbers, prices, percentages and units
+   as words in ${FULL[lang] || lang}, exactly as a native speaker would pronounce them.
 3. Keep each numbered line separate, same count and same order (this is dubbing).
 4. LENGTH IS CRITICAL: each line must take the SAME TIME TO SAY OR LESS than the original.
    ${FULL[lang] || lang} is usually longer than English/German — so COMPRESS: drop filler words,
