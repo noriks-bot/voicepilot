@@ -6034,7 +6034,9 @@ async function vmNeedsClean(work, job) {
                 ...imgs] }] })
         });
         if (!r.ok) return true;
-        const a = (await r.json()).choices[0].message.content.trim().toUpperCase();
+        const jj = await r.json();
+        if (job) { job.cost_miniIn = (job.cost_miniIn || 0) + ((jj.usage || {}).prompt_tokens || 0); job.cost_miniOut = (job.cost_miniOut || 0) + ((jj.usage || {}).completion_tokens || 0); }
+        const a = jj.choices[0].message.content.trim().toUpperCase();
         lvLog(job, 'vzgani napisi/logotipi na videu: ' + a);
         return a.startsWith('Y');
     } catch (e) { return true; }
@@ -6063,7 +6065,10 @@ async function vmRunTask(job, srcUrl, taskName) {
 
     const cons = await vmCall('POST', `${VM_WAPI}/skill/consume.json`, { url: srcUrl, task: taskName, gid });
     const context = (cons.response || {}).context || '';
-    lvLog(job, `vmake: kvota potrjena, posiljam nalogo ${taskName}`);
+    (job.vmakeTasks = job.vmakeTasks || []).push(taskName);
+    // morebitni podatki o kreditih iz consume odgovora (za kalibracijo cene)
+    const consInfo = Object.fromEntries(Object.entries(cons.response || {}).filter(([k, v]) => k !== 'context' && (typeof v === 'number' || typeof v === 'string' && v.length < 40)));
+    lvLog(job, `vmake: kvota potrjena, posiljam nalogo ${taskName}` + (Object.keys(consInfo).length ? ` [${JSON.stringify(consInfo)}]` : ''));
 
     const base = String(policy.url).replace(/\/+$/, '');
     const run = await vmCall('POST', `${base}/${policy.push_path}`, {
@@ -6095,6 +6100,9 @@ async function vmRunTask(job, srcUrl, taskName) {
 
 // ── 1) STT: ElevenLabs scribe, ob 401 rezerva na OpenAI Whisper ──
 async function lvSTT(audioPath, job, langHint) {
+    // minute za stroskovnik (scribe/whisper se placujeta na minuto)
+    let _min = 0;
+    try { _min = (parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(audioPath)}'`)).stdout || '0').trim()) || 0) / 60; } catch (e) {}
     try {
         const fd = new FormData();
         fd.append('file', new Blob([fs.readFileSync(audioPath)]), 'a.mp3');
@@ -6104,6 +6112,7 @@ async function lvSTT(audioPath, job, langHint) {
         const r = await fetch(`${LV_EL}/speech-to-text`, { method: 'POST', headers: { 'xi-api-key': ELEVENLABS_API_KEY }, body: fd });
         if (r.ok) {
             const d = await r.json();
+            if (job) job.cost_scribeMin = (job.cost_scribeMin || 0) + _min;
             lvLog(job, 'STT: ElevenLabs scribe ✓');
             return { text: d.text || '', lang: d.language_code || 'en',
                 words: (d.words || []).filter(w => w.type !== 'spacing' && (w.text || '').trim())
@@ -6122,6 +6131,7 @@ async function lvSTT(audioPath, job, langHint) {
         method: 'POST', headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, body: fd });
     if (!r.ok) throw new Error('STT (Whisper) ' + r.status + ': ' + (await r.text()).slice(0, 200));
     const d = await r.json();
+    if (job) job.cost_whisperMin = (job.cost_whisperMin || 0) + _min;
     lvLog(job, 'STT: OpenAI Whisper ✓');
     return { text: d.text || '', lang: d.language || 'en',
         words: (d.words || []).map(w => ({ w: w.word, s: w.start, e: w.end })) };
@@ -6147,6 +6157,7 @@ async function lvClone(audioPath, job) {
         fd.append('name', 'LV-' + job.id);
         fd.append('files', new Blob([fs.readFileSync(audioPath)]), 'voice.mp3');
         fd.append('description', 'LipVoiceMaker klon govorca');
+        fd.append('remove_background_noise', 'true'); // glasba/sum v ozadju sicer pokvari klon (napacen spol/timbre)
         const r = await fetch(`${LV_EL}/voices/add`, { method: 'POST', headers: { 'xi-api-key': ELEVENLABS_API_KEY }, body: fd });
         if (r.ok) { const v = (await r.json()).voice_id; lvLog(job, 'KLON GLASU ✓ (' + v + ')'); return v; }
         lvLog(job, 'klon glasu ' + r.status + ' (manjka create_instant_voice_clone) -> rezervni glas');
@@ -6288,7 +6299,7 @@ function lvCues(words, opts) {
 // Kljucno: vrstice so casovno ZVEZNE (od te besede do zacetka naslednje),
 // zato napis nikoli ne ugasne sredi stavka.
 function lvAss(cues, W, H) {
-    const fs_ = Math.round(W * 0.082);           // ~89px pri 1080 — vecja pisava (kratki napisi + prelom jo prenesejo)
+    const fs_ = Math.round(W * 0.088);           // ~95px pri 1080 — se malce vecja pisava
     const mv = Math.round(H * 0.14);
     const mh = Math.round(W * 0.08);             // levi/desni rob -> besedilo ostane v kadru
     const t = (x) => { x = Math.max(0, x); const h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), s = (x % 60).toFixed(2).padStart(5, '0'); return `${h}:${String(m).padStart(2, '0')}:${s}`; };
@@ -6386,7 +6397,9 @@ async function lvHasFace(video, work, job) {
                 { type: 'text', text: 'Do these video frames show a person whose FACE and MOUTH are clearly visible and talking to camera? Answer only YES or NO.' }, ...imgs] }] })
         });
         if (!r.ok) return { face: false, gender: null };
-        const ans = (await r.json()).choices[0].message.content.trim().toUpperCase();
+        const jj = await r.json();
+        if (job) { job.cost_miniIn = (job.cost_miniIn || 0) + ((jj.usage || {}).prompt_tokens || 0); job.cost_miniOut = (job.cost_miniOut || 0) + ((jj.usage || {}).completion_tokens || 0); }
+        const ans = jj.choices[0].message.content.trim().toUpperCase();
         lvLog(job, 'obraz v kadru: ' + ans);
         return { face: ans.startsWith('Y'), gender: null };
     } catch (e) { lvLog(job, 'zaznava obraza ni uspela -> brez lipsynca'); return { face: false, gender: null }; }
@@ -6401,43 +6414,75 @@ function lvLipsyncReady() {
         fs.existsSync(path.join(W2L_DIR, 'checkpoints', 'wav2lip_gan.pth'));
 }
 async function lvLipsync(videoIn, audioIn, outPath, job, lang) {
-    lvLog(job, `[${lang}] lipsync (Wav2Lip, CPU) — to traja nekaj minut…`);
+    lvLog(job, `[${lang}] lipsync (Wav2Lip, CPU) 0% — zaganjam…`);
     const t0 = Date.now();
+    const logf = outPath + '.progress.log';
     // resize_factor 2: obdelava na polovicni locljivosti (obraz se vedno oster), ~4x hitreje
-    await execPromise(
+    const p = execPromise(
         `cd '${lvSh(W2L_DIR)}' && OMP_NUM_THREADS=3 nice -n 10 '${lvSh(W2L_PY)}' inference.py ` +
         `--checkpoint_path checkpoints/wav2lip_gan.pth ` +
         `--face '${lvSh(videoIn)}' --audio '${lvSh(audioIn)}' --outfile '${lvSh(outPath)}' ` +
-        `--resize_factor 2 --wav2lip_batch_size 64 --face_det_batch_size 4 2>&1 | tail -2`,
+        `--resize_factor 2 --wav2lip_batch_size 64 --face_det_batch_size 4 > '${lvSh(logf)}' 2>&1`,
         { timeout: 45 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }
     );
+    // ZIV NAPREDEK: tqdm izpis -> odstotek v zadnji log vrstici (UI jo osvezuje)
+    const iv = setInterval(() => {
+        try {
+            const t = fs.readFileSync(logf, 'utf8');
+            const m = [...t.matchAll(/(\d{1,3})%\|/g)];
+            if (!m.length) return;
+            const pct = m[m.length - 1][1];
+            const faza = (t.match(/100%\|/g) || []).length >= 1 ? 'sinhronizacija ust' : 'detekcija obraza';
+            const min = ((Date.now() - t0) / 60000).toFixed(1);
+            const line = `[${lang}] lipsync (Wav2Lip) — ${faza} ${pct}% · ${min} min`;
+            const L = job.log = job.log || [];
+            if (L.length && L[L.length - 1].includes('lipsync (Wav2Lip)')) L[L.length - 1] = line;
+            else L.push(line);
+            lvSave();
+        } catch (e) {}
+    }, 8000);
+    try { await p; } finally { clearInterval(iv); }
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 50000) throw new Error('Wav2Lip ni ustvaril izhoda');
     lvLog(job, `[${lang}] lipsync koncan ✓ (${Math.round((Date.now() - t0) / 60000)} min)`);
 }
 
 // ── 5b) spol govorca (da rezervni glas ni moski, ko govori zenska, in obratno) ──
 // Posluh: gpt-4o-audio-preview nad izsekom izvirnega zvoka. Ob napaki -> slika, nato 'male'.
+// zaznava spola NAD POLJUBNIM mp3 (uporablja se za izvirnik IN za preverbo klona)
+// preizkusi vec audio modelov — gpt-4o-audio-preview je vracal 404
+async function lvAudioGender(mp3Path, job, oznaka) {
+    let b64;
+    try { b64 = fs.readFileSync(mp3Path).toString('base64'); } catch (e) { return null; }
+    for (const model of ['gpt-audio', 'gpt-4o-audio-preview', 'gpt-4o-mini-audio-preview']) {
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+                body: JSON.stringify({
+                    model, max_tokens: 4, modalities: ['text'],
+                    messages: [{ role: 'user', content: [
+                        { type: 'text', text: 'Listen to the speaker. Is the voice MALE or FEMALE? Answer with one word: MALE or FEMALE.' },
+                        { type: 'input_audio', input_audio: { data: b64, format: 'mp3' } }] }]
+                })
+            });
+            if (!r.ok) continue;
+            const jj = await r.json();
+            if (job) job.cost_audTok = (job.cost_audTok || 0) + ((jj.usage || {}).total_tokens || 0);
+            const a = (jj.choices[0].message.content || '').trim().toUpperCase();
+            if (a.includes('FEMALE')) { lvLog(job, `spol ${oznaka || 'govorca'}: ZENSKA (po zvoku, ${model})`); return 'female'; }
+            if (a.includes('MALE')) { lvLog(job, `spol ${oznaka || 'govorca'}: MOSKI (po zvoku, ${model})`); return 'male'; }
+        } catch (e) {}
+    }
+    return null;
+}
+
 async function lvSpeakerGender(audioPath, work, job) {
     // a) po zvoku (najbolj zanesljivo — deluje tudi brez obraza v kadru)
     try {
         const clip = path.join(work, 'gender.mp3');
         await execPromise(`ffmpeg -y -i '${lvSh(audioPath)}' -t 12 -ac 1 -ar 16000 -b:a 64k '${lvSh(clip)}' 2>/dev/null`);
-        const b64 = fs.readFileSync(clip).toString('base64');
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
-            body: JSON.stringify({
-                model: 'gpt-4o-audio-preview', max_tokens: 4,
-                modalities: ['text'],
-                messages: [{ role: 'user', content: [
-                    { type: 'text', text: 'Listen to the speaker. Is the voice MALE or FEMALE? Answer with one word: MALE or FEMALE.' },
-                    { type: 'input_audio', input_audio: { data: b64, format: 'mp3' } }] }]
-            })
-        });
-        if (r.ok) {
-            const a = (await r.json()).choices[0].message.content.trim().toUpperCase();
-            if (a.includes('FEMALE')) { lvLog(job, 'spol govorca: ZENSKA (po zvoku)'); return 'female'; }
-            if (a.includes('MALE')) { lvLog(job, 'spol govorca: MOSKI (po zvoku)'); return 'male'; }
-        } else { lvLog(job, 'spol po zvoku ' + r.status + ' -> poskusim po sliki'); }
+        const g = await lvAudioGender(clip, job, 'govorca');
+        if (g) return g;
+        lvLog(job, 'spol po zvoku ni sel -> poskusim po sliki');
     } catch (e) { lvLog(job, 'spol po zvoku ni uspel -> poskusim po sliki'); }
 
     // b) rezerva: po sliki (kadri so ze izluscen v lvHasFace)
@@ -6453,7 +6498,9 @@ async function lvSpeakerGender(audioPath, work, job) {
                     { type: 'text', text: 'Is the person speaking in these frames a MAN or a WOMAN? Answer one word: MALE or FEMALE.' }, ...imgs] }] })
             });
             if (r.ok) {
-                const a = (await r.json()).choices[0].message.content.trim().toUpperCase();
+                const jj = await r.json();
+                if (job) { job.cost_miniIn = (job.cost_miniIn || 0) + ((jj.usage || {}).prompt_tokens || 0); job.cost_miniOut = (job.cost_miniOut || 0) + ((jj.usage || {}).completion_tokens || 0); }
+                const a = jj.choices[0].message.content.trim().toUpperCase();
                 if (a.includes('FEMALE')) { lvLog(job, 'spol govorca: ZENSKA (po sliki)'); return 'female'; }
                 if (a.includes('MALE')) { lvLog(job, 'spol govorca: MOSKI (po sliki)'); return 'male'; }
             }
@@ -6526,13 +6573,16 @@ async function lvRun(job) {
         const probe = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -show_entries format=duration -of csv=p=0 '${lvSh(job.videoPath)}'`);
         const nums = String(probe.stdout || probe).match(/[\d.]+/g) || [];
         const W = parseInt(nums[0]) || 1080, H = parseInt(nums[1]) || 1920, DUR = parseFloat(nums[2]) || 60;
-        job.meta = { W, H, DUR }; job.cost_sttMin = DUR/60; lvLog(job, `video ${W}x${H}, ${DUR.toFixed(1)}s`);
+        job.meta = { W, H, DUR }; lvLog(job, `video ${W}x${H}, ${DUR.toFixed(1)}s`);
 
         const aud = path.join(work, 'src.mp3');
         await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`);
         lvLog(job, 'zvok izlocen');
 
-        clonedVoice = await lvClone(aud, job);
+        // za klon VISOKA kvaliteta vzorca (src.mp3 z 22 kHz je za STT, za klon premalo)
+        const cloneSrc = path.join(work, 'clone-src.mp3');
+        try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 44100 -b:a 192k '${lvSh(cloneSrc)}' 2>/dev/null`); } catch (e) {}
+        clonedVoice = await lvClone(fs.existsSync(cloneSrc) ? cloneSrc : aud, job);
         job.cloned = !!clonedVoice;
 
         const stt = await lvSTT(aud, job);
@@ -6544,7 +6594,25 @@ async function lvRun(job) {
         const fa = await lvHasFace(job.videoPath, work, job);
         job.hasFace = fa.face;
         // spol govorca zaznamo VEDNO — rezervni glas mora biti istega spola kot izvirnik
-        job.gender = clonedVoice ? null : await lvSpeakerGender(aud, work, job);
+        // spol zaznamo VEDNO (tudi ob klonu — za preverbo klona in za rezervo)
+        job.gender = await lvSpeakerGender(aud, work, job);
+
+        // ── PREVERBA KLONA: kratek testni TTS -> ali klon zveni kot pravi spol govorca? ──
+        if (clonedVoice && job.gender) {
+            try {
+                const probe = path.join(work, 'probe.mp3');
+                await lvTTS('Dobar dan! Ovo je test glasa za NORIKS video.', (job.langs[0] || 'HR'), probe, clonedVoice, job.gender);
+                job.cost_ttsChars = (job.cost_ttsChars || 0) + 42;
+                const pg = await lvAudioGender(probe, job, 'klona');
+                if (pg && pg !== job.gender) {
+                    lvLog(job, `KLON zveni ${pg === 'female' ? 'ZENSKO' : 'MOSKO'}, govorec je ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} -> klon ZAVRZEN, rezervni ${job.gender === 'female' ? 'zenski' : 'moski'} glas`);
+                    await lvDeleteVoice(clonedVoice);
+                    clonedVoice = null; job.cloned = false;
+                } else if (pg) {
+                    lvLog(job, 'klon preverjen: spol se ujema ✓');
+                }
+            } catch (e) { lvLog(job, 'preverba klona ni uspela (' + String(e.message).slice(0, 60) + ') -> klon ostane'); }
+        }
 
         for (const lang of job.langs) {
             lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
@@ -6658,7 +6726,32 @@ async function lvRun(job) {
             job.progress = Math.round((++job.done) / job.langs.length * 100);
             lvLog(job, `[${lang}] KONCANO ✓`);
         }
-        job.cost = Math.round(((job.cost_sttMin||0)*0.006 + (job.cost_gptIn||0)*2.5e-6 + (job.cost_gptOut||0)*1e-5 + ((job.cost_ttsChars||0)/1000)*0.30)*10000)/10000;
+        // ── STROSKOVNIK: vsi API klici po postavkah + skupni znesek ──
+        const eur = (x) => Math.round(x * 10000) / 10000;
+        const C = {  // cene (EUR), po potrebi prepises z env
+            gptIn: 2.5e-6, gptOut: 1e-5,            // gpt-4o (prevod)
+            miniIn: 1.5e-7, miniOut: 6e-7,          // gpt-4o-mini (vizija: napisi/obraz/spol)
+            audTok: 4e-5,                            // audio model (spol po zvoku, preverba klona)
+            whisperMin: 0.006,                       // Whisper rezerva
+            scribeMin: parseFloat(process.env.EL_SCRIBE_EUR_MIN || '0.007'),
+            tts1k: parseFloat(process.env.EL_TTS_EUR_1K || '0.30'),
+            vmakeTask: parseFloat(process.env.VMAKE_EUR_TASK || '0')  // nastavi, ko poves ceno vmake kreditov
+        };
+        const cOpenai = (job.cost_gptIn||0)*C.gptIn + (job.cost_gptOut||0)*C.gptOut
+            + (job.cost_miniIn||0)*C.miniIn + (job.cost_miniOut||0)*C.miniOut
+            + (job.cost_audTok||0)*C.audTok + (job.cost_whisperMin||0)*C.whisperMin;
+        const cEleven = ((job.cost_ttsChars||0)/1000)*C.tts1k + (job.cost_scribeMin||0)*C.scribeMin;
+        const nVmake = (job.vmakeTasks||[]).length;
+        const cVmake = nVmake * C.vmakeTask;
+        job.cost_breakdown = {
+            openai: eur(cOpenai), elevenlabs: eur(cEleven),
+            vmake_nalog: nVmake, vmake: eur(cVmake),
+            gpt_tok: (job.cost_gptIn||0) + (job.cost_gptOut||0),
+            mini_tok: (job.cost_miniIn||0) + (job.cost_miniOut||0),
+            tts_znakov: job.cost_ttsChars||0, scribe_min: eur(job.cost_scribeMin||0), whisper_min: eur(job.cost_whisperMin||0)
+        };
+        job.cost = eur(cOpenai + cEleven + cVmake);
+        lvLog(job, `STROSKI: OpenAI ${eur(cOpenai)} € (gpt ${((job.cost_gptIn||0)+(job.cost_gptOut||0))} tok, vizija ${((job.cost_miniIn||0)+(job.cost_miniOut||0))} tok${job.cost_audTok?`, audio ${job.cost_audTok} tok`:''}${job.cost_whisperMin?`, whisper ${(job.cost_whisperMin).toFixed(1)} min`:''}) | ElevenLabs ${eur(cEleven)} € (TTS ${job.cost_ttsChars||0} znakov, scribe ${(job.cost_scribeMin||0).toFixed(1)} min, klon vkljucen v narocnino) | vmake ${nVmake} nalog${C.vmakeTask?` = ${eur(cVmake)} €`:' (krediti na vmake racunu — EUR cena se ni nastavljena)'} | SKUPAJ ${job.cost} €`);
         job.status = 'done'; job.progress = 100;
     } catch (e) {
         job.status = 'error'; job.error = e.message; lvLog(job, 'NAPAKA: ' + e.message);
@@ -6681,7 +6774,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 // javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
