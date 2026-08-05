@@ -6021,17 +6021,20 @@ async function vmCall(method, url, bodyObj) {
 }
 
 // ali je na videu sploh kaj za odstraniti (da ne trosimo kreditov po nepotrebnem)
-async function vmNeedsClean(work, job) {
+async function vmNeedsClean(work, job, strict) {
     try {
         const d = path.join(work, 'fr');
         const files = fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.jpg')).slice(0, 5) : [];
         if (!files.length) return true;
         const imgs = files.map(f => ({ type: 'image_url',
-            image_url: { url: 'data:image/jpeg;base64,' + fs.readFileSync(path.join(d, f)).toString('base64'), detail: 'low' } }));
+            image_url: { url: 'data:image/jpeg;base64,' + fs.readFileSync(path.join(d, f)).toString('base64'), detail: strict ? 'high' : 'low' } }));
+        const q = strict
+            ? 'This video had burned-in text/logos removed by AI inpainting. Inspect carefully. Do you see ANY of: (a) remaining overlaid text/captions/logos/watermarks, (b) VISIBLE REMAINS of the removal — smudges, dark or light streaks, blurry rectangles, ghosting or distorted patches where text used to be? Ignore text physically part of the scene (clothing, packaging, signs). Answer only YES or NO.'
+            : 'Do these frames contain any OVERLAID graphics burned into the video — subtitles/captions, on-screen text, a logo, or a watermark? Ignore text that is physically part of the scene (on clothing, packaging, signs). Answer only YES or NO.';
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
             body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 5, messages: [{ role: 'user', content: [
-                { type: 'text', text: 'Do these frames contain any OVERLAID graphics burned into the video — subtitles/captions, on-screen text, a logo, or a watermark? Ignore text that is physically part of the scene (on clothing, packaging, signs). Answer only YES or NO.' },
+                { type: 'text', text: q },
                 ...imgs] }] })
         });
         if (!r.ok) return true;
@@ -6585,9 +6588,9 @@ async function lvRun(job) {
                             if (!rr.ok) throw new Error('prenos ocescenega videa ' + rr.status);
                             fs.writeFileSync(cleaned, Buffer.from(await rr.arrayBuffer()));
                             job.videoPath = cleaned; job.cleaned = true;
-                            // PREVERBA: ali je na ocescenem videu se vedno kaj vzganega?
+                            // PREVERBA (strogo): napisi ALI ostanki brisanja (madezi, proge, ghosting)?
                             await regenFrames();
-                            if (await vmNeedsClean(work, job)) {
+                            if (await vmNeedsClean(work, job, true)) {
                                 lvLog(job, `vmake: po metodi "${m.label}" so napisi SE VEDNO vidni -> poskusim naslednjo metodo`);
                                 continue; // naslednja metoda tece na ze delno ocescenem videu
                             }
