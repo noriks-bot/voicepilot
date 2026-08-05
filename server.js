@@ -6237,6 +6237,7 @@ function _lvBrandNorm(s) {
     return String(s || '').toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/[^a-z]/g, '')
+        .replace(/(.)\1+/g, '$1')          // podvojene crke: Norrix -> Norix, Norikss -> Noriks
         .replace(/cks|kz|gs|qs|x/g, 'ks');
 }
 function lvBrandWord(word, product) {
