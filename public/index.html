@@ -8327,9 +8327,14 @@
   <div class="lv-container">
 
     <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px">
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🎬 Video (angleški ali drug jezik) — do 6 hkrati</div>
-      <input type="file" id="lvFile" multiple accept="video/mp4,video/quicktime,video/*" style="width:100%;padding:10px;border:1.5px dashed #cbd5e1;border-radius:8px;margin-bottom:14px">
-      <div id="lvFileList" style="font-size:11px;color:#64748b;margin:-8px 0 12px"></div>
+      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🎬 Video (angleški ali drug jezik) — DO 6 HKRATI</div>
+      <div id="lvDrop" onclick="document.getElementById('lvFile').click()"
+           style="border:2px dashed #93c5fd;background:#f8fafc;border-radius:10px;padding:26px 16px;text-align:center;cursor:pointer;margin-bottom:14px;transition:.15s">
+        <div style="font-size:15px;font-weight:700;color:#334155">⬆️ Povleci sem do 6 videov — ali klikni in jih izberi več (Cmd/Ctrl + klik)</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">mp4 / mov · vsak video postane svoj job, države se naredijo znotraj joba</div>
+      </div>
+      <input type="file" id="lvFile" multiple accept="video/mp4,video/quicktime,video/*" style="display:none">
+      <div id="lvFileList" style="font-size:12px;color:#334155;margin:-6px 0 12px;font-weight:600"></div>
 
       <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🏷️ Ime tvojega izdelka (zamenja vse tuje znamke)</div>
       <input type="text" id="lvProduct" value="NORIKS" placeholder="npr. NORIKS BUNION" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;margin-bottom:14px;font-weight:600">
@@ -8411,10 +8416,21 @@ async function lvStart(){
   lvStartPolling();
   b.disabled=false; b.textContent='🚀 Generiraj';
 }
-document.getElementById('lvFile').addEventListener('change',function(){
-  const fs=[...this.files]; const el=document.getElementById('lvFileList');
-  el.innerHTML = fs.length ? ('Izbrano: '+fs.slice(0,6).map(f=>f.name).join(' · ')+(fs.length>6?' <b style="color:#dc2626">(samo prvih 6!)</b>':'')) : '';
-});
+function lvShowFiles(){
+  const fs=[...document.getElementById('lvFile').files]; const el=document.getElementById('lvFileList');
+  el.innerHTML = fs.length ? ('🎬 Izbrano '+Math.min(fs.length,6)+'/6: '+fs.slice(0,6).map(f=>f.name).join(' · ')+(fs.length>6?' <b style="color:#dc2626">(samo prvih 6!)</b>':'')) : '';
+}
+document.getElementById('lvFile').addEventListener('change',lvShowFiles);
+(function(){
+  const dz=document.getElementById('lvDrop'), inp=document.getElementById('lvFile');
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.style.background='#dbeafe';dz.style.borderColor='#3b82f6';}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.style.background='#f8fafc';dz.style.borderColor='#93c5fd';}));
+  dz.addEventListener('drop',e=>{
+    const dt=new DataTransfer();
+    [...e.dataTransfer.files].filter(f=>f.type.startsWith('video')||/\.(mp4|mov)$/i.test(f.name)).slice(0,6).forEach(f=>dt.items.add(f));
+    inp.files=dt.files; lvShowFiles();
+  });
+})();
 document.querySelectorAll('#lvLangs .lv-lang input').forEach(cb=>{
   const sync=()=>{const l=cb.closest('label'); l.style.borderColor=cb.checked?'#3b82f6':'#e2e8f0'; l.style.background=cb.checked?'#eff6ff':'#fff';};
   cb.addEventListener('change',sync); sync();
