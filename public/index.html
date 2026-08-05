@@ -8433,6 +8433,14 @@ document.querySelectorAll('#lvLangs .lv-lang input').forEach(cb=>{
   cb.addEventListener('change',sync); sync();
 });
 let _lvPolling = false;
+async function lvCancel(id){
+  if(!confirm('Prekinem ta job?'))return;
+  try{await fetch('/api/lipvoice/cancel/'+id,{method:'POST'});}catch(e){}
+}
+async function lvDelete(id){
+  if(!confirm('Izbrišem to vrstico (in datoteke)?'))return;
+  try{await fetch('/api/lipvoice/job/'+id,{method:'DELETE'});}catch(e){}
+}
 async function lvRerun(id,lang){
   if(!confirm('Ponovim '+lang+'? (vmake čiščenje se NE ponovi — uporabi se že očiščen video)'))return;
   try{
@@ -8507,9 +8515,12 @@ async function lvPoll(){
        +'<details'+(j.status==='running'?' open':'')+' style="margin-top:4px"><summary style="cursor:pointer;font-size:11px;color:#64748b;user-select:none">log</summary>'
        +'<div style="font-family:monospace;font-size:10px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px;max-height:130px;overflow:auto">'+(j.log||[]).join('<br>')+'</div></details>'
        +'</div>'
-       +(outs?'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'+outs
+       +'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'
+         +((j.status==='running'||j.status==='queued'||j.status==='starting')?'<a href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')" style="display:inline-block;padding:6px 10px;background:#dc2626;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">✖ prekini</a>':'')
+         +'<a href="javascript:void(0)" onclick="lvDelete(\''+j.id+'\')" title="izbrisi vrstico" style="display:inline-block;padding:6px 9px;background:#f1f5f9;color:#64748b;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px">🗑</a>'
+         +outs
          +(j.status==='done'&&(j.outputs||[]).length>1?'<a href="/api/lipvoice/download-zip/'+j.id+'" style="display:inline-block;padding:6px 12px;background:#0f172a;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">📦 VSE (ZIP)</a>':'')
-         +'</div>':'')
+         +'</div>'
        +'</div>';
     }
     document.getElementById('lvJobs').innerHTML = html || '<div style="color:#94a3b8;text-align:center;padding:30px">Ni opravil</div>';

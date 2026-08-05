@@ -6090,6 +6090,7 @@ async function vmRunTask(job, srcUrl, taskName, paramsOverride) {
         // casovno omejeno (30 min), NE po stevilu poskusov — daljsi videi rabijo 10+ min
         const t0 = Date.now(), MAX_MS = 30 * 60 * 1000;
         while (Date.now() - t0 < MAX_MS) {
+            if (job && job.cancel) throw new Error('preklican rocno');
             await new Promise(r => setTimeout(r, 3000));
             const st = await vmCall('GET', `${base}/${policy.status_query.path}?task_id=${encodeURIComponent(tid)}`);
             data = st.data || {};
@@ -6544,6 +6545,7 @@ async function lvRun(job) {
     let clonedVoice = null;
     try {
         job.status = 'running'; job.progress = 2; lvSave();
+        const lvCk = () => { if (job.cancel) throw new Error('preklican rocno'); };
         const work = path.join(LV_OUT, job.id);
         if (!fs.existsSync(work)) fs.mkdirSync(work, { recursive: true });
 
@@ -6569,6 +6571,7 @@ async function lvRun(job) {
                         await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
                     };
                     for (let mi = 0; mi < metode.length; mi++) {
+                        lvCk();
                         const m = metode[mi];
                         try {
                             lvLog(job, `vmake: ciscenje (${m.label})…`);
@@ -6680,6 +6683,7 @@ async function lvRun(job) {
         let _li = 0;
         const _span = 80 / job.langs.length;
         for (const lang of job.langs) {
+            lvCk();
             const _base = 20 + _li * _span;
             try {
             lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
@@ -6690,6 +6694,7 @@ async function lvRun(job) {
             // ── govor po segmentih ──
             const parts = [];
             for (let i = 0; i < tr.length; i++) {
+                lvCk();
                 const mp3 = path.join(work, `${lang}-${i}.mp3`);
                 await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
                 const dd = parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(mp3)}'`)).stdout || '0').trim()) || 0;
@@ -6904,6 +6909,28 @@ app.get('/api/lipvoice/src/:id', (req, res) => {
     res.type('video/mp4');
     fs.createReadStream(f).pipe(res);
 });
+// prekini job (kooperativno — pipeline se ustavi na naslednji kontrolni tocki)
+app.post('/api/lipvoice/cancel/:id', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    j.cancel = true;
+    if (j.status === 'queued') { j.status = 'error'; j.error = 'preklican rocno (iz vrste)'; }
+    (j.log = j.log || []).push('zahtevana prekinitev…');
+    lvSave();
+    res.json({ ok: true });
+});
+// izbrisi job + datoteke
+app.delete('/api/lipvoice/job/:id', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    j.cancel = true;
+    lvJobs.delete(req.params.id);
+    try { require('child_process').execSync(`rm -rf '${path.join(LV_OUT, req.params.id).replace(/'/g, "")}'`); } catch (e) {}
+    try { if (j.srcPath && j.srcPath.startsWith(LV_UP) && fs.existsSync(j.srcPath)) fs.unlinkSync(j.srcPath); } catch (e) {}
+    lvSave();
+    res.json({ ok: true });
+});
+
 // ponovi ENO drzavo: nov job iz ZE OCISCENEGA videa starega joba (vmake se NE ponovi)
 app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
     const old = lvJobs.get(req.params.id);
