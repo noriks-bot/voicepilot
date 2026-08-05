@@ -51,6 +51,10 @@
         .mode-tab p { font-size: 13px; color: #888; }
         
         .mode-content { display: none !important; }
+        /* LipVoiceSubMaker v2 — lastna ovojnica, da je switchPage ne skrije skupaj z legacy .container */
+        #page-lipvoice .lv-container { max-width: 860px; margin: 0; }
+        #page-lipvoice .lv-container input[type="text"] { color: #0f172a; background: #fff; }
+
         /* mode-content shown only on voiceover page, controlled by JS in switchPage */
 
         /* PAGE-BASED VISIBILITY: container + mode-content only show on relevant pages */
@@ -8307,6 +8311,41 @@
 
     </script>
             </section>
+            <!-- LipVoiceSubMaker (v2) -->
+            <section class="page-content" id="page-lipvoice" style="display:none;">
+                <div class="page-header">
+                    <div class="page-title">
+                        <h1>💋 LipVoiceSubMaker (v2)</h1>
+                        <p>Naloži video → klon glasu govorca → prevod (blagovne znamke → tvoj izdelek) → govor v ciljnem jeziku → podnapisi.</p>
+                    </div>
+                    <div class="page-actions">
+                        <a href="javascript:void(0)" onclick="switchPage('downloads')" class="btn" style="background:var(--accent); text-decoration:none; padding:10px 18px; border-radius:8px; color:#fff; font-weight:600;">📥 Jobs</a>
+                    </div>
+                </div>
+
+  <div class="lv-container">
+
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px">
+      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🎬 Video (angleški ali drug jezik)</div>
+      <input type="file" id="lvFile" accept="video/mp4,video/quicktime,video/*" style="width:100%;padding:10px;border:1.5px dashed #cbd5e1;border-radius:8px;margin-bottom:14px">
+
+      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🏷️ Ime tvojega izdelka (zamenja vse tuje znamke)</div>
+      <input type="text" id="lvProduct" value="NORIKS" placeholder="npr. NORIKS BUNION" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;margin-bottom:14px;font-weight:600">
+
+      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🌍 Jeziki</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="lvLangs">
+        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1.5px solid #3b82f6;background:#eff6ff;border-radius:8px;cursor:pointer;font-weight:600"><input type="checkbox" value="HR" checked> 🇭🇷 HR</label>
+        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer"><input type="checkbox" value="SK"> 🇸🇰 SK</label>
+      </div>
+
+      <button onclick="lvStart()" id="lvBtn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🚀 Generiraj</button>
+      <div id="lvMsg" style="margin-top:10px;font-size:12px"></div>
+    </div>
+
+    <div id="lvJobs"></div>
+  </div>
+            </section>
+
         </main>
     </div>
 
@@ -8331,31 +8370,6 @@ window._regenJob = async function(jobId) {
     } catch (e) { alert('Napaka pri regeneraciji: ' + (e.message || e)); }
 };
 </script>
-<div class="page" id="page-lipvoice" style="display:none">
-  <div class="container">
-    <h1 style="margin-bottom:4px">💋 LipVoiceMaker (v2)</h1>
-    <p style="color:#64748b;margin-bottom:20px">Naloži video → klon glasu govorca → prevod (blagovne znamke → tvoj izdelek) → govor v ciljnem jeziku → podnapisi.</p>
-
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px">
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🎬 Video (angleški ali drug jezik)</div>
-      <input type="file" id="lvFile" accept="video/mp4,video/quicktime,video/*" style="width:100%;padding:10px;border:1.5px dashed #cbd5e1;border-radius:8px;margin-bottom:14px">
-
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🏷️ Ime tvojega izdelka (zamenja vse tuje znamke)</div>
-      <input type="text" id="lvProduct" value="NORIKS" placeholder="npr. NORIKS BUNION" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;margin-bottom:14px;font-weight:600">
-
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🌍 Jeziki</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="lvLangs">
-        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1.5px solid #3b82f6;background:#eff6ff;border-radius:8px;cursor:pointer;font-weight:600"><input type="checkbox" value="HR" checked> 🇭🇷 HR</label>
-        <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer"><input type="checkbox" value="SK"> 🇸🇰 SK</label>
-      </div>
-
-      <button onclick="lvStart()" id="lvBtn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🚀 Generiraj</button>
-      <div id="lvMsg" style="margin-top:10px;font-size:12px"></div>
-    </div>
-
-    <div id="lvJobs"></div>
-  </div>
-</div>
 <script>
 async function lvStart(){
   const f=document.getElementById('lvFile').files[0];
@@ -8372,12 +8386,14 @@ async function lvStart(){
     document.getElementById('lvMsg').innerHTML = d.ok
       ? '<span style="color:#16a34a">✓ Zagnano ('+d.id+') — spremljaj spodaj</span>'
       : '<span style="color:#dc2626">✗ '+(d.error||'napaka')+'</span>';
-    lvPoll();
+    lvStartPolling();
   }catch(e){document.getElementById('lvMsg').innerHTML='<span style="color:#dc2626">✗ '+e.message+'</span>';}
   b.disabled=false; b.textContent='🚀 Generiraj';
 }
+let _lvPolling = false;
+function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvPoll(); }
 async function lvPoll(){
-  if(!document.body.classList.contains('page-lipvoice'))return;
+  if(!document.body.classList.contains('page-lipvoice')){ _lvPolling = false; return; }
   try{
     const jobs=await (await fetch('/api/lipvoice/jobs')).json();
     document.getElementById('lvJobs').innerHTML = jobs.map(j=>{
@@ -8398,5 +8414,16 @@ async function lvPoll(){
   setTimeout(lvPoll,3000);
 }
 
+(function(){
+  const _sp = window.switchPage;
+  if (typeof _sp === "function") {
+    window.switchPage = function(page){
+      _sp(page);
+      if (page === "lipvoice") lvStartPolling();
+    };
+  }
+  if (document.body && document.body.classList.contains("page-lipvoice")) lvStartPolling();
+})();
+</script>
 </body>
 </html>
