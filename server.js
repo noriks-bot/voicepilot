@@ -6037,9 +6037,16 @@ async function vmNeedsClean(work, job) {
     } catch (e) { return true; }
 }
 
+// GID: vrne ga config.json in ga moramo posiljati v consume.json (trajno kesiran)
+const VM_GID_FILE = path.join(LV_DIR, 'vmake_gid.txt');
+function _vmGidRead() { try { return fs.readFileSync(VM_GID_FILE, 'utf8').trim(); } catch (e) { return ''; } }
+function _vmGidWrite(g) { try { fs.writeFileSync(VM_GID_FILE, g); } catch (e) {} }
+
 // celoten vmake potek: config -> token_policy -> consume -> invoke -> poll
 async function vmCleanVideo(job, srcUrl) {
-    const cfg = await vmCall('POST', `${VM_WAPI}/skill/config.json`, { gid: '', version: 'v1.0.0' });
+    let gid = _vmGidRead();
+    const cfg = await vmCall('POST', `${VM_WAPI}/skill/config.json`, { gid, version: 'v1.0.0' });
+    if ((cfg.response || {}).gid && cfg.response.gid !== gid) { gid = cfg.response.gid; _vmGidWrite(gid); }
     const algo = (cfg.response || {}).algorithm || {};
     const preset = (algo.invoke || {})[VM_TASK];
     if (!preset) throw new Error(`vmake: naloga "${VM_TASK}" ni na voljo (na voljo: ${Object.keys(algo.invoke || {}).join(', ')})`);
@@ -6050,7 +6057,7 @@ async function vmCleanVideo(job, srcUrl) {
     const mt = ((pol.data || {})[typ]) || (pol.data || {}).mtai;
     const policy = mt.api[mt.api.order[0]];
 
-    const cons = await vmCall('POST', `${VM_WAPI}/skill/consume.json`, { url: srcUrl, task: VM_TASK, gid: '' });
+    const cons = await vmCall('POST', `${VM_WAPI}/skill/consume.json`, { url: srcUrl, task: VM_TASK, gid });
     const context = (cons.response || {}).context || '';
     lvLog(job, `vmake: kvota potrjena, posiljam nalogo ${VM_TASK}`);
 
