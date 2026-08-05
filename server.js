@@ -5983,7 +5983,9 @@ const lvSh = (s) => String(s).replace(/'/g, "'\\''");
 // ═══ KORAK 0: VMAKE — odstrani vzgane podnapise / logotipe / watermarke ═══
 const VM_AK = process.env.VMAKE_AK || '';
 const VM_SK = process.env.VMAKE_SK || '';
-const VM_TASK = process.env.VMAKE_TASK || 'videoscreenclear';   // celozaslonsko ciscenje (Smart pro)
+const VM_TASK = process.env.VMAKE_TASK || 'videoscreenclear';   // celozaslonsko ciscenje (podnapisi+logotipi+watermarki)
+const VM_ENHANCE = process.env.VMAKE_ENHANCE !== '0';           // po ciscenju se izboljsava kvalitete
+const VM_ENHANCE_TASK = process.env.VMAKE_ENHANCE_TASK || 'hdvideoallinone'; // video izboljsava (image_restoration je za slike)
 const VM_PUBLIC = process.env.VMAKE_PUBLIC_BASE || 'https://voicepilot.noriks.com';
 const VM_WAPI = 'https://wapi-skill.vmake.ai';
 const _vmSha = (s) => require('crypto').createHash('sha256').update(s || '', 'utf8').digest('hex');
@@ -6044,13 +6046,14 @@ function _vmGidRead() { try { return fs.readFileSync(VM_GID_FILE, 'utf8').trim()
 function _vmGidWrite(g) { try { fs.writeFileSync(VM_GID_FILE, g); } catch (e) {} }
 
 // celoten vmake potek: config -> token_policy -> consume -> invoke -> poll
-async function vmCleanVideo(job, srcUrl) {
+// taskName: 'videoscreenclear' (ciscenje) ali 'hdvideoallinone' (izboljsava kvalitete)
+async function vmRunTask(job, srcUrl, taskName) {
     let gid = _vmGidRead();
     const cfg = await vmCall('POST', `${VM_WAPI}/skill/config.json`, { gid, version: 'v1.0.0' });
     if ((cfg.response || {}).gid && cfg.response.gid !== gid) { gid = cfg.response.gid; _vmGidWrite(gid); }
     const algo = (cfg.response || {}).algorithm || {};
-    const preset = (algo.invoke || {})[VM_TASK];
-    if (!preset) throw new Error(`vmake: naloga "${VM_TASK}" ni na voljo (na voljo: ${Object.keys(algo.invoke || {}).join(', ')})`);
+    const preset = (algo.invoke || {})[taskName];
+    if (!preset) throw new Error(`vmake: naloga "${taskName}" ni na voljo (na voljo: ${Object.keys(algo.invoke || {}).join(', ')})`);
     const regionHost = Object.values(algo.regions || {})[0] || 'strategy.stariidata.com';
     const typ = algo.token_policy_type || 'mtai';
 
@@ -6058,9 +6061,9 @@ async function vmCleanVideo(job, srcUrl) {
     const mt = ((pol.data || {})[typ]) || (pol.data || {}).mtai;
     const policy = mt.api[mt.api.order[0]];
 
-    const cons = await vmCall('POST', `${VM_WAPI}/skill/consume.json`, { url: srcUrl, task: VM_TASK, gid });
+    const cons = await vmCall('POST', `${VM_WAPI}/skill/consume.json`, { url: srcUrl, task: taskName, gid });
     const context = (cons.response || {}).context || '';
-    lvLog(job, `vmake: kvota potrjena, posiljam nalogo ${VM_TASK}`);
+    lvLog(job, `vmake: kvota potrjena, posiljam nalogo ${taskName}`);
 
     const base = String(policy.url).replace(/\/+$/, '');
     const run = await vmCall('POST', `${base}/${policy.push_path}`, {
@@ -6479,17 +6482,35 @@ async function lvRun(job) {
                 if (await vmNeedsClean(work, job)) {
                     const srcUrl = `${VM_PUBLIC}/api/lipvoice/src/${job.id}`;
                     lvLog(job, `vmake: ciscenje izvirnika (${VM_TASK})…`);
-                    const outUrl = await vmCleanVideo(job, srcUrl);
+                    const outUrl = await vmRunTask(job, srcUrl, VM_TASK);
                     const cleaned = path.join(work, 'clean.mp4');
                     const rr = await fetch(outUrl);
                     if (!rr.ok) throw new Error('prenos ocescenega videa ' + rr.status);
                     fs.writeFileSync(cleaned, Buffer.from(await rr.arrayBuffer()));
                     job.videoPath = cleaned; job.cleaned = true;
-                    lvLog(job, 'vmake: izvirnik ocisten ✓ (nadaljnji koraki tecejo na ocescenem videu)');
-                    // kadri iz OCESCENEGA videa (za obraz/spol)
+                    lvLog(job, 'vmake: izvirnik ocisten ✓');
+
+                    // ── KORAK 0b: izboljsava kvalitete ocescenega videa (da izgleda, kot da ne bi nic brisali) ──
+                    if (VM_ENHANCE) {
+                        try {
+                            lvLog(job, `vmake: izboljsava kvalitete (${VM_ENHANCE_TASK})…`);
+                            const enhUrl = await vmRunTask(job, srcUrl, VM_ENHANCE_TASK); // src endpoint zdaj streze OCISCEN video
+                            const enhanced = path.join(work, 'enhanced.mp4');
+                            const re = await fetch(enhUrl);
+                            if (!re.ok) throw new Error('prenos izboljsanega videa ' + re.status);
+                            fs.writeFileSync(enhanced, Buffer.from(await re.arrayBuffer()));
+                            const szC = fs.statSync(cleaned).size, szE = fs.statSync(enhanced).size;
+                            job.videoPath = enhanced; job.enhanced = true;
+                            lvLog(job, `vmake: kvaliteta izboljsana ✓ (${Math.round(szC/1e6)}MB -> ${Math.round(szE/1e6)}MB)`);
+                        } catch (e) {
+                            lvLog(job, 'vmake izboljsava ni uspela (' + String(e.message).slice(0, 100) + ') -> ostane ocisceni video');
+                        }
+                    }
+                    lvLog(job, 'nadaljnji koraki tecejo na ' + (job.enhanced ? 'ocescenem+izboljsanem' : 'ocescenem') + ' videu');
+                    // kadri iz koncnega videa (za obraz/spol)
                     try {
                         fs.readdirSync(frDir).forEach(f => { try { fs.unlinkSync(path.join(frDir, f)); } catch (e) {} });
-                        await execPromise(`ffmpeg -y -i '${lvSh(cleaned)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
+                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
                     } catch (e) {}
                 } else {
                     lvLog(job, 'vmake: na videu ni vzganih napisov -> ciscenje ni potrebno');
@@ -6660,13 +6681,14 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, sourceLang: j.sourceLang, cost: j.cost, product: j.product,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 // javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
 app.get('/api/lipvoice/src/:id', (req, res) => {
     const j = lvJobs.get(req.params.id);
-    const f = j && (j.srcPath || j.videoPath);
+    // streze TRENUTNI videoPath: med ciscenjem je to izvirnik, med izboljsavo ze ocisceni video
+    const f = j && (j.videoPath || j.srcPath);
     if (!f || !fs.existsSync(f)) return res.status(404).send('Ni datoteke');
     res.type('video/mp4');
     fs.createReadStream(f).pipe(res);
