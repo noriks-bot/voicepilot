@@ -5970,6 +5970,7 @@ const lvJobs = new Map();
 const LV_STATE = path.join(LV_DIR, 'jobs.json');
 try { if (fs.existsSync(LV_STATE)) JSON.parse(fs.readFileSync(LV_STATE, 'utf8')).forEach(j => lvJobs.set(j.id, j)); } catch (e) {}
 function lvSave() { try { fs.writeFileSync(LV_STATE, JSON.stringify([...lvJobs.values()].slice(-40), null, 1)); } catch (e) {} }
+function lvP(j, v) { j.progress = Math.max(j.progress || 0, Math.min(100, Math.round(v))); lvSave(); }
 function lvLog(j, m) { (j.log = j.log || []).push(m); console.log(`[LV ${j.id}] ${m}`); lvSave(); }
 const lvUpload = multer({
     storage: multer.diskStorage({
@@ -6421,7 +6422,7 @@ function lvLipsyncReady() {
         fs.existsSync(path.join(W2L_DIR, 'inference.py')) &&
         fs.existsSync(path.join(W2L_DIR, 'checkpoints', 'wav2lip_gan.pth'));
 }
-async function lvLipsync(videoIn, audioIn, outPath, job, lang, resizeFactor) {
+async function lvLipsync(videoIn, audioIn, outPath, job, lang, resizeFactor, onPct) {
     const rf = resizeFactor || 1;
     lvLog(job, `[${lang}] lipsync (Wav2Lip, CPU${rf > 1 ? `, resize ${rf}x` : ', polna locljivost'}) 0% — zaganjam…`);
     const t0 = Date.now();
@@ -6431,7 +6432,7 @@ async function lvLipsync(videoIn, audioIn, outPath, job, lang, resizeFactor) {
         `cd '${lvSh(W2L_DIR)}' && OMP_NUM_THREADS=3 nice -n 10 '${lvSh(W2L_PY)}' inference.py ` +
         `--checkpoint_path checkpoints/wav2lip_gan.pth ` +
         `--face '${lvSh(videoIn)}' --audio '${lvSh(audioIn)}' --outfile '${lvSh(outPath)}' ` +
-        `--resize_factor ${rf} --pads 0 15 0 0 --wav2lip_batch_size 32 --face_det_batch_size 2 > '${lvSh(logf)}' 2>&1`,
+        `--resize_factor ${rf} --pads 0 15 0 0 --wav2lip_batch_size 64 --face_det_batch_size 8 > '${lvSh(logf)}' 2>&1`,
         { timeout: 90 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 }
     );
     // ZIV NAPREDEK: tqdm izpis -> odstotek v zadnji log vrstici (UI jo osvezuje)
@@ -6444,6 +6445,7 @@ async function lvLipsync(videoIn, audioIn, outPath, job, lang, resizeFactor) {
             const faza = (t.match(/100%\|/g) || []).length >= 1 ? 'sinhronizacija ust' : 'detekcija obraza';
             const min = ((Date.now() - t0) / 60000).toFixed(1);
             const line = `[${lang}] lipsync (Wav2Lip) — ${faza} ${pct}% · ${min} min`;
+            if (typeof onPct === 'function') onPct(faza === 'detekcija obraza' ? (+pct) / 2 : 50 + (+pct) / 2);
             const L = job.log = job.log || [];
             if (L.length && L[L.length - 1].includes('lipsync (Wav2Lip)')) L[L.length - 1] = line;
             else L.push(line);
@@ -6488,7 +6490,10 @@ async function lvSpeakerGender(audioPath, work, job) {
     // a) po zvoku (najbolj zanesljivo — deluje tudi brez obraza v kadru)
     try {
         const clip = path.join(work, 'gender.mp3');
-        await execPromise(`ffmpeg -y -i '${lvSh(audioPath)}' -t 12 -ac 1 -ar 16000 -b:a 64k '${lvSh(clip)}' 2>/dev/null`);
+        // vzorec iz SREDINE (na zacetku so pogosto glasba/uvodi/drug glas)
+        const _dur = (job.meta && job.meta.DUR) || 30;
+        const _ss = Math.max(0, Math.min(_dur * 0.35, _dur - 12)).toFixed(1);
+        await execPromise(`ffmpeg -y -ss ${_ss} -i '${lvSh(audioPath)}' -t 12 -ac 1 -ar 16000 -b:a 64k '${lvSh(clip)}' 2>/dev/null`);
         const g = await lvAudioGender(clip, job, 'govorca');
         if (g) return g;
         lvLog(job, 'spol po zvoku ni sel -> poskusim po sliki');
@@ -6523,7 +6528,7 @@ async function lvSpeakerGender(audioPath, work, job) {
 async function lvRun(job) {
     let clonedVoice = null;
     try {
-        job.status = 'running'; lvSave();
+        job.status = 'running'; job.progress = 2; lvSave();
         const work = path.join(LV_OUT, job.id);
         if (!fs.existsSync(work)) fs.mkdirSync(work, { recursive: true });
 
@@ -6536,6 +6541,7 @@ async function lvRun(job) {
         if (VM_AK && VM_SK && job.clean !== false) {
             try {
                 if (await vmNeedsClean(work, job)) {
+                    lvP(job, 5);
                     const srcUrl = `${VM_PUBLIC}/api/lipvoice/src/${job.id}`;
                     // KASKADA metod + PREVERBA po vsaki: napisi morajo RES izginiti
                     const metode = [
@@ -6570,6 +6576,7 @@ async function lvRun(job) {
                         }
                     }
                     if (!job.cleaned) throw new Error('nobena metoda ciscenja ni uspela');
+                    lvP(job, 10);
 
                     // ── KORAK 0b: izboljsava kvalitete ocescenega videa (da izgleda, kot da ne bi nic brisali) ──
                     if (VM_ENHANCE) {
@@ -6588,6 +6595,7 @@ async function lvRun(job) {
                         }
                     }
                     lvLog(job, 'nadaljnji koraki tecejo na ' + (job.enhanced ? 'ocescenem+izboljsanem' : 'ocescenem') + ' videu');
+                    lvP(job, 15);
                     // kadri iz koncnega videa (za obraz/spol)
                     try {
                         fs.readdirSync(frDir).forEach(f => { try { fs.unlinkSync(path.join(frDir, f)); } catch (e) {} });
@@ -6612,18 +6620,21 @@ async function lvRun(job) {
         const aud = path.join(work, 'src.mp3');
         await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`);
         lvLog(job, 'zvok izlocen');
+        lvP(job, 16);
 
         // za klon VISOKA kvaliteta vzorca (src.mp3 z 22 kHz je za STT, za klon premalo)
         const cloneSrc = path.join(work, 'clone-src.mp3');
         try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 44100 -b:a 192k '${lvSh(cloneSrc)}' 2>/dev/null`); } catch (e) {}
         clonedVoice = await lvClone(fs.existsSync(cloneSrc) ? cloneSrc : aud, job);
         job.cloned = !!clonedVoice;
+        lvP(job, 18);
 
         const stt = await lvSTT(aud, job);
         const segs = lvSegs(stt.words, stt.text);
         if (!segs.length) throw new Error('V videu ni zaznanega govora');
         job.sourceLang = stt.lang; job.sourceText = stt.text;
         lvLog(job, `prepoznano ${segs.length} segmentov (${stt.lang})`);
+        lvP(job, 20);
 
         const fa = await lvHasFace(job.videoPath, work, job);
         job.hasFace = fa.face;
@@ -6640,19 +6651,25 @@ async function lvRun(job) {
                 job.cost_ttsChars = (job.cost_ttsChars || 0) + 42;
                 const pg = await lvAudioGender(probe, job, 'klona');
                 if (pg && pg !== job.gender) {
-                    lvLog(job, `KLON zveni ${pg === 'female' ? 'ZENSKO' : 'MOSKO'}, govorec je ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} -> klon ZAVRZEN, rezervni ${job.gender === 'female' ? 'zenski' : 'moski'} glas`);
-                    await lvDeleteVoice(clonedVoice);
-                    clonedVoice = null; job.cloned = false;
+                    // KLON JE ZGRAJEN IZ DEJANSKEGA GLASU -> njegov zvok je mocnejsi dokaz od zaznave.
+                    // Klona NE zavrzemo; popravimo zaznani spol (rezerva bi sicer sla v napacen glas).
+                    lvLog(job, `klon zveni ${pg === 'female' ? 'ZENSKO' : 'MOSKO'}, zaznava izvirnika pa ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} -> VERJAMEM KLONU, spol popravljen na ${pg === 'female' ? 'ZENSKA' : 'MOSKI'}`);
+                    job.gender = pg;
+                    lvLog(job, `>>> SPOL GOVORCA (popravljen po klonu): ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} <<<`);
                 } else if (pg) {
                     lvLog(job, 'klon preverjen: spol se ujema ✓');
                 }
             } catch (e) { lvLog(job, 'preverba klona ni uspela (' + String(e.message).slice(0, 60) + ') -> klon ostane'); }
         }
 
+        let _li = 0;
+        const _span = 80 / job.langs.length;
         for (const lang of job.langs) {
+            const _base = 20 + _li * _span;
             lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
             const tr = await lvTranslate(segs, lang, job.product || "NORIKS", job);
             (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
+            lvP(job, _base + 0.08 * _span);
 
             // ── govor po segmentih ──
             const parts = [];
@@ -6661,6 +6678,7 @@ async function lvRun(job) {
                 await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
                 const dd = parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(mp3)}'`)).stdout || '0').trim()) || 0;
                 parts.push({ mp3, srcS: tr[i].s, srcE: tr[i].e, d: dd });
+                lvP(job, _base + (0.08 + 0.34 * (i + 1) / tr.length) * _span);
                 if ((i + 1) % 3 === 0) lvLog(job, `[${lang}] govor ${i + 1}/${tr.length}`);
             }
 
@@ -6697,6 +6715,7 @@ async function lvRun(job) {
             const voice = path.join(work, `voice-${lang}.mp3`);
             await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -b:a 192k '${lvSh(voice)}' 2>/dev/null`);
             lvLog(job, `[${lang}] govor sestavljen`);
+            lvP(job, _base + 0.5 * _span);
 
             // izvirni zvok gre na 0 — v izhod damo SAMO nas govor (samo 1:a je mapiran spodaj)
             lvLog(job, `[${lang}] izvirni zvok UTISAN (0%) — slisi se samo ${lang} govor`);
@@ -6711,8 +6730,8 @@ async function lvRun(job) {
                         await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)}" -an -c:v libx264 -preset veryfast -crf 20 '${lvSh(lsIn)}' 2>/dev/null`);
                     }
                     const lsOut = path.join(work, `lipsync-${lang}.mp4`);
-                    const rf = Math.min(W, H) <= 768 ? 1 : 2;   // do 768px polna locljivost (ostrejse ustnice)
-                    await lvLipsync(lsIn, voice, lsOut, job, lang, rf);
+                    const rf = Math.max(1, Math.round(Math.min(W, H) / 720));   // obdelava cim blizje 720p (hitrost/ostrina)
+                    await lvLipsync(lsIn, voice, lsOut, job, lang, rf, (lp) => lvP(job, _base + (0.5 + 0.42 * lp / 100) * _span));
                     lipVideo = lsOut;
                 } catch (e) {
                     lvLog(job, `[${lang}] lipsync ni uspel (${String(e.message).slice(0, 90)}) -> nadaljujem brez lipsynca`);
@@ -6759,7 +6778,7 @@ async function lvRun(job) {
                 await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest '${lvSh(out)}' 2>/dev/null`);
             }
             (job.outputs = job.outputs || {})[lang] = out;
-            job.progress = Math.round((++job.done) / job.langs.length * 100);
+            job.progress = Math.min(100, Math.round(20 + (++job.done) * _span)); _li++;
             lvLog(job, `[${lang}] KONCANO ✓`);
         }
         // ── STROSKOVNIK: vsi API klici po postavkah + skupni znesek ──
@@ -6794,6 +6813,22 @@ async function lvRun(job) {
     } finally { if (clonedVoice) await lvDeleteVoice(clonedVoice); lvSave(); }
 }
 
+// ── 6b) vrsta: naenkrat tece najvec LIPVOICE_CONCURRENCY jobov (privzeto 1) ──
+// vec hkratnih jobov bi se stepalo za 4 CPU jedra (lipsync!) in vmake/TTS limite
+let _lvActive = 0;
+const LV_CONC = Math.max(1, parseInt(process.env.LIPVOICE_CONCURRENCY || '1'));
+function lvKick() {
+    while (_lvActive < LV_CONC) {
+        const next = [...lvJobs.values()].filter(j => j.status === 'queued').sort((a, b) => String(a.created).localeCompare(String(b.created)))[0];
+        if (!next) return;
+        next.status = 'starting'; // da je while zanka ne pobere se enkrat
+        _lvActive++;
+        lvRun(next).catch(() => {}).finally(() => { _lvActive--; setImmediate(lvKick); });
+    }
+}
+// ob zagonu streznika: jobi, ki so obtičali v queued, se pozenejo
+setTimeout(lvKick, 3000);
+
 // ── 7) routes ──
 app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Ni videa' });
@@ -6804,13 +6839,13 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
         clean: String(req.body.clean || '1') !== '0',
         status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
-    lvJobs.set(id, job); lvSave(); setImmediate(() => lvRun(job));
+    lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
     res.json({ ok: true, id, langs });
 });
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 // javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
