@@ -8454,15 +8454,27 @@ async function lvPoll(){
       const outs=(j.outputs||[]).map(l=>'<a href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:6px 10px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap">⬇ '+l+'</a>').join('');
       const cost=j.cost!=null?('<span style="margin-left:8px;padding:2px 8px;background:#fef3c7;border-radius:6px;font-size:11px;font-weight:700">💰 '+j.cost.toFixed(4)+' €</span>'):'';
       const info=[j.sourceLang?('jezik: '+j.sourceLang):'',j.gender?('govorec: '+(j.gender==='female'?'ženska':'moški')):'',j.cloned?'klon glasu ✓':(j.cloned===false?'rezervni glas':''),j.cleaned?'očiščen ✓':'',j.enhanced?'HD ✓':'',j.hasFace===true?'obraz ✓ (lipsync)':j.hasFace===false?'ni obraza':''].filter(Boolean).join(' · ');
-      // status po drzavah: ✓ koncana / ⏳ v delu / · caka
+      // status po drzavah + SKUPNA faza (ciscenje/klon/prepis velja za VSE drzave)
+      const FLAGS={SI:'🇸🇮',HR:'🇭🇷',SK:'🇸🇰',CZ:'🇨🇿',HU:'🇭🇺',PL:'🇵🇱',GR:'🇬🇷',IT:'🇮🇹',RO:'🇷🇴',BG:'🇧🇬',DE:'🇩🇪',EN:'🇬🇧'};
       const lastLog=(j.log&&j.log.length?j.log[j.log.length-1]:'');
-      const langChips=(j.langs||[]).map(L=>{
+      const sharedActive = j.status==='running' && (j.progress||0) < 20 && lastLog.indexOf('[')!==0;
+      let sharedChip='';
+      if(sharedActive){
+        let f='⚙️ priprava';
+        if(/vmake|napis/i.test(lastLog)) f='🧹 čiščenje + HD izvirnika';
+        else if(/klon|KLON/i.test(lastLog)) f='🎤 klon glasu';
+        else if(/STT|prepoznano|zvok/i.test(lastLog)) f='📝 prepis govora';
+        else if(/spol|SPOL/i.test(lastLog)) f='🚻 zaznava spola';
+        sharedChip='<span style="padding:3px 10px;border-radius:999px;background:#ede9fe;color:#6d28d9;font-size:11px;font-weight:700">'+f+' — skupno za vse države</span>';
+      }
+      const langChips=sharedChip+' '+(j.langs||[]).map(L=>{
         const done=(j.outputs||[]).includes(L);
         const active=!done && j.status==='running' && lastLog.indexOf('['+L+']')===0;
         const bg=done?'#dcfce7':(active?'#dbeafe':'#f1f5f9');
         const fg=done?'#166534':(active?'#1d4ed8':'#94a3b8');
-        const ico=done?'✓ ':(active?'⏳ ':'· ');
-        return '<span style="padding:3px 10px;border-radius:999px;background:'+bg+';color:'+fg+';font-size:11px;font-weight:700">'+ico+L+(done?' končana':(active?' v delu':' čaka'))+'</span>';
+        const ico=done?'✓ ':(active?'⏳ ':'');
+        const st=done?' končana':(active?' v delu':(sharedActive?'':' čaka'));
+        return '<span style="padding:3px 10px;border-radius:999px;background:'+bg+';color:'+fg+';font-size:11px;font-weight:700">'+(FLAGS[L]||'')+' '+ico+L+st+'</span>';
       }).join(' ');
       const ur=dt?String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'):'';
       // ena vrstica na video; drzave (prenosi) desno v enem rowu
