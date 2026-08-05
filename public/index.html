@@ -8458,7 +8458,11 @@ async function lvPoll(){
       const FLAGS={SI:'🇸🇮',HR:'🇭🇷',SK:'🇸🇰',CZ:'🇨🇿',HU:'🇭🇺',PL:'🇵🇱',GR:'🇬🇷',IT:'🇮🇹',RO:'🇷🇴',BG:'🇧🇬',DE:'🇩🇪',EN:'🇬🇧'};
       const lastLog=(j.log&&j.log.length?j.log[j.log.length-1]:'');
       const sharedActive = j.status==='running' && (j.progress||0) < 20 && lastLog.indexOf('[')!==0;
+      const prepDone = (j.progress||0) >= 20 || j.status==='done';
       let sharedChip='';
+      if(!sharedActive && prepDone && (j.cleaned||j.cloned!==undefined)){
+        sharedChip='<span style="padding:3px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:700">✓ priprava končana'+(j.cleaned?' (očiščeno'+(j.enhanced?'+HD':'')+')':'')+(j.cloned?' · klon ✓':'')+'</span>';
+      }
       if(sharedActive){
         let f='⚙️ priprava';
         if(/vmake|napis/i.test(lastLog)) f='🧹 čiščenje + HD izvirnika';
@@ -8474,6 +8478,7 @@ async function lvPoll(){
         const fg=done?'#166534':(active?'#1d4ed8':'#94a3b8');
         const ico=done?'✓ ':(active?'⏳ ':'');
         const st=done?' končana':(active?' v delu':(sharedActive?'':' čaka'));
+        if(done) return '<a href="/api/lipvoice/download/'+j.id+'/'+L+'" style="padding:3px 10px;border-radius:999px;background:#16a34a;color:#fff;font-size:11px;font-weight:700;text-decoration:none">'+(FLAGS[L]||'')+' ✓ '+L+' ⬇</a>';
         return '<span style="padding:3px 10px;border-radius:999px;background:'+bg+';color:'+fg+';font-size:11px;font-weight:700">'+(FLAGS[L]||'')+' '+ico+L+st+'</span>';
       }).join(' ');
       const ur=dt?String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'):'';
@@ -8490,7 +8495,9 @@ async function lvPoll(){
        +'<details'+(j.status==='running'?' open':'')+' style="margin-top:4px"><summary style="cursor:pointer;font-size:11px;color:#64748b;user-select:none">log</summary>'
        +'<div style="font-family:monospace;font-size:10px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px;max-height:130px;overflow:auto">'+(j.log||[]).join('<br>')+'</div></details>'
        +'</div>'
-       +(outs?'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'+outs+'</div>':'')
+       +(outs?'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'+outs
+         +(j.status==='done'&&(j.outputs||[]).length>1?'<a href="/api/lipvoice/download-zip/'+j.id+'" style="display:inline-block;padding:6px 12px;background:#0f172a;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">📦 VSE (ZIP)</a>':'')
+         +'</div>':'')
        +'</div>';
     }
     document.getElementById('lvJobs').innerHTML = html || '<div style="color:#94a3b8;text-align:center;padding:30px">Ni opravil</div>';
