@@ -6239,6 +6239,46 @@ RULES:
     return segs.map((s, i) => ({ ...s, text: lvBrandText(lines[i] || s.text, product) }));
 }
 
+// ── DUBBING: celoten govor v ENEM kosu — ElevenLabs ohrani casovnico, ton in poudarke originala ──
+// manual nacin: nas prevod (NORIKS ze vstavljen) + casi segmentov iz izvirnika
+const LV_DUB_LANGS = { HR: 'hr', SI: 'sl', SK: 'sk', CZ: 'cs', PL: 'pl', HU: 'hu', RO: 'ro', GR: 'el', IT: 'it', BG: 'bg', DE: 'de' };
+async function lvDubbing(job, audioPath, lang, segs, tr, outWav, work) {
+    const tgt = LV_DUB_LANGS[lang] || (ELEVEN_LANG_CODES[lang] || String(lang).toLowerCase());
+    const esc = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""').replace(/\r?\n/g, ' ') + '"';
+    const rows = ['speaker,start_time,end_time,transcription,translation'];
+    for (let i = 0; i < tr.length; i++)
+        rows.push(['0', Number(segs[i].s).toFixed(3), Number(segs[i].e).toFixed(3), esc(segs[i].text), esc(tr[i].text)].join(','));
+    const fd = new FormData();
+    fd.append('file', new Blob([fs.readFileSync(audioPath)], { type: 'audio/mpeg' }), 'src.mp3');
+    fd.append('csv_file', new Blob([rows.join('\n')], { type: 'text/csv' }), 'script.csv');
+    fd.append('mode', 'manual');
+    fd.append('target_lang', tgt);
+    fd.append('source_lang', 'auto');
+    fd.append('num_speakers', '1');
+    fd.append('watermark', 'false');
+    const r = await fetch(`${LV_EL}/dubbing`, { method: 'POST', headers: { 'xi-api-key': ELEVENLABS_API_KEY }, body: fd });
+    if (!r.ok) throw new Error('dubbing start ' + r.status + ': ' + (await r.text()).slice(0, 180));
+    const did = (await r.json()).dubbing_id;
+    const t0 = Date.now();
+    for (;;) {
+        if (Date.now() - t0 > 20 * 60 * 1000) throw new Error('dubbing casovna omejitev 20 min');
+        await new Promise(rr => setTimeout(rr, 5000));
+        if (job.cancel) throw new Error('preklican rocno');
+        const st = await fetch(`${LV_EL}/dubbing/${did}`, { headers: { 'xi-api-key': ELEVENLABS_API_KEY } });
+        const dj = await st.json().catch(() => ({}));
+        if (dj.status === 'dubbed') break;
+        if (dj.status === 'failed') throw new Error('dubbing failed: ' + String(dj.error || '').slice(0, 120));
+        const min = (Date.now() - t0) / 60000;
+        if (Math.floor(min * 2) !== Math.floor((min - 0.09) * 2)) lvLog(job, `[${lang}] dubbing se izdeluje… ${min.toFixed(1)} min`);
+    }
+    const a = await fetch(`${LV_EL}/dubbing/${did}/audio/${tgt}`, { headers: { 'xi-api-key': ELEVENLABS_API_KEY } });
+    if (!a.ok) throw new Error('dubbing audio ' + a.status);
+    const raw = path.join(work, `dub-${lang}.mp3`);
+    fs.writeFileSync(raw, Buffer.from(await a.arrayBuffer()));
+    await execPromise(`ffmpeg -y -i '${lvSh(raw)}' -ac 2 -ar 44100 -c:a pcm_s16le '${lvSh(outWav)}' 2>/dev/null`);
+    try { await fetch(`${LV_EL}/dubbing/${did}`, { method: 'DELETE', headers: { 'xi-api-key': ELEVENLABS_API_KEY } }); } catch (e) {}
+}
+
 // ── 4z) IME ZNAMKE: vedno tocno "NORIKS" — nikoli NORIX / NORIC / no riks ──
 // STT nad generiranim govorom zapise ime fonetsko, zato ga tu vedno vrnemo na pravo obliko.
 function _lvBrandNorm(s) {
@@ -6698,8 +6738,25 @@ async function lvRun(job) {
             (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
             lvP(job, _base + 0.08 * _span);
 
-            // ── govor po segmentih ──
-            const parts = [];
+            const voice = path.join(work, `voice-${lang}.wav`);
+            let parts, startsF, durF, totalF, tempo = 1, vidPad = 0, dubbed = false;
+            if (process.env.LIPVOICE_DUBBING !== '0') {
+                try {
+                    lvLog(job, `[${lang}] ElevenLabs DUBBING — govor kot celota, ton in poudarki kot original…`);
+                    await lvDubbing(job, aud, lang, segs, tr, voice, work);
+                    job.cost_dubMin = (job.cost_dubMin || 0) + DUR / 60;
+                    dubbed = true;
+                    parts = tr.map(t => ({ d: Math.max(0.2, t.e - t.s) }));
+                    startsF = tr.map(t => t.s); durF = parts.map(pp => pp.d); totalF = DUR;
+                    lvLog(job, `[${lang}] dubbing ✓ — brez lepljenja, casovnica kot original`);
+                    lvP(job, _base + 0.5 * _span);
+                } catch (e) {
+                    lvLog(job, `[${lang}] dubbing ni uspel (${String(e.message).slice(0, 110)}) -> klasicno po segmentih`);
+                }
+            }
+            if (!dubbed) {
+            // ── govor po segmentih (rezerva) ──
+            parts = [];
             for (let i = 0; i < tr.length; i++) {
                 lvCk();
                 const mp3 = path.join(work, `${lang}-${i}.mp3`);
@@ -6724,12 +6781,12 @@ async function lvRun(job) {
 
             // Ce je govor daljsi od videa: NAJVEC 1.12x pohitritev (prej do 1.9x = "prehitro"),
             // ostanek raje podaljsamo video z zamrznjeno zadnjo sliko.
-            let tempo = 1;
+            tempo = 1;
             if (rawTotal > DUR + 0.05 && DUR > 0) tempo = Math.min(1.12, rawTotal / DUR);
-            const startsF = starts.map(s => s / tempo);
-            const durF = parts.map(p => p.d / tempo);
-            const totalF = parts.length ? startsF[parts.length - 1] + durF[parts.length - 1] : 0;
-            const vidPad = Math.max(0, totalF - DUR);
+            startsF = starts.map(s => s / tempo);
+            durF = parts.map(p => p.d / tempo);
+            totalF = parts.length ? startsF[parts.length - 1] + durF[parts.length - 1] : 0;
+            vidPad = Math.max(0, totalF - DUR);
             lvLog(job, `[${lang}] govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s` +
                 (tempo > 1.001 ? ` — tempo ${tempo.toFixed(3)}x` : ' — brez pohitritve') +
                 (vidPad > 0.05 ? `, video podaljsan za ${vidPad.toFixed(1)}s` : ''));
@@ -6740,10 +6797,10 @@ async function lvRun(job) {
                 const tp = tempo > 1.001 ? `atempo=${tempo.toFixed(3)},` : '';
                 return `[${i}:a]${tp}adelay=${dly}|${dly}[a${i}]`;
             }).join(';');
-            const voice = path.join(work, `voice-${lang}.wav`);
             await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -c:a pcm_s16le '${lvSh(voice)}' 2>/dev/null`);
             lvLog(job, `[${lang}] govor sestavljen`);
             lvP(job, _base + 0.5 * _span);
+            } // konec klasicne rezerve
 
             // izvirni zvok gre na 0 — v izhod damo SAMO nas govor (samo 1:a je mapiran spodaj)
             lvLog(job, `[${lang}] izvirni zvok UTISAN (0%) — slisi se samo ${lang} govor`);
@@ -6825,13 +6882,14 @@ async function lvRun(job) {
             audTok: 4e-5,                            // audio model (spol po zvoku, preverba klona)
             whisperMin: 0.006,                       // Whisper rezerva
             scribeMin: parseFloat(process.env.EL_SCRIBE_EUR_MIN || '0.007'),
+            dubMin: parseFloat(process.env.EL_DUB_EUR_MIN || '0.18'),
             tts1k: parseFloat(process.env.EL_TTS_EUR_1K || '0.30'),
             vmakeTask: parseFloat(process.env.VMAKE_EUR_TASK || '0')  // nastavi, ko poves ceno vmake kreditov
         };
         const cOpenai = (job.cost_gptIn||0)*C.gptIn + (job.cost_gptOut||0)*C.gptOut
             + (job.cost_miniIn||0)*C.miniIn + (job.cost_miniOut||0)*C.miniOut
             + (job.cost_audTok||0)*C.audTok + (job.cost_whisperMin||0)*C.whisperMin;
-        const cEleven = ((job.cost_ttsChars||0)/1000)*C.tts1k + (job.cost_scribeMin||0)*C.scribeMin;
+        const cEleven = ((job.cost_ttsChars||0)/1000)*C.tts1k + (job.cost_scribeMin||0)*C.scribeMin + (job.cost_dubMin||0)*C.dubMin;
         const nVmake = (job.vmakeTasks||[]).length;
         const cVmake = nVmake * C.vmakeTask;
         job.cost_breakdown = {
@@ -6842,7 +6900,7 @@ async function lvRun(job) {
             tts_znakov: job.cost_ttsChars||0, scribe_min: eur(job.cost_scribeMin||0), whisper_min: eur(job.cost_whisperMin||0)
         };
         job.cost = eur(cOpenai + cEleven + cVmake);
-        lvLog(job, `STROSKI: OpenAI ${eur(cOpenai)} € (gpt ${((job.cost_gptIn||0)+(job.cost_gptOut||0))} tok, vizija ${((job.cost_miniIn||0)+(job.cost_miniOut||0))} tok${job.cost_audTok?`, audio ${job.cost_audTok} tok`:''}${job.cost_whisperMin?`, whisper ${(job.cost_whisperMin).toFixed(1)} min`:''}) | ElevenLabs ${eur(cEleven)} € (TTS ${job.cost_ttsChars||0} znakov, scribe ${(job.cost_scribeMin||0).toFixed(1)} min, klon vkljucen v narocnino) | vmake ${nVmake} nalog${C.vmakeTask?` = ${eur(cVmake)} €`:' (krediti na vmake racunu — EUR cena se ni nastavljena)'} | SKUPAJ ${job.cost} €`);
+        lvLog(job, `STROSKI: OpenAI ${eur(cOpenai)} € (gpt ${((job.cost_gptIn||0)+(job.cost_gptOut||0))} tok, vizija ${((job.cost_miniIn||0)+(job.cost_miniOut||0))} tok${job.cost_audTok?`, audio ${job.cost_audTok} tok`:''}${job.cost_whisperMin?`, whisper ${(job.cost_whisperMin).toFixed(1)} min`:''}) | ElevenLabs ${eur(cEleven)} € (TTS ${job.cost_ttsChars||0} znakov, scribe ${(job.cost_scribeMin||0).toFixed(1)} min${job.cost_dubMin?`, dubbing ${(job.cost_dubMin).toFixed(1)} min`:''}, klon vkljucen v narocnino) | vmake ${nVmake} nalog${C.vmakeTask?` = ${eur(cVmake)} €`:' (krediti na vmake racunu — EUR cena se ni nastavljena)'} | SKUPAJ ${job.cost} €`);
         const nOut = Object.keys(job.outputs || {}).length;
         if (nOut === 0 && job.langErrors && Object.keys(job.langErrors).length) throw new Error('nobena drzava ni uspela: ' + Object.values(job.langErrors)[0]);
         if (job.langErrors && Object.keys(job.langErrors).length) lvLog(job, 'OPOZORILO: padle drzave: ' + Object.keys(job.langErrors).join(', ') + ' -> gumb ponovi');
