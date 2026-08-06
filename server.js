@@ -6211,7 +6211,7 @@ async function lvTTS(text, lang, out, voiceId, gender, ctx) {
         if (model === 'eleven_multilingual_v2') {
             body.language_code = code;
             // nizji similarity: model sme izgovarjati NATIVE, ne kopirati izvornega (angleskega) naglasa
-            body.voice_settings = { stability: 0.55, similarity_boost: 0.65, style: 0.15, use_speaker_boost: true };
+            body.voice_settings = { stability: 0.55, similarity_boost: (ctx && ctx.sim) || 0.65, style: 0.15, use_speaker_boost: true };
         }
         const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}?output_format=mp3_44100_192`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
@@ -6592,6 +6592,47 @@ async function lvAudioGender(mp3Path, job, oznaka) {
     return null;
 }
 
+// ── KONTROLA NAGLASA: AI poslusa testni stavek klona — NATIVE ali TUJE? ──
+const LV_LANG_FULL = { HR: 'Croatian', SI: 'Slovenian', SK: 'Slovak', CZ: 'Czech', PL: 'Polish', HU: 'Hungarian', RO: 'Romanian', GR: 'Greek', IT: 'Italian', BG: 'Bulgarian', DE: 'German' };
+const LV_PROBE_TEXT = {
+    HR: 'Dobar dan! Danas ću vam pokazati nešto zaista posebno za svakodnevnu udobnost i kvalitetu.',
+    SI: 'Dober dan! Danes vam bom pokazal nekaj res posebnega za vsakodnevno udobje in kakovost.',
+    SK: 'Dobrý deň! Dnes vám ukážem niečo naozaj výnimočné pre každodenné pohodlie a kvalitu.',
+    CZ: 'Dobrý den! Dnes vám ukážu něco opravdu výjimečného pro každodenní pohodlí a kvalitu.',
+    PL: 'Dzień dobry! Dziś pokażę wam coś naprawdę wyjątkowego dla codziennego komfortu i jakości.',
+    HU: 'Jó napot! Ma valami igazán különlegeset mutatok a mindennapi kényelemhez és minőséghez.',
+    RO: 'Bună ziua! Astăzi vă arăt ceva cu adevărat special pentru confortul zilnic și calitate.',
+    IT: 'Buongiorno! Oggi vi mostro qualcosa di davvero speciale per il comfort quotidiano e la qualità.',
+    DE: 'Guten Tag! Heute zeige ich Ihnen etwas ganz Besonderes für täglichen Komfort und Qualität.',
+    BG: 'Добър ден! Днес ще ви покажа нещо наистина специално за ежедневния комфорт и качество.',
+    GR: 'Καλημέρα! Σήμερα θα σας δείξω κάτι πραγματικά ξεχωριστό για καθημερινή άνεση και ποιότητα.'
+};
+async function lvAccentCheck(mp3Path, lang, job) {
+    const full = LV_LANG_FULL[lang] || lang;
+    let b64;
+    try { b64 = fs.readFileSync(mp3Path).toString('base64'); } catch (e) { return null; }
+    for (const model of ['gpt-audio', 'gpt-4o-audio-preview']) {
+        try {
+            const r = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+                body: JSON.stringify({
+                    model, max_tokens: 4, modalities: ['text'],
+                    messages: [{ role: 'user', content: [
+                        { type: 'text', text: `You hear ${full} speech. Does the speaker sound like a NATIVE ${full} speaker, or with a noticeable FOREIGN (e.g. English) accent? Answer one word: NATIVE or FOREIGN.` },
+                        { type: 'input_audio', input_audio: { data: b64, format: 'mp3' } }] }]
+                })
+            });
+            if (!r.ok) continue;
+            const jj = await r.json();
+            if (job) job.cost_audTok = (job.cost_audTok || 0) + ((jj.usage || {}).total_tokens || 0);
+            const a = (jj.choices[0].message.content || '').trim().toUpperCase();
+            if (a.includes('NATIVE')) return 'native';
+            if (a.includes('FOREIGN')) return 'foreign';
+        } catch (e) {}
+    }
+    return null;
+}
+
 async function lvSpeakerGender(audioPath, work, job) {
     // a) po zvoku (najbolj zanesljivo — deluje tudi brez obraza v kadru)
     try {
@@ -6773,6 +6814,24 @@ async function lvRun(job) {
                 } else if (pg) {
                     lvLog(job, 'klon preverjen: spol se ujema ✓');
                 }
+
+                // ── KONTROLA NAGLASA: klon mora zveneti NATIVE, sicer nizja podobnost, sicer native govorec ──
+                const aLang = (job.langs[0] || 'HR');
+                const aText = LV_PROBE_TEXT[aLang] || LV_PROBE_TEXT.HR;
+                const aProbe = path.join(work, 'accent.mp3');
+                for (const sim of [0.65, 0.45]) {
+                    await lvTTS(aText, aLang, aProbe, clonedVoice, job.gender, { sim });
+                    job.cost_ttsChars = (job.cost_ttsChars || 0) + aText.length;
+                    const acc = await lvAccentCheck(aProbe, aLang, job);
+                    if (acc === 'native') { job.simBoost = sim; lvLog(job, `NAGLAS KLONA: NATIVE ✓ (similarity ${sim})`); break; }
+                    if (acc === 'foreign') { lvLog(job, `naglas klona pri similarity ${sim}: TUJE -> ${sim > 0.45 ? 'poskusim z nizjo podobnostjo' : 'klon ZAVRZEN'}`); job.simBoost = null; }
+                    if (acc === null) { job.simBoost = sim; lvLog(job, 'kontrole naglasa ni bilo mogoce izvesti -> klon ostane'); break; }
+                }
+                if (job.simBoost === null) {
+                    await lvDeleteVoice(clonedVoice);
+                    clonedVoice = null; job.cloned = false;
+                    lvLog(job, `klon tudi pri nizki podobnosti zveni TUJE -> NATIVE govorec trga (${job.gender === 'female' ? 'zenski' : 'moski'} glas) — brez tujega naglasa, zajamceno`);
+                }
             } catch (e) { lvLog(job, 'preverba klona ni uspela (' + String(e.message).slice(0, 60) + ') -> klon ostane'); }
         }
 
@@ -6811,7 +6870,7 @@ async function lvRun(job) {
             for (let i = 0; i < tr.length; i++) {
                 lvCk();
                 const mp3 = path.join(work, `${lang}-${i}.mp3`);
-                await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender, { prev: i > 0 ? tr[i - 1].text : undefined, next: i + 1 < tr.length ? tr[i + 1].text : undefined }); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
+                await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender, { prev: i > 0 ? tr[i - 1].text : undefined, next: i + 1 < tr.length ? tr[i + 1].text : undefined, sim: job.simBoost }); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
                 const dd = parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(mp3)}'`)).stdout || '0').trim()) || 0;
                 parts.push({ mp3, srcS: tr[i].s, srcE: tr[i].e, d: dd });
                 lvP(job, _base + (0.08 + 0.34 * (i + 1) / tr.length) * _span);
