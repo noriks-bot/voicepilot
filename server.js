@@ -6163,6 +6163,22 @@ function lvSegs(words, fallbackText) {
     return out;
 }
 
+// segmente zdruzi v VELIKE kose (~15 s) — manj lepljenja = naravnejsi tok govora
+function lvMergeSegs(segs, o) {
+    o = Object.assign({ maxDur: 16, maxChars: 260, minPause: 0.5 }, o || {});
+    const out = []; let c = null;
+    for (const g of segs) {
+        const pause = c ? (g.s - c.e) : 0;
+        const canMerge = c && (c.e - c.s) + (g.e - g.s) <= o.maxDur
+            && (c.text.length + g.text.length) <= o.maxChars
+            && pause < o.minPause;
+        if (canMerge) { c.text += ' ' + g.text; c.e = g.e; c.words = (c.words || []).concat(g.words || []); }
+        else { if (c) out.push(c); c = { s: g.s, e: g.e, text: g.text, words: (g.words || []).slice() }; }
+    }
+    if (c) out.push(c);
+    return out;
+}
+
 // ── 2) klon glasu govorca (ob napaki rezervni glas) ──
 async function lvClone(audioPath, job) {
     try {
@@ -6181,13 +6197,16 @@ async function lvDeleteVoice(id) { try { await fetch(`${LV_EL}/voices/${id}`, { 
 
 // TTS s klonom (ali rezervo — rezerva UPOSTEVA spol govorca iz izvirnika)
 // PRAVILNA koda jezika (SI -> "sl"!) + veriga modelov: SI rabi eleven_v3 (v2 slovenscine ne podpira)
-async function lvTTS(text, lang, out, voiceId, gender) {
+async function lvTTS(text, lang, out, voiceId, gender, ctx) {
     if (!voiceId) return generateTTS(text, lang, out, 1.0, gender === 'female' ? 'female' : 'male');
     const code = ELEVEN_LANG_CODES[lang] || String(lang).toLowerCase();
     const models = ['eleven_v3', 'eleven_multilingual_v2'];  // v3 = najbolj native prosodija (HR/SI!), v2 rezerva
     let lastErr = '';
     for (const model of models) {
         const body = { text, model_id: model };
+        // context stitching: model poveze prozodijo cez rez med kosi (uradna ElevenLabs funkcija)
+        if (ctx && ctx.prev) body.previous_text = String(ctx.prev).slice(-300);
+        if (ctx && ctx.next) body.next_text = String(ctx.next).slice(0, 300);
         if (model === 'eleven_multilingual_v2') {
             body.language_code = code;
             body.voice_settings = { stability: 0.45, similarity_boost: 0.9, style: 0.35, use_speaker_boost: true };
@@ -6695,7 +6714,8 @@ async function lvRun(job) {
         lvP(job, 18);
 
         const stt = await lvSTT(aud, job);
-        const segs = lvSegs(stt.words, stt.text);
+        const segsRaw = lvSegs(stt.words, stt.text);
+        const segs = lvMergeSegs(segsRaw);   // veliki kosi -> tok govora brez rezov
         if (!segs.length) throw new Error('V videu ni zaznanega govora');
         job.sourceLang = stt.lang; job.sourceText = stt.text;
         lvLog(job, `prepoznano ${segs.length} segmentov (${stt.lang})`);
@@ -6760,7 +6780,7 @@ async function lvRun(job) {
             for (let i = 0; i < tr.length; i++) {
                 lvCk();
                 const mp3 = path.join(work, `${lang}-${i}.mp3`);
-                await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
+                await lvTTS(tr[i].text, lang, mp3, clonedVoice, job.gender, { prev: i > 0 ? tr[i - 1].text : undefined, next: i + 1 < tr.length ? tr[i + 1].text : undefined }); job.cost_ttsChars = (job.cost_ttsChars||0) + tr[i].text.length;
                 const dd = parseFloat(String((await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(mp3)}'`)).stdout || '0').trim()) || 0;
                 parts.push({ mp3, srcS: tr[i].s, srcE: tr[i].e, d: dd });
                 lvP(job, _base + (0.08 + 0.34 * (i + 1) / tr.length) * _span);
