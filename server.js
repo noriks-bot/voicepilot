@@ -6200,7 +6200,8 @@ async function lvDeleteVoice(id) { try { await fetch(`${LV_EL}/voices/${id}`, { 
 async function lvTTS(text, lang, out, voiceId, gender, ctx) {
     if (!voiceId) return generateTTS(text, lang, out, 1.0, gender === 'female' ? 'female' : 'male');
     const code = ELEVEN_LANG_CODES[lang] || String(lang).toLowerCase();
-    const models = ['eleven_v3', 'eleven_multilingual_v2'];  // v3 = najbolj native prosodija (HR/SI!), v2 rezerva
+    // v2 s language_code VSILI fonetiko ciljnega jezika (proti tujemu naglasu klona); SI rabi v3 (v2 nima sl)
+    const models = lang === 'SI' ? ['eleven_v3', 'eleven_multilingual_v2'] : ['eleven_multilingual_v2', 'eleven_v3'];
     let lastErr = '';
     for (const model of models) {
         const body = { text, model_id: model };
@@ -6209,7 +6210,8 @@ async function lvTTS(text, lang, out, voiceId, gender, ctx) {
         if (ctx && ctx.next) body.next_text = String(ctx.next).slice(0, 300);
         if (model === 'eleven_multilingual_v2') {
             body.language_code = code;
-            body.voice_settings = { stability: 0.45, similarity_boost: 0.9, style: 0.35, use_speaker_boost: true };
+            // nizji similarity: model sme izgovarjati NATIVE, ne kopirati izvornega (angleskega) naglasa
+            body.voice_settings = { stability: 0.55, similarity_boost: 0.65, style: 0.15, use_speaker_boost: true };
         }
         const r = await fetch(`${LV_EL}/text-to-speech/${voiceId}?output_format=mp3_44100_192`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'xi-api-key': ELEVENLABS_API_KEY },
@@ -6728,10 +6730,15 @@ async function lvRun(job) {
         lvLog(job, 'zvok izlocen');
         lvP(job, 16);
 
+        if (job.voiceMode === 'native') {
+            lvLog(job, 'glas: NATIVE govorec trga (izbrano) -> kloniranje preskocim, popoln naglas');
+            clonedVoice = null;
+        } else {
         // za klon VISOKA kvaliteta vzorca (src.mp3 z 22 kHz je za STT, za klon premalo)
         const cloneSrc = path.join(work, 'clone-src.mp3');
         try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 44100 -b:a 192k '${lvSh(cloneSrc)}' 2>/dev/null`); } catch (e) {}
         clonedVoice = await lvClone(fs.existsSync(cloneSrc) ? cloneSrc : aud, job);
+        }
         job.cloned = !!clonedVoice;
         lvP(job, 18);
 
@@ -7007,6 +7014,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
         clean: String(req.body.clean || '1') !== '0',
         lipsync: String(req.body.lipsync || '0') === '1',
         subpos: String(req.body.subpos || 'bottom') === 'middle' ? 'middle' : 'bottom',
+        voiceMode: String(req.body.voicemode || 'native') === 'clone' ? 'clone' : 'native',
         status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
@@ -7061,7 +7069,7 @@ app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
     const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
         langs: [L], product: old.product || 'NORIKS',
         clean: src !== old.srcPath ? false : (old.clean !== false), // ze ocisceni video -> brez vmake
-        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom',
+        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'native',
         hidden: true, parentId: old.id, parentLang: L,   // tece SKRITO, rezultat gre v starsev row
         status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
         log: ['ponovitev drzave ' + L + ' iz joba ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
