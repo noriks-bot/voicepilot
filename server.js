@@ -6469,6 +6469,28 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
     return a;
 }
 
+// ── OZADJE: Demucs loci glasbo od govora — obdrzimo GLASBO originala, govor odstranimo ──
+const DEMUCS_PY = '/home/ec2-user/wav2lip/venv/bin/python';
+async function lvBackground(job, work) {
+    const out = path.join(work, 'bg.wav');
+    if (fs.existsSync(out)) return out;
+    try {
+        const src = path.join(work, 'bg-src.wav');
+        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 2 -ar 44100 -c:a pcm_s16le '${lvSh(src)}' 2>/dev/null`);
+        lvLog(job, 'locujem glasbo od govora (Demucs)…');
+        await execPromise(`cd '${lvSh(work)}' && OMP_NUM_THREADS=3 nice -n 10 '${lvSh(DEMUCS_PY)}' -m demucs.separate --two-stems=vocals -n htdemucs -o '${lvSh(work)}/demucs' '${lvSh(src)}' 2>&1 | tail -1`,
+            { timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 });
+        const nov = path.join(work, 'demucs', 'htdemucs', 'bg-src', 'no_vocals.wav');
+        if (!fs.existsSync(nov)) throw new Error('demucs ni ustvaril no_vocals');
+        fs.copyFileSync(nov, out);
+        lvLog(job, 'glasbeno ozadje izlusceno ✓ (originalna glasba ostane, izvirni govor odstranjen)');
+        return out;
+    } catch (e) {
+        lvLog(job, 'locitev ozadja ni uspela (' + String(e.message).slice(0, 80) + ') -> brez glasbene podlage');
+        return null;
+    }
+}
+
 // ── 5) zaznava obraza (ffmpeg vzorci + preprosta hevristika kože) ──
 async function lvHasFace(video, work, job) {
     try {
@@ -6747,6 +6769,7 @@ async function lvRun(job) {
             } catch (e) { lvLog(job, 'preverba klona ni uspela (' + String(e.message).slice(0, 60) + ') -> klon ostane'); }
         }
 
+        const bgWav = await lvBackground(job, work);   // glasba originala (1x za vse drzave)
         let _li = 0;
         const _span = 80 / job.langs.length;
         for (const lang of job.langs) {
@@ -6823,7 +6846,7 @@ async function lvRun(job) {
             } // konec klasicne rezerve
 
             // izvirni zvok gre na 0 — v izhod damo SAMO nas govor (samo 1:a je mapiran spodaj)
-            lvLog(job, `[${lang}] izvirni zvok UTISAN (0%) — slisi se samo ${lang} govor`);
+            lvLog(job, bgWav ? `[${lang}] izvirni GOVOR odstranjen, GLASBA originala ohranjena + ${lang} govor` : `[${lang}] izvirni zvok UTISAN (0%) — slisi se samo ${lang} govor`);
 
             // ── LIPSYNC (Wav2Lip) — obraz v kadru + namescen ──
             let lipVideo = null;
@@ -6879,10 +6902,18 @@ async function lvRun(job) {
             // koncni izris: (lipsync video ze vsebuje nas zvok) ali (original + podaljsanje + nas zvok)
             const out = path.join(work, `${job.name}-${lang}.mp4`);
             if (lipVideo) {
-                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                if (bgWav) {
+                    await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'[vo];[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[sp];[1:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                } else {
+                    await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                }
             } else {
                 const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
-                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`);
+                if (bgWav) {
+                    await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo];[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,apad[sp];[2:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest '${lvSh(out)}' 2>/dev/null`);
+                } else {
+                    await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`);
+                }
             }
             (job.outputs = job.outputs || {})[lang] = out;
             job.progress = Math.min(100, Math.round(20 + (++job.done) * _span)); _li++;
