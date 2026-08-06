@@ -6769,7 +6769,8 @@ async function lvRun(job) {
             } catch (e) { lvLog(job, 'preverba klona ni uspela (' + String(e.message).slice(0, 60) + ') -> klon ostane'); }
         }
 
-        const bgWav = await lvBackground(job, work);   // glasba originala (1x za vse drzave)
+        // glasbena podlaga: IZKLOPLJENA (Dejan noce glasbe) — vklop samo z LIPVOICE_BG=1
+        const bgWav = process.env.LIPVOICE_BG === '1' ? await lvBackground(job, work) : null;
         let _li = 0;
         const _span = 80 / job.langs.length;
         for (const lang of job.langs) {
