@@ -8351,6 +8351,12 @@
         <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="DE"> 🇩🇪 DE</label>
       </div>
 
+      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">💬 Pozicija podnapisov</div>
+      <div style="display:flex;gap:14px;margin-bottom:14px;font-size:13px;font-weight:600">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvSubPos" value="bottom" checked> ⬇️ Spodaj</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvSubPos" value="middle"> ↔️ Sredina (vertikalno)</label>
+      </div>
+
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;font-weight:600;cursor:pointer">
         <input type="checkbox" id="lvLipsync"> 💋 Lipsync (sinhronizacija ust — POCASNO: ~15 min na minuto videa)
       </label>
@@ -8401,6 +8407,7 @@ async function lvStart(){
     fd.append('video',files[i]); fd.append('langs',langs.join(','));
     fd.append('product',document.getElementById('lvProduct').value.trim()||'NORIKS');
     fd.append('lipsync',document.getElementById('lvLipsync').checked?'1':'0');
+    fd.append('subpos',(document.querySelector('input[name=lvSubPos]:checked')||{}).value||'bottom');
     try{
       const r=await fetch('/api/lipvoice/upload',{method:'POST',body:fd});
       const d=await r.json();

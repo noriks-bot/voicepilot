@@ -6329,7 +6329,7 @@ function lvCues(words, opts) {
 // ── 4b) VEED-slog podnapisi: SREDINSKO, samodejno prelomljeno, BREZ utripanja ──
 // Kljucno: vrstice so casovno ZVEZNE (od te besede do zacetka naslednje),
 // zato napis nikoli ne ugasne sredi stavka.
-function lvAss(cues, W, H) {
+function lvAss(cues, W, H, pos) {
     const fs_ = Math.round(W * 0.088);           // ~95px pri 1080 — se malce vecja pisava
     const mv = Math.round(H * 0.14);
     const mh = Math.round(W * 0.08);             // levi/desni rob -> besedilo ostane v kadru
@@ -6344,7 +6344,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-Style: V,DejaVu Sans,${fs_},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,${Math.round(fs_ * 0.13)},${Math.round(fs_ * 0.06)},2,${mh},${mh},${mv},1
+Style: V,DejaVu Sans,${fs_},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,${Math.round(fs_ * 0.13)},${Math.round(fs_ * 0.06)},${pos === 'middle' ? 5 : 2},${mh},${mh},${pos === 'middle' ? 0 : mv},1
 
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
@@ -6797,7 +6797,7 @@ async function lvRun(job) {
             }
 
             const ass = path.join(work, `subs-${lang}.ass`);
-            fs.writeFileSync(ass, lvAss(cues, W, H));
+            fs.writeFileSync(ass, lvAss(cues, W, H, job.subpos));
 
             // koncni izris: (lipsync video ze vsebuje nas zvok) ali (original + podaljsanje + nas zvok)
             const out = path.join(work, `${job.name}-${lang}.mp4`);
@@ -6896,6 +6896,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
         videoPath: req.file.path, srcPath: req.file.path, langs, product: (req.body.product||"NORIKS").trim(),
         clean: String(req.body.clean || '1') !== '0',
         lipsync: String(req.body.lipsync || '0') === '1',
+        subpos: String(req.body.subpos || 'bottom') === 'middle' ? 'middle' : 'bottom',
         status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
@@ -6950,7 +6951,7 @@ app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
     const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
         langs: [L], product: old.product || 'NORIKS',
         clean: src !== old.srcPath ? false : (old.clean !== false), // ze ocisceni video -> brez vmake
-        lipsync: !!old.lipsync,
+        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom',
         hidden: true, parentId: old.id, parentLang: L,   // tece SKRITO, rezultat gre v starsev row
         status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
         log: ['ponovitev drzave ' + L + ' iz joba ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
