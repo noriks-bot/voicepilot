@@ -6237,10 +6237,10 @@ RULES:
 2b. This text will be READ ALOUD by TTS: write out ALL numbers, prices, percentages and units
    as words in ${FULL[lang] || lang}, exactly as a native speaker would pronounce them.
 3. Keep each numbered line separate, same count and same order (this is dubbing).
-4. LENGTH IS CRITICAL: each line must take the SAME TIME TO SAY OR LESS than the original.
-   ${FULL[lang] || lang} is usually longer than English/German — so COMPRESS: drop filler words,
-   use shorter synonyms, avoid subordinate clauses. Never pad a line to make it longer.
-   Aim for AT MOST the same number of syllables as the source line.
+4. LENGTH IS CRITICAL: each line must take THE SAME TIME TO SAY as the original — within about
+   ten percent, NEITHER much shorter NOR much longer. Match the syllable count of the source line
+   as closely as you can. If your translation comes out much shorter, expand it naturally
+   (an extra adjective, a natural filler a native ad would use) — never leave dead air.
 5. Write it so it can be spoken calmly, at a normal pace, without rushing.
 6. Output ONLY the numbered lines.`;
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
