@@ -7014,7 +7014,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
         clean: String(req.body.clean || '1') !== '0',
         lipsync: String(req.body.lipsync || '0') === '1',
         subpos: String(req.body.subpos || 'bottom') === 'middle' ? 'middle' : 'bottom',
-        voiceMode: String(req.body.voicemode || 'native') === 'clone' ? 'clone' : 'native',
+        voiceMode: String(req.body.voicemode || 'clone') === 'native' ? 'native' : 'clone',
         status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
@@ -7069,7 +7069,7 @@ app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
     const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
         langs: [L], product: old.product || 'NORIKS',
         clean: src !== old.srcPath ? false : (old.clean !== false), // ze ocisceni video -> brez vmake
-        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'native',
+        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'clone',
         hidden: true, parentId: old.id, parentLang: L,   // tece SKRITO, rezultat gre v starsev row
         status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
         log: ['ponovitev drzave ' + L + ' iz joba ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };

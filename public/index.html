@@ -8351,12 +8351,6 @@
         <label class="lv-lang" style="display:flex;align-items:center;gap:4px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap"><input type="checkbox" value="DE"> 🇩🇪 DE</label>
       </div>
 
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🎤 Glas govorca</div>
-      <div style="display:flex;gap:14px;margin-bottom:14px;font-size:13px;font-weight:600">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvVoiceMode" value="native" checked> 🇭🇷 Native govorec trga (najboljši naglas)</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvVoiceMode" value="clone"> 🧬 Klon originalnega glasu (lahko tuji naglas)</label>
-      </div>
-
       <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">💬 Pozicija podnapisov</div>
       <div style="display:flex;gap:14px;margin-bottom:14px;font-size:13px;font-weight:600">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvSubPos" value="bottom" checked> ⬇️ Spodaj</label>
@@ -8414,7 +8408,6 @@ async function lvStart(){
     fd.append('product',document.getElementById('lvProduct').value.trim()||'NORIKS');
     fd.append('lipsync',document.getElementById('lvLipsync').checked?'1':'0');
     fd.append('subpos',(document.querySelector('input[name=lvSubPos]:checked')||{}).value||'bottom');
-    fd.append('voicemode',(document.querySelector('input[name=lvVoiceMode]:checked')||{}).value||'native');
     try{
       const r=await fetch('/api/lipvoice/upload',{method:'POST',body:fd});
       const d=await r.json();
