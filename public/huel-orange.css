@@ -293,3 +293,10 @@ a { color: var(--brand); }
 input[type="radio"], input[type="checkbox"], input[type="range"], progress {
     accent-color: #C05E12 !important;
 }
+
+/* ── 12. HOME: vsebina začasno skrita (Dejan 2026-08-10: "zbriši vse to,
+   ne rabimo, bomo kasneje znova zgradili") — markup ostaja, samo skrit,
+   da JS (loadHomeActivity ipd.) ne pade. Za novo gradnjo odstrani ta blok. ── */
+#page-home .section-heading,
+#page-home .quick-grid,
+#page-home .activity-wrap { display: none !important; }
