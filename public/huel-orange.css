@@ -1,0 +1,295 @@
+/* ═══════════════════════════════════════════════════════════════════
+   HUEL ORANGE v1 — 2026-08-10
+   Voicepilot preoblečen v isti dizajn kot dash.noriks.com (welcome/huel),
+   zelena → oranžna. Nalaga se ZADNJI v <head> in prepiše oba obstoječa
+   sistema tokenov (--bg-… / --brand iz "Linear" plasti in --c-… iz v2 plasti).
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. TOKENI ─────────────────────────────────────────────────────── */
+:root {
+    /* Linear plast */
+    --bg-base: #F6F6F4;
+    --bg-app: #FFFFFF;
+    --bg-elev-1: #FFFFFF;
+    --bg-elev-2: #F4F2EE;
+    --bg-elev-3: #ECEAE5;
+    --bg-hover: #F6F3EE;
+    --bg-subtle: #FAFAF8;
+    --border: #E6E6E2;
+    --border-strong: #D9D7D2;
+    --border-subtle: #ECEAE6;
+    --text-primary: #0C0C0D;
+    --text-body: #1B1B19;
+    --text-secondary: #47474A;
+    --text-tertiary: #5D5D5E;
+    --text-muted: #8A8A85;
+    --brand: #C05E12;
+    --brand-hover: #9C4A0C;
+    --brand-soft: rgba(192, 94, 18, 0.10);
+    --brand-glow: rgba(192, 94, 18, 0.16);
+    --brand-glow-strong: rgba(192, 94, 18, 0.28);
+    --success: #C05E12;          /* zelena → oranžna */
+    --danger: #B3402F;
+    --warning: #8A6A1F;
+    --info: #C05E12;
+
+    /* v2 (c-*) plast */
+    --c-bg: #F6F6F4;
+    --c-surface: #FFFFFF;
+    --c-surface-2: #F5F3F0;
+    --c-border: #E6E6E2;
+    --c-border-hover: #D6D3D1;
+    --c-text: #0C0C0D;
+    --c-text-muted: #57534E;
+    --c-text-soft: #78716C;
+    --c-brand: #C05E12;
+    --c-brand-hover: #9C4A0C;
+    --c-brand-soft: #FDF4E8;
+    --c-brand-border: #F2D5B4;
+    --c-success: #C05E12;
+    --c-success-hover: #9C4A0C;
+    --c-success-soft: #FBEAD5;
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 12px;
+    --r-xl: 14px;
+}
+
+/* ── 2. FONTI (isti kot dash: Instrument Sans + IBM Plex Mono) ─────── */
+body, .app-shell, button, input, select, textarea {
+    font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    letter-spacing: -0.011em;
+}
+h1, h2, h3, h4, h5, h6 { font-weight: 600 !important; letter-spacing: -0.02em !important; }
+.sidebar-section-label, .stat-card .label, .nav-item .badge, .badge,
+.stat-card .trend, .sidebar-brand .subtitle {
+    font-family: 'IBM Plex Mono', monospace !important;
+}
+html, body { background: #F6F6F4 !important; }
+
+/* ── 3. SIDEBAR — temen kot na dash ────────────────────────────────── */
+.sidebar {
+    background: #0C0C0D !important;
+    border-right: none !important;
+}
+.sidebar-brand { border-bottom: 1px solid rgba(255,255,255,0.08) !important; }
+.sidebar-brand .logo { background: var(--brand) !important; color: #FFFFFF !important; border-radius: 10px !important; }
+.sidebar-brand .title { color: #FFFFFF !important; }
+.sidebar-brand .subtitle { color: #F2C48D !important; letter-spacing: 0.12em !important; }
+.sidebar-section-label { color: #F2C48D !important; opacity: 1 !important; }
+.sidebar .nav-item { color: rgba(255,255,255,0.88) !important; border-radius: 10px !important; }
+.sidebar .nav-item:hover { background: rgba(255,255,255,0.07) !important; color: #FFFFFF !important; }
+.sidebar .nav-item.active {
+    background: linear-gradient(180deg, #D97B24, #B4560A) !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 6px 16px -8px rgba(192, 94, 18, 0.55);
+}
+.sidebar .nav-item.active .badge { background: rgba(255,255,255,0.18) !important; color: #FFFFFF !important; }
+.sidebar .nav-item .badge { background: rgba(255,255,255,0.10) !important; color: rgba(255,255,255,0.65) !important; }
+.sidebar-footer { border-top: 1px solid rgba(255,255,255,0.08) !important; }
+.sidebar-user { background: rgba(255,255,255,0.06) !important; }
+.sidebar-user .user-name { color: #FFFFFF !important; }
+.sidebar-user .user-role { color: rgba(255,255,255,0.5) !important; }
+.sidebar-user .avatar { background: var(--brand) !important; color: #FFFFFF !important; }
+.sidebar-user .logout-btn-sm { color: rgba(255,255,255,0.6) !important; }
+.sidebar ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16) !important; border-radius: 6px; }
+
+/* ── 4. KARTICE — bele, radius 14, oranžna akcent črtica, dvig ─────── */
+.stat-card, .card, .ui-card {
+    background: #FFFFFF !important;
+    border: 1px solid #E6E6E2 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 1px 2px rgba(15,16,17,.04), 0 12px 32px -24px rgba(15,16,17,.14) !important;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.stat-card:hover, .card:hover {
+    transform: translateY(-2px);
+    border-color: #DEDEDA !important;
+    box-shadow: 0 10px 24px -12px rgba(15,16,17,.18) !important;
+}
+.stat-card::before {
+    content: "";
+    display: block;
+    width: 24px; height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #C05E12, #EFA153);
+    margin-bottom: 12px;
+}
+.stat-card .label {
+    font-size: 10px !important;
+    text-transform: uppercase;
+    letter-spacing: .09em !important;
+    color: #75756F !important;
+    font-weight: 500 !important;
+}
+.stat-card .value { font-weight: 600 !important; letter-spacing: -0.02em !important; font-variant-numeric: tabular-nums; }
+.stat-card .trend { font-size: 9.5px !important; color: #9C5608 !important; letter-spacing: .04em !important; }
+
+/* ── 5. NASLOVI STRANI — oranžen gradient kot hero na dash ─────────── */
+.page-title h1 {
+    background: linear-gradient(90deg, #7A3D08, #C05E12, #EFA153) !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    color: transparent !important;
+    font-weight: 600 !important;
+}
+
+/* ── 6. GUMBI — radius 12 (kot dash), oranžni primarni ─────────────── */
+button:not(.nav-item):not(.logout-btn-sm), .btn, .btn-primary, .btn-primary-el {
+    border-radius: 12px !important;
+}
+.btn-primary, .btn-primary-el, button.btn-primary {
+    background: var(--brand) !important;
+    border-color: var(--brand) !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 1px 2px rgba(192,94,18,0.22) !important;
+}
+.btn-primary:hover, .btn-primary-el:hover, button.btn-primary:hover {
+    background: var(--brand-hover) !important;
+    border-color: var(--brand-hover) !important;
+    transform: translateY(-1px);
+}
+
+/* ── 7. INPUTI ─────────────────────────────────────────────────────── */
+.app-shell input[type="text"], .app-shell input[type="number"], .app-shell input[type="password"],
+.app-shell input[type="search"], .app-shell input[type="url"], .app-shell textarea, .app-shell select {
+    border-radius: 10px !important;
+    border: 1px solid #E3E3E0 !important;
+    background: #FFFFFF !important;
+}
+.app-shell input:focus, .app-shell textarea:focus, .app-shell select:focus {
+    border-color: var(--brand) !important;
+    box-shadow: 0 0 0 3px var(--brand-glow) !important;
+    outline: none !important;
+}
+
+/* ── 8. TRDO KODIRANE STARE BARVE (smaragd + kobalt → oranžna) ─────── */
+[style*="color:#10b981"], [style*="color: #10b981"], [style*="color:#10B981"],
+[style*="color:#34d399"], [style*="color:#059669"],
+[style*="color:#0A59D2"], [style*="color: #0A59D2"], [style*="color:#3D75F5"] {
+    color: var(--brand) !important;
+}
+[style*="background:#10b981"], [style*="background: #10b981"], [style*="background:#10B981"],
+[style*="background:#059669"],
+[style*="background:#0A59D2"], [style*="background: #0A59D2"],
+[style*="background:#0847A8"], [style*="background:#3D75F5"], [style*="background:#2A5FE8"] {
+    background: var(--brand) !important;
+    color: #FFFFFF !important;
+}
+[style*="border-color:#10b981"], [style*="border: 2px solid #10b981"], [style*="border:2px solid #10b981"] {
+    border-color: var(--brand) !important;
+}
+.library-section h4 { color: var(--brand) !important; }
+.library-section h4:hover { color: var(--brand-hover) !important; }
+
+/* ── 9. LOGIN ──────────────────────────────────────────────────────── */
+.login-overlay { background: #F6F6F4 !important; }
+.login-box {
+    background: #FFFFFF !important;
+    border: 1px solid #E6E6E2 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 2px rgba(15,16,17,.04), 0 24px 60px -24px rgba(15,16,17,.25) !important;
+    color: var(--text-primary) !important;
+}
+.login-box h2 { color: var(--text-primary) !important; }
+.login-box h2 span { color: var(--brand) !important; }
+.login-box input { background: #FFFFFF !important; color: var(--text-body) !important; border: 1px solid #E3E3E0 !important; border-radius: 10px !important; }
+.login-box button { background: var(--brand) !important; color: #FFFFFF !important; border-radius: 12px !important; border: none !important; }
+.login-box button:hover { background: var(--brand-hover) !important; }
+
+/* ── 10a. TRDO KODIRAN KOBALT V RAZREDIH (home/creatives/activity) ── */
+.section-heading {
+    color: #75756F !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 10.5px !important;
+    font-weight: 500 !important;
+    letter-spacing: .1em !important;
+}
+.creatives-matrix thead th, .activity-table thead th {
+    color: #75756F !important;
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-weight: 500 !important;
+    letter-spacing: .08em !important;
+    background: #FAFAF8 !important;
+}
+.cov-fill { background: var(--brand) !important; }
+.creative-id, .activity-job { color: var(--brand) !important; font-family: 'IBM Plex Mono', monospace !important; }
+.creatives-toolbar select { color: var(--text-secondary) !important; }
+.creatives-toolbar input.search:focus, .creatives-toolbar select:focus { border-color: var(--brand) !important; }
+.btn-refresh, button.btn-refresh { background: var(--brand) !important; color: #FFFFFF !important; }
+.btn-refresh:hover, button.btn-refresh:hover { background: var(--brand-hover) !important; }
+.spinner { border-top-color: var(--brand) !important; }
+.quick-card:hover { border-color: var(--brand) !important; box-shadow: 0 8px 24px rgba(192,94,18,.12) !important; }
+.quick-card:hover .quick-arrow { color: var(--brand) !important; }
+.quick-icon { background: #FBEAD5 !important; color: #9C4A0C !important; }
+.quick-card.quick-primary { background: linear-gradient(135deg, #D97B24 0%, #8A4509 100%) !important; }
+.quick-card.quick-primary:hover { box-shadow: 0 12px 28px rgba(192,94,18,.30) !important; }
+.quick-card.quick-primary .quick-icon { background: rgba(255,255,255,.15) !important; color: #FFFFFF !important; }
+.lang-chip { background: #FBEAD5 !important; color: #9C4A0C !important; font-family: 'IBM Plex Mono', monospace !important; }
+.btn-ghost { color: #47474A !important; }
+.btn-ghost:hover { border-color: var(--brand) !important; }
+.btn-link { color: var(--brand) !important; }
+.btn-link:hover { background: #FBEAD5 !important; }
+#downloads-overlay { background: rgba(78, 42, 6, 0.18) !important; }
+
+/* zeleni in modri čipi → topli odtenki (nič zelene/modre v celem appu) */
+:root {
+    --pill-green-bg: #FBEAD5;
+    --pill-green-fg: #9C4A0C;
+    --pill-blue-bg: #F6DFC2;
+    --pill-blue-fg: #7A4408;
+}
+.author-pill.author-tk, .creative-badge, .product-pill.shirts, .product-pill.tshirt {
+    background: #F6DFC2 !important;
+    color: #7A4408 !important;
+}
+[style*="background:#DBEAFE"], [style*="background: #DBEAFE"] { background: #F6DFC2 !important; }
+[style*="color:#1E40AF"], [style*="color:#1D4ED8"], [style*="color: #1E40AF"] { color: #7A4408 !important; }
+
+/* ── 10b. INLINE STILI (tudi JS-generirani): modra/zelena → oranžna ── */
+[style*="solid #0A59D2"], [style*="solid #10b981"], [style*="solid #3b82f6"] { border-color: var(--brand) !important; }
+[style*="background:#EFF6FF"], [style*="background: #EFF6FF"], [style*="background:#F0F6FF"] { background: #FDF4E8 !important; }
+[style*="solid #BFDBFE"] { border-color: #F2D5B4 !important; }
+[style*="dashed #93c5fd"], [style*="dashed #BFDBFE"] { border-color: #EFB679 !important; }
+[style*="color:#3b82f6"], [style*="color: #3b82f6"] { color: var(--brand) !important; }
+[style*="background:#3b82f6"] { background: var(--brand) !important; color: #FFFFFF !important; }
+[style*="background:#DCFCE7"], [style*="background: #DCFCE7"] { background: #FBEAD5 !important; }
+[style*="color:#16a34a"], [style*="color:#15803d"], [style*="color: #16a34a"], [style*="color: #15803d"] { color: #9C4A0C !important; }
+
+/* ── 10c. LIPVOICE + JS-mutirani stili (hex IN rgb() oblika) ───────── */
+[style*="linear-gradient(135deg,#3b82f6,#2563eb)" i], [style*="linear-gradient(135deg, #3b82f6, #2563eb)" i] {
+    background: linear-gradient(135deg, #D97B24, #9C4A0C) !important;
+}
+[style*="linear-gradient(90deg, #10b981, #3b82f6)" i], [style*="linear-gradient(90deg,#10b981,#3b82f6)" i] {
+    background: linear-gradient(90deg, #EFA153, #C05E12) !important;
+}
+[style*="color:#3b82f6" i], [style*="color: #3b82f6" i], [style*="color:#2563eb" i],
+[style*="color:#1d4ed8" i], [style*="color: #1d4ed8" i], [style*="color:#60a5fa" i] {
+    color: var(--brand) !important;
+}
+[style*="background:#3b82f6" i], [style*="background: #3b82f6" i], [style*="background:#2563eb" i] {
+    background: var(--brand) !important;
+    color: #FFFFFF !important;
+}
+[style*="background:#dbeafe" i], [style*="background: #dbeafe" i] { background: #F6DFC2 !important; }
+[style*="background:#eff6ff" i], [style*="background: #eff6ff" i] { background: #FDF4E8 !important; }
+[style*="solid #3b82f6" i], [style*="border-color:#3b82f6" i] { border-color: var(--brand) !important; }
+/* JS: el.style.x = '#hex' se v atributu serializira kot rgb(...) */
+[style*="border-color: rgb(59, 130, 246)"], [style*="solid rgb(59, 130, 246)"] { border-color: var(--brand) !important; }
+[style*="border-color: rgb(147, 197, 253)"], [style*="solid rgb(147, 197, 253)"] { border-color: #EFB679 !important; }
+[style*="background: rgb(219, 234, 254)"], [style*="background-color: rgb(219, 234, 254)"] { background: #F6DFC2 !important; }
+[style*="background: rgb(239, 246, 255)"], [style*="background-color: rgb(239, 246, 255)"] { background: #FDF4E8 !important; }
+[style*="background: rgb(59, 130, 246)"], [style*="background-color: rgb(59, 130, 246)"] { background: var(--brand) !important; }
+.gender-btn.active { background: var(--brand) !important; color: #FFFFFF !important; }
+.timeline-dropzone.suggested-benefit { border-color: #EFA153 !important; background: rgba(239, 161, 83, 0.08) !important; }
+
+/* ── 10. DROBNARIJE ────────────────────────────────────────────────── */
+*::selection { background: rgba(192, 94, 18, 0.22) !important; color: var(--text-primary) !important; }
+::-webkit-scrollbar-thumb { background: #D6D6D1 !important; border-radius: 8px; }
+a { color: var(--brand); }
+.badge, .pill { border-radius: 8px !important; }
+
+/* native kontrole (radio/checkbox/range/progress) — oranžen accent */
+input[type="radio"], input[type="checkbox"], input[type="range"], progress {
+    accent-color: #C05E12 !important;
+}
