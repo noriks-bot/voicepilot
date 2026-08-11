@@ -323,3 +323,30 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 .lv-jobrow { cursor:grab; }
 .lv-jobrow:active { cursor:grabbing; }
 .lv-row-folder { font-size:10px; font-weight:700; color:#9C4A0C; background:#FBEAD5; border-radius:6px; padding:2px 7px; }
+
+/* ── 13. LipVoice DVOFAZNO: panel za generiranje drzav + SRT modal ── */
+.lv-genpanel { margin-top:10px; padding:10px 12px; background:#FDF9F4; border:1px dashed #EBD9C2; border-radius:10px; }
+.lv-genpanel-t { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:#9C5608; margin-bottom:8px; }
+.lv-genchips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:9px; }
+.lv-gen-chip { display:inline-flex; align-items:center; gap:4px; padding:5px 9px; border:1.5px solid #E3E3E0; border-radius:8px; background:#fff; cursor:pointer; font-weight:600; font-size:12px; }
+.lv-gen-chip.on { border-color:var(--brand); background:#FDF4E8; }
+.lv-gengo { padding:7px 14px; background:var(--brand); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:12px; cursor:pointer; font-family:inherit; }
+.lv-gengo:hover { background:var(--brand-hover); }
+.lv-gengo:disabled { opacity:.6; cursor:not-allowed; }
+#lvJobs a.lv-srt { background:#F1EFEA !important; color:#5D5D5E !important; border:1px solid #E3E0DA !important; }
+#lvJobs a.lv-srt:hover { background:#E9E6DF !important; color:#0C0C0D !important; }
+
+.lv-srt-box { background:#fff; border:1px solid #E6E6E2; border-radius:16px; width:min(1100px,94vw); max-height:88vh; display:flex; flex-direction:column; box-shadow:0 24px 60px -24px rgba(15,16,17,.35); overflow:hidden; }
+.lv-srt-topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #ECEAE6; }
+.lv-srt-x { background:transparent; border:none; font-size:16px; color:#75756F; cursor:pointer; padding:4px 8px; }
+.lv-srt-tabs { display:flex; gap:6px; flex-wrap:wrap; padding:10px 20px; border-bottom:1px solid #ECEAE6; align-items:center; }
+.lv-srt-tab { padding:5px 12px; border:1px solid #E3E3E0; background:#fff; color:#47474A; border-radius:9px; font-weight:600; font-size:12px; cursor:pointer; font-family:inherit; }
+.lv-srt-tab.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+.lv-srt-body { overflow-y:auto; padding:0 20px 18px; }
+.lv-srt-head { position:sticky; top:0; background:#fff; display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:12px 0 8px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:#9A9A94; border-bottom:1px solid #F0EEE9; z-index:1; }
+.lv-srt-row { padding:12px 0; border-bottom:1px solid #F4F2ED; }
+.lv-srt-time { font-family:'IBM Plex Mono',monospace; font-size:10px; color:#A8A49C; margin-bottom:5px; }
+.lv-srt-cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
+.lv-srt-orig { font-size:13.5px; line-height:1.5; color:#5D5D5E; }
+.lv-srt-tr { font-size:13.5px; line-height:1.5; color:#0C0C0D; font-weight:500; }
+@media (max-width:760px){ .lv-srt-cols,.lv-srt-head{ grid-template-columns:1fr; gap:6px; } }
