@@ -2115,9 +2115,9 @@
         /* ========== END UNIFIED DESIGN SYSTEM v2 ========== */
 
         </style>
-    <!-- HUEL ORANGE - isti dizajn kot dash.noriks.com, oranzna namesto zelene/modre -->
+    <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=7">
+    <link rel="stylesheet" href="/huel-orange.css?v=8">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8370,6 +8370,19 @@
 
     <div id="lvJobs"></div>
   </div>
+
+  <!-- Modal: dodaj dodatne drzave k obstojecemu videu -->
+  <div id="lvAddModal" style="display:none;position:fixed;inset:0;background:rgba(20,12,4,.5);z-index:99999;align-items:center;justify-content:center">
+    <div style="background:#fff;border:1px solid #E6E6E2;border-radius:16px;padding:24px;max-width:460px;width:92%;box-shadow:0 24px 60px -24px rgba(15,16,17,.35)">
+      <div style="font-size:17px;font-weight:700;margin-bottom:4px">➕ Dodaj države</div>
+      <div id="lvAddSub" style="font-size:12px;color:#75756F;margin-bottom:16px">Izberi države, ki jih želiš še generirati za ta video.</div>
+      <div id="lvAddLangs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="lvAddClose()" style="padding:9px 16px;border:1px solid #E3E3E0;background:#fff;color:#47474A;border-radius:12px;font-weight:600;font-size:13px;cursor:pointer">Prekliči</button>
+        <button onclick="lvAddSubmit()" id="lvAddGo" class="btn-primary" style="padding:9px 18px;border:none;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer">🚀 Generiraj</button>
+      </div>
+    </div>
+  </div>
             </section>
 
         </main>
@@ -8460,6 +8473,37 @@ async function lvRerun(id,lang){
     lvStartPolling();
   }catch(e){alert('Napaka: '+e.message);}
 }
+// ── DODAJ DRZAVE k obstojecemu videu ──
+const LV_ALL_LANGS=['SI','HR','SK','CZ','HU','PL','GR','IT','RO','BG','DE'];
+const LV_FLAGS2={SI:'🇸🇮',HR:'🇭🇷',SK:'🇸🇰',CZ:'🇨🇿',HU:'🇭🇺',PL:'🇵🇱',GR:'🇬🇷',IT:'🇮🇹',RO:'🇷🇴',BG:'🇧🇬',DE:'🇩🇪'};
+let _lvAddId=null;
+function lvAddOpen(id){
+  const j=(window._lvJobsById||{})[id]; if(!j){alert('Video ni najden');return;}
+  _lvAddId=id;
+  document.getElementById('lvAddSub').innerHTML='Video: <b>'+(j.name||id)+'</b> · že narejeno: '+((j.langs||[]).join(', ')||'—');
+  const have=new Set([...(j.langs||[]),...(j.outputs||[])]);
+  const rem=LV_ALL_LANGS.filter(L=>!have.has(L));
+  const box=document.getElementById('lvAddLangs');
+  if(!rem.length){ box.innerHTML='<span style="font-size:13px;color:#75756F">Vse države so že generirane.</span>'; }
+  else box.innerHTML=rem.map(L=>'<label class="lv-add-chip" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1.5px solid #E3E3E0;border-radius:10px;cursor:pointer;font-weight:600;font-size:13px"><input type="checkbox" value="'+L+'" onchange="lvAddSync(this)"> '+(LV_FLAGS2[L]||'')+' '+L+'</label>').join('');
+  document.getElementById('lvAddModal').style.display='flex';
+}
+function lvAddSync(cb){ const l=cb.closest('label'); l.style.borderColor=cb.checked?'#C05E12':'#E3E3E0'; l.style.background=cb.checked?'#FDF4E8':'#fff'; }
+function lvAddClose(){ document.getElementById('lvAddModal').style.display='none'; _lvAddId=null; }
+async function lvAddSubmit(){
+  if(!_lvAddId)return;
+  const langs=[...document.querySelectorAll('#lvAddLangs input:checked')].map(x=>x.value);
+  if(!langs.length){alert('Izberi vsaj eno državo');return;}
+  const b=document.getElementById('lvAddGo'); b.disabled=true; b.textContent='⏳ Zaganjam…';
+  try{
+    const r=await fetch('/api/lipvoice/addlangs/'+_lvAddId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({langs:langs.join(',')})});
+    const d=await r.json();
+    if(!d.ok){alert('Napaka: '+(d.error||r.status));}
+    else { lvAddClose(); lvStartPolling(); }
+  }catch(e){alert('Napaka: '+e.message);}
+  finally{ b.disabled=false; b.textContent='🚀 Generiraj'; }
+}
+document.getElementById('lvAddModal').addEventListener('click',e=>{ if(e.target.id==='lvAddModal') lvAddClose(); });
 function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvPoll(); }
 async function lvPoll(){
   if(!document.body.classList.contains('page-lipvoice')){ _lvPolling = false; return; }
@@ -8467,7 +8511,9 @@ async function lvPoll(){
     const jobs=await (await fetch('/api/lipvoice/jobs')).json();
     const DNEVI=['NED','PON','TOR','SRE','ČET','PET','SOB'];
     let html='', lastDay='';
+    window._lvJobsById={};
     for(const j of jobs){
+      window._lvJobsById[j.id]=j;
       // datumski locilnik (kronoloski pogled po dnevih)
       const dt=j.created?new Date(j.created):null;
       const dayKey=dt?(dt.getFullYear()+'-'+dt.getMonth()+'-'+dt.getDate()):'';
@@ -8478,7 +8524,7 @@ async function lvPoll(){
           +'<div style="flex:1;height:1px;background:#e2e8f0"></div></div>';
       }
       const col=j.status==='done'?'#16a34a':j.status==='error'?'#dc2626':(j.status==='queued'?'#d97706':'#3b82f6');
-      const outs=(j.outputs||[]).map(l=>'<a href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:6px 10px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap">⬇ '+l+'</a>').join('');
+      const outs=(j.outputs||[]).map(l=>'<a class="lv-dl" href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:6px 10px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap">⬇ '+l+'</a>').join('');
       const cost=j.cost!=null?('<span style="margin-left:8px;padding:2px 8px;background:#fef3c7;border-radius:6px;font-size:11px;font-weight:700">💰 '+j.cost.toFixed(4)+' €</span>'):'';
       const info=[j.sourceLang?('jezik: '+j.sourceLang):'',j.gender?('govorec: '+(j.gender==='female'?'ženska':'moški')):'',j.cloned?'klon glasu ✓':(j.cloned===false?'rezervni glas':''),j.cleaned?'očiščen ✓':'',j.enhanced?'HD ✓':'',j.hasFace===true?'obraz ✓ (lipsync)':j.hasFace===false?'ni obraza':''].filter(Boolean).join(' · ');
       // status po drzavah + SKUPNA faza (ciscenje/klon/prepis velja za VSE drzave)
@@ -8505,7 +8551,7 @@ async function lvPoll(){
         const fg=done?'#166534':(active?'#1d4ed8':'#94a3b8');
         const ico=done?'✓ ':(active?'⏳ ':'');
         const st=done?' končana':(active?' v delu':(sharedActive?'':' čaka'));
-        if(done) return '<a href="/api/lipvoice/download/'+j.id+'/'+L+'" style="padding:3px 10px;border-radius:999px;background:#16a34a;color:#fff;font-size:11px;font-weight:700;text-decoration:none">'+(FLAGS[L]||'')+' ✓ '+L+' ⬇</a>';
+        if(done) return '<a class="lv-dl" href="/api/lipvoice/download/'+j.id+'/'+L+'" style="padding:3px 10px;border-radius:999px;background:#16a34a;color:#fff;font-size:11px;font-weight:700;text-decoration:none">'+(FLAGS[L]||'')+' ✓ '+L+' ⬇</a>';
         if(j.rerunning&&j.rerunning[L]) return '<span style="padding:3px 10px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:700">'+(FLAGS[L]||'')+' ⏳ '+L+' ponovitev teče</span>';
         const failed=(j.langErrors&&j.langErrors[L])||((j.status==='done'||j.status==='error')&&!done);
         if(failed) return '<a href="javascript:void(0)" onclick="lvRerun(\''+j.id+'\',\''+L+'\')" title="'+((j.langErrors&&j.langErrors[L])||'ni izdelana')+'" style="padding:3px 10px;border-radius:999px;background:#f97316;color:#fff;font-size:11px;font-weight:800;text-decoration:none">'+(FLAGS[L]||'')+' ↻ '+L+' PONOVI</a>';
@@ -8528,8 +8574,9 @@ async function lvPoll(){
        +'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'
          +((j.status==='running'||j.status==='queued'||j.status==='starting')?'<a href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')" style="display:inline-block;padding:6px 10px;background:#dc2626;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">✖ prekini</a>':'')
          +'<a href="javascript:void(0)" onclick="lvDelete(\''+j.id+'\')" title="izbrisi vrstico" style="display:inline-block;padding:6px 9px;background:#f1f5f9;color:#64748b;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px">🗑</a>'
+         +((j.status==='done'||j.status==='error')?'<a class="lv-add" href="javascript:void(0)" onclick="lvAddOpen(\''+j.id+'\')" title="dodaj se drzave v ta video" style="display:inline-block;padding:6px 11px;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">➕ država</a>':'')
          +outs
-         +(j.status==='done'&&(j.outputs||[]).length>1?'<a href="/api/lipvoice/download-zip/'+j.id+'" style="display:inline-block;padding:6px 12px;background:#0f172a;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">📦 VSE (ZIP)</a>':'')
+         +(j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'" style="display:inline-block;padding:6px 12px;background:#0f172a;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">📦 VSE (ZIP)</a>':'')
          +'</div>'
        +'</div>';
     }

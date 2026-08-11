@@ -6236,14 +6236,19 @@ RULES:
 2. Translate the way a NATIVE ${FULL[lang] || lang} speaker actually TALKS in everyday speech —
    natural word order, colloquial phrasing, correct diacritics. Never a literal/textbook translation.
    If a phrase would sound odd spoken aloud, rephrase it the way a local ad would say it.
+2a. DYNAMIC & NATURAL: write it like a real UGC creator speaking to camera — lively, punchy,
+   with natural rhythm and energy, varied sentence length (some short, snappy lines, some flowing).
+   Use everyday spoken connectors and the emphasis a native would give a hook or an offer.
+   Never flat, monotone or robotic; it must sound like a person, not a translation.
 2b. This text will be READ ALOUD by TTS: write out ALL numbers, prices, percentages and units
    as words in ${FULL[lang] || lang}, exactly as a native speaker would pronounce them.
 3. Keep each numbered line separate, same count and same order (this is dubbing).
-4. LENGTH IS CRITICAL: each line must take THE SAME TIME TO SAY as the original — within about
-   ten percent, NEITHER much shorter NOR much longer. Match the syllable count of the source line
-   as closely as you can. If your translation comes out much shorter, expand it naturally
-   (an extra adjective, a natural filler a native ad would use) — never leave dead air.
-5. Write it so it can be spoken calmly, at a normal pace, without rushing.
+4. LENGTH IS CRITICAL: each line must take THE SAME TIME TO SAY as the original — match the
+   syllable count of the source line as closely as you can. Prefer a hair SHORTER over longer;
+   NEVER write a line that is longer than the source (a longer line forces the voice to rush).
+   If a translation would come out much shorter, expand it naturally (an extra adjective, a
+   natural filler a native ad would use) so the pacing stays even — never leave dead air.
+5. Write it so it can be spoken at a natural, lively pace without rushing.
 6. Output ONLY the numbered lines.`;
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
@@ -6867,6 +6872,7 @@ async function lvRun(job) {
             if (!dubbed) {
             // ── govor po segmentih (rezerva) ──
             parts = [];
+            let segTempo = [];   // RAZLICNA hitrost po sekcijah (napolni casovnica spodaj)
             for (let i = 0; i < tr.length; i++) {
                 lvCk();
                 const mp3 = path.join(work, `${lang}-${i}.mp3`);
@@ -6877,34 +6883,55 @@ async function lvRun(job) {
                 if ((i + 1) % 3 === 0) lvLog(job, `[${lang}] govor ${i + 1}/${tr.length}`);
             }
 
-            // ── NARAVNA casovnica: segmenti se NIKOLI ne prekrivajo in ne rezejo ──
-            // Premor med segmenti povzamemo po izvirniku, a ga omejimo (brez grdih lukenj).
-            const MIN_PAUSE = 0.10, MAX_PAUSE = 0.50;
-            const starts = [];
-            for (let i = 0; i < parts.length; i++) {
-                if (i === 0) { starts.push(Math.max(0, Math.min(parts[0].srcS, 0.6))); continue; }
-                const srcPause = parts[i].srcS - parts[i - 1].srcE;
-                const pause = Math.min(MAX_PAUSE, Math.max(MIN_PAUSE, isFinite(srcPause) ? srcPause : 0.2));
-                starts.push(starts[i - 1] + parts[i - 1].d + pause);
+            // ── CASOVNICA PO SEKCIJAH (Dejan 6.8.2026) ──
+            // Vsak segment poravnamo na NJEGOV izvorni zacetni cas in ga stisnemo LE toliko,
+            // da se prilega svojemu casovnemu oknu (do zacetka naslednjega; zadnji do DUR).
+            // => razlicna hitrost po sekcijah (kratke ostanejo naravne, dolge se pohitrijo),
+            //    skupna dolzina = dolzina originala, BREZ zamrznjene zadnje slike.
+            const MAX_LEAD = 2.0;   // najvec toliko tisine na zacetku (ce STT zgresi uvodni govor)
+            const timesOk = DUR > 0 && parts.every((p, i) =>
+                isFinite(p.srcS) && isFinite(p.srcE) && p.srcE >= p.srcS &&
+                (i === 0 || p.srcS >= parts[i - 1].srcS - 0.05));
+            segTempo = parts.map(() => 1);
+            tempo = 1; vidPad = 0;   // globalni tempo se pri per-sekciji ne rabi; NIKOLI freza
+            if (timesOk && parts.length) {
+                startsF = new Array(parts.length);
+                durF = new Array(parts.length);
+                for (let i = 0; i < parts.length; i++) {
+                    const segStart = Math.max(0, Math.min(parts[i].srcS, i === 0 ? MAX_LEAD : DUR - 0.2));
+                    const nextStart = (i + 1 < parts.length) ? Math.max(segStart + 0.3, parts[i + 1].srcS) : DUR;
+                    const slot = Math.max(0.3, nextStart - segStart);        // okno te sekcije
+                    const t = parts[i].d > slot + 0.02 ? parts[i].d / slot : 1;  // stisni SAMO, ce ne gre
+                    segTempo[i] = t; startsF[i] = segStart; durF[i] = parts[i].d / t;
+                }
+                const L = parts.length - 1;                                  // zadnja sekcija nikoli cez DUR
+                if (startsF[L] + durF[L] > DUR) {
+                    const slotL = Math.max(0.3, DUR - startsF[L]);
+                    segTempo[L] = parts[L].d / slotL; durF[L] = slotL;
+                }
+                totalF = startsF[L] + durF[L];
+                lvLog(job, `[${lang}] casovnica po sekcijah: ${parts.length} sekcij, hitrost ${Math.min(...segTempo).toFixed(2)}–${Math.max(...segTempo).toFixed(2)}x, govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s (brez freza)`);
+            } else {
+                // rezerva (nezanesljivi casi): zaporedno + en globalni tempo, se vedno brez freza
+                let acc = Math.min(parts[0] ? parts[0].srcS : 0, MAX_LEAD);
+                startsF = []; durF = parts.map(p => p.d);
+                for (let i = 0; i < parts.length; i++) { startsF.push(acc); acc += parts[i].d + 0.12; }
+                const rawTotal = parts.length ? startsF[parts.length - 1] + durF[parts.length - 1] : 0;
+                if (rawTotal > DUR + 0.05 && DUR > 0) {
+                    tempo = rawTotal / DUR;
+                    startsF = startsF.map(s => s / tempo); durF = durF.map(d => d / tempo);
+                    segTempo = parts.map(() => tempo);
+                }
+                totalF = parts.length ? startsF[parts.length - 1] + durF[parts.length - 1] : 0;
+                lvLog(job, `[${lang}] casovnica (rezerva): govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s` + (tempo > 1.001 ? ` — enoten tempo ${tempo.toFixed(3)}x, brez freza` : ', brez freza'));
             }
-            const rawTotal = parts.length ? starts[parts.length - 1] + parts[parts.length - 1].d : 0;
 
-            // Ce je govor daljsi od videa: NAJVEC 1.12x pohitritev (prej do 1.9x = "prehitro"),
-            // ostanek raje podaljsamo video z zamrznjeno zadnjo sliko.
-            tempo = 1;
-            if (rawTotal > DUR + 0.05 && DUR > 0) tempo = Math.min(1.12, rawTotal / DUR);
-            startsF = starts.map(s => s / tempo);
-            durF = parts.map(p => p.d / tempo);
-            totalF = parts.length ? startsF[parts.length - 1] + durF[parts.length - 1] : 0;
-            vidPad = Math.max(0, totalF - DUR);
-            lvLog(job, `[${lang}] govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s` +
-                (tempo > 1.001 ? ` — tempo ${tempo.toFixed(3)}x` : ' — brez pohitritve') +
-                (vidPad > 0.05 ? `, video podaljsan za ${vidPad.toFixed(1)}s` : ''));
-
+            // atempo podpira 0.5–2.0 na instanco -> za vecje faktorje verizimo
+            const mkTempo = (tf) => { if (!(tf > 1.001)) return ''; let s = '', r = tf; while (r > 2.0) { s += 'atempo=2.0,'; r /= 2.0; } return s + `atempo=${r.toFixed(3)},`; };
             const ins = parts.map(p => `-i '${lvSh(p.mp3)}'`).join(' ');
             const filt = parts.map((p, i) => {
                 const dly = Math.round(startsF[i] * 1000);
-                const tp = tempo > 1.001 ? `atempo=${tempo.toFixed(3)},` : '';
+                const tp = mkTempo(segTempo[i]);   // RAZLICNA hitrost po sekcijah
                 return `[${i}:a]${tp}adelay=${dly}|${dly}[a${i}]`;
             }).join(';');
             await execPromise(`ffmpeg -y ${ins} -filter_complex "${filt};${parts.map((_, i) => `[a${i}]`).join('')}amix=inputs=${parts.length}:normalize=0:dropout_transition=0[o]" -map "[o]" -c:a pcm_s16le '${lvSh(voice)}' 2>/dev/null`);
@@ -7036,10 +7063,16 @@ async function lvRun(job) {
                 if (job.outputs && job.outputs[L]) {
                     (par.outputs = par.outputs || {})[L] = job.outputs[L];
                     if (par.langErrors) delete par.langErrors[L];
-                    if (Object.keys(par.langErrors || {}).length === 0) { par.status = 'done'; par.error = undefined; par.progress = 100; }
-                    (par.log = par.log || []).push('[' + L + '] ponovitev USPESNA ✓');
+                    (par.log = par.log || []).push('[' + L + '] ' + L + ' dodana/ponovljena USPESNO ✓');
                 } else {
-                    (par.log = par.log || []).push('[' + L + '] ponovitev NI uspela: ' + String(job.error || 'napaka').slice(0, 120));
+                    (par.langErrors = par.langErrors || {})[L] = String(job.error || 'napaka').slice(0, 160);
+                    (par.log = par.log || []).push('[' + L + '] NI uspela: ' + String(job.error || 'napaka').slice(0, 120));
+                }
+                // starsa dokoncaj SELE ko ni vec tekocih dodatkov/ponovitev
+                if (Object.keys(par.rerunning || {}).length === 0) {
+                    par.progress = 100;
+                    par.status = Object.keys(par.outputs || {}).length ? 'done' : 'error';
+                    if (par.status === 'done' && Object.keys(par.langErrors || {}).length === 0) par.error = undefined;
                 }
             }
         }
@@ -7137,6 +7170,41 @@ app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
     (old.log = old.log || []).push('[' + L + '] ponovitev v teku…');
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
     res.json({ ok: true, id });
+});
+
+// dodaj NOVE drzave k ze obstojecemu jobu — uporabi ZE OCISCENI video (vmake se NE ponovi)
+app.post('/api/lipvoice/addlangs/:id', (req, res) => {
+    const old = lvJobs.get(req.params.id);
+    if (!old) return res.status(404).json({ error: 'Ni joba' });
+    const src = (old.videoPath && fs.existsSync(old.videoPath)) ? old.videoPath
+        : ((old.srcPath && fs.existsSync(old.srcPath)) ? old.srcPath : null);
+    if (!src) return res.status(410).json({ error: 'Izvorni video ni vec na disku' });
+    const want = String((req.body && req.body.langs) || req.query.langs || '')
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!want.length) return res.status(400).json({ error: 'Ni izbranih drzav' });
+    const added = [], skipped = [];
+    let n = 0;
+    for (const L of want) {
+        if ((old.outputs || {})[L]) { skipped.push(L); continue; }   // ze generirana
+        if ((old.rerunning || {})[L]) { skipped.push(L); continue; } // ze tece
+        if (!old.langs.includes(L)) old.langs.push(L);
+        if (old.langErrors) delete old.langErrors[L];
+        const id = 'lv-' + Date.now() + '-' + (++n) + '-' + L;
+        const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
+            langs: [L], product: old.product || 'NORIKS',
+            clean: src !== old.srcPath ? false : (old.clean !== false),  // ze ocisceni video -> brez vmake
+            lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'clone',
+            hidden: true, parentId: old.id, parentLang: L,               // tece SKRITO, rezultat gre v starsev row
+            status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
+            log: ['dodajanje drzave ' + L + ' k jobu ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
+        if (src !== old.srcPath) { job.cleaned = old.cleaned; job.enhanced = old.enhanced; }
+        (old.rerunning = old.rerunning || {})[L] = true;
+        (old.log = old.log || []).push('[' + L + '] dodana v generiranje…');
+        lvJobs.set(id, job); added.push(L);
+    }
+    if (added.length) { old.status = 'running'; old.progress = Math.min(old.progress || 100, 99); }
+    lvSave(); setImmediate(lvKick);
+    res.json({ ok: true, added, skipped });
 });
 
 // prenos VSEH drzav enega joba v ZIP

@@ -300,3 +300,10 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 #page-home .section-heading,
 #page-home .quick-grid,
 #page-home .activity-wrap { display: none !important; }
+
+/* ── 11. LipVoice: gumbi v seznamu jobov (ID-scoped -> premaga color:#fff->temno pravilo) ── */
+#lvJobs a.lv-dl { background: var(--brand) !important; color:#FFFFFF !important; }
+#lvJobs a.lv-dl:hover { background: var(--brand-hover) !important; }
+#lvJobs a.lv-zip { color:#FFFFFF !important; }                 /* crn ZIP gumb: tekst spet viden */
+#lvJobs a.lv-add { background:#FBEAD5 !important; color:#9C4A0C !important; border:1px solid #F2D5B4 !important; }
+#lvJobs a.lv-add:hover { background:#F6DFC2 !important; }
