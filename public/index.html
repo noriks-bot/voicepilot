@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=28">
+    <link rel="stylesheet" href="/huel-orange.css?v=29">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8807,7 +8807,8 @@ async function lvPoll(){
       }
       const col=(j.status==='done'||j.status==='prepared')?'#16a34a':j.status==='error'?'#dc2626':(j.status==='queued'?'#d97706':'#3b82f6');
       const outs=(j.outputs||[]).map(l=>'<a class="lv-dl" href="/api/lipvoice/download/'+j.id+'/'+l+'" style="display:inline-block;padding:6px 10px;background:#16a34a;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap">⬇ '+l+'</a>').join('');
-      const cost=j.cost!=null?('<span style="margin-left:8px;padding:2px 8px;background:#fef3c7;border-radius:6px;font-size:11px;font-weight:700">💰 '+j.cost.toFixed(4)+' €</span>'):'';
+      const cost='';   // cene ne prikazujemo
+
       const info=[j.sourceLang?('jezik: '+j.sourceLang):'',j.gender?('govorec: '+(j.gender==='female'?'ženska':'moški')):'',j.cloned?'klon glasu ✓':(j.cloned===false?'rezervni glas':''),j.cleaned?'očiščen ✓':'',j.enhanced?'HD ✓':'',j.hasFace===true?'obraz ✓ (lipsync)':j.hasFace===false?'ni obraza':''].filter(Boolean).join(' · ');
       // status po drzavah + SKUPNA faza (ciscenje/klon/prepis velja za VSE drzave)
       const FLAGS={SI:'🇸🇮',HR:'🇭🇷',SK:'🇸🇰',CZ:'🇨🇿',HU:'🇭🇺',PL:'🇵🇱',GR:'🇬🇷',IT:'🇮🇹',RO:'🇷🇴',BG:'🇧🇬',DE:'🇩🇪',EN:'🇬🇧'};

@@ -6800,7 +6800,7 @@ function lvComputeCost(job, doLog) {
         tts_znakov: job.cost_ttsChars||0, scribe_min: eur(job.cost_scribeMin||0), whisper_min: eur(job.cost_whisperMin||0)
     };
     job.cost = eur(cOpenai + cEleven + cVmake);
-    if (doLog) lvLog(job, `STROSKI (skupaj): OpenAI ${eur(cOpenai)} € (gpt ${((job.cost_gptIn||0)+(job.cost_gptOut||0))} tok, vizija ${((job.cost_miniIn||0)+(job.cost_miniOut||0))} tok) | ElevenLabs ${eur(cEleven)} € (TTS ${job.cost_ttsChars||0} znakov, scribe ${(job.cost_scribeMin||0).toFixed(1)} min${job.cost_dubMin?`, dubbing ${(job.cost_dubMin).toFixed(1)} min`:''}) | vmake ${nVmake} nalog | SKUPAJ ${job.cost} €`);
+    // stroskovnik se ne izpisuje (Dejan 11.8.2026: ne rabimo)
 }
 
 // ═══ FAZA 1: PRIPRAVA — ciscenje napisov, prepis govora, klon glasu, spol (BREZ generiranja drzav) ═══
@@ -7328,7 +7328,7 @@ app.get('/api/lipvoice/jobs', (req, res) => res.json(
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
         langState: j.langState || {}, langProgress: j.langProgress || {}, hasSegments: !!(j.segments || []).length,
         subpos: j.subpos || 'bottom', lipsync: !!j.lipsync,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, genderForced: j.genderForced || null, folderId: j.folderId || null, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, genderForced: j.genderForced || null, folderId: j.folderId || null, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 
