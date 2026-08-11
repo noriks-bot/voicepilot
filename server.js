@@ -6236,19 +6236,14 @@ RULES:
 2. Translate the way a NATIVE ${FULL[lang] || lang} speaker actually TALKS in everyday speech —
    natural word order, colloquial phrasing, correct diacritics. Never a literal/textbook translation.
    If a phrase would sound odd spoken aloud, rephrase it the way a local ad would say it.
-2a. DYNAMIC & NATURAL: write it like a real UGC creator speaking to camera — lively, punchy,
-   with natural rhythm and energy, varied sentence length (some short, snappy lines, some flowing).
-   Use everyday spoken connectors and the emphasis a native would give a hook or an offer.
-   Never flat, monotone or robotic; it must sound like a person, not a translation.
 2b. This text will be READ ALOUD by TTS: write out ALL numbers, prices, percentages and units
    as words in ${FULL[lang] || lang}, exactly as a native speaker would pronounce them.
 3. Keep each numbered line separate, same count and same order (this is dubbing).
-4. LENGTH IS CRITICAL: each line must take THE SAME TIME TO SAY as the original — match the
-   syllable count of the source line as closely as you can. Prefer a hair SHORTER over longer;
-   NEVER write a line that is longer than the source (a longer line forces the voice to rush).
-   If a translation would come out much shorter, expand it naturally (an extra adjective, a
-   natural filler a native ad would use) so the pacing stays even — never leave dead air.
-5. Write it so it can be spoken at a natural, lively pace without rushing.
+4. LENGTH IS CRITICAL: each line must take THE SAME TIME TO SAY as the original — within about
+   ten percent, NEITHER much shorter NOR much longer. Match the syllable count of the source line
+   as closely as you can. If your translation comes out much shorter, expand it naturally
+   (an extra adjective, a natural filler a native ad would use) — never leave dead air.
+5. Write it so it can be spoken calmly, at a normal pace, without rushing.
 6. Output ONLY the numbered lines.`;
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
