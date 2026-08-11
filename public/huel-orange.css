@@ -470,3 +470,14 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 /* Generira drzave -> oranzen rob */
 .lv-jobrow.gen { background:#FFFDFB !important; border-color:#EFCFA9 !important; }
 .lv-jobrow.gen .lv-row-prog { background:#F6E4D2; }
+
+/* ── 19. Kartice videov v 2 STOLPCA ── */
+#lvJobs { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; }
+#lvJobs > div:not(.lv-jobrow) { grid-column:1 / -1; }   /* datumski locilnik cez celo sirino */
+#lvJobs .lv-jobrow { margin-bottom:0; }
+/* v ozjem stolpcu naj se drobne stvari lepse zlozijo */
+#lvJobs .lv-row-main { flex-wrap:wrap; gap:8px 10px; }
+#lvJobs .lv-row-actions { gap:6px; }
+#lvJobs .lv-folsel { max-width:130px; }
+#lvJobs .lv-gen-chip { padding:8px 12px; font-size:13.5px; }
+@media (max-width:1250px){ #lvJobs { grid-template-columns:1fr; } }
