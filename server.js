@@ -6861,7 +6861,11 @@ async function lvPrepare(job) {
 
         const stt = await lvSTT(aud, job);
         const segsRaw = lvSegs(stt.words, stt.text);
-        const segs = lvMergeSegs(segsRaw);
+        const segs = lvMergeSegs(segsRaw, {
+            maxDur: parseFloat(process.env.LIPVOICE_SEG_DUR || '8.5'),
+            maxChars: parseInt(process.env.LIPVOICE_SEG_CHARS || '170', 10),
+            minPause: 0.45
+        });   // smiselni kadri (ne veliki bloki) -> lazji pregled/urejanje + natancnejsa sinhronizacija
         if (!segs.length) throw new Error('V videu ni zaznanega govora');
         job.sourceLang = stt.lang; job.sourceText = stt.text;
         job.segments = segs.map(s => ({ s: s.s, e: s.e, text: s.text }));   // shranimo za fazo 2 + SRT modal
@@ -7223,6 +7227,71 @@ app.get('/api/lipvoice/jobs', (req, res) => res.json(
         cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, genderForced: j.genderForced || null, folderId: j.folderId || null, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
+
+// zazna preprosto zamenjavo besed(e): vrne {from,to} ali null (prevelika sprememba)
+function _lvDiffSwap(oldT, newT) {
+    const a = String(oldT || '').trim().split(/\s+/), b = String(newT || '').trim().split(/\s+/);
+    let p = 0; while (p < a.length && p < b.length && a[p] === b[p]) p++;
+    let q = 0; while (q < a.length - p && q < b.length - p && a[a.length - 1 - q] === b[b.length - 1 - q]) q++;
+    const from = a.slice(p, a.length - q).join(' ').trim();
+    const to = b.slice(p, b.length - q).join(' ').trim();
+    if (!from || !to) return null;
+    if (from.split(/\s+/).length > 4) return null;
+    return { from, to };
+}
+const _lvRxEsc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// UREDI IZVIRNIK -> spremembo prenesi v VSE prevode
+app.post('/api/lipvoice/transcript/:id/source', async (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    const lines = (req.body && req.body.lines);
+    if (!Array.isArray(lines)) return res.status(400).json({ error: 'Ni vrstic' });
+    const segs = j.segments || [];
+    if (lines.length !== segs.length) return res.status(400).json({ error: `Pricakovanih ${segs.length} vrstic` });
+
+    const changed = [];
+    for (let i = 0; i < segs.length; i++) {
+        const nw = String(lines[i] == null ? '' : lines[i]).trim();
+        if (nw && nw !== String(segs[i].text || '').trim()) changed.push({ i, old: segs[i].text, nw });
+    }
+    if (!changed.length) return res.json({ ok: true, changed: 0, swapped: 0, retranslated: 0 });
+
+    for (const c of changed) segs[c.i].text = c.nw;
+    j.sourceText = segs.map(x => x.text).join(' ');
+
+    const langs = Object.keys(j.translations || {}).filter(L => (j.translations[L] || []).length === segs.length);
+    let nSwap = 0; const needTr = {};
+    for (const c of changed) {
+        const sw = _lvDiffSwap(c.old, c.nw);
+        for (const L of langs) {
+            const cur = j.translations[L][c.i] || '';
+            // VARNO: zamenjaj le cele besede in le dovolj dolge nize (da ne razbijemo tujih besed)
+            const rx = (sw && sw.from.replace(/[^\p{L}\p{N}]/gu, '').length >= 3)
+                ? new RegExp('(^|[^\\p{L}\\p{N}])(' + _lvRxEsc(sw.from) + ')(?=[^\\p{L}\\p{N}]|$)', 'giu') : null;
+            if (rx && rx.test(cur)) {
+                j.translations[L][c.i] = cur.replace(rx, (m, pre) => pre + sw.to);
+                nSwap++;
+            } else {
+                (needTr[L] = needTr[L] || []).push(c.i);
+            }
+        }
+    }
+    lvSave();
+
+    let nRe = 0;
+    for (const L of Object.keys(needTr)) {
+        try {
+            const idx = [...new Set(needTr[L])];
+            const sub = idx.map(i => ({ s: segs[i].s, e: segs[i].e, text: segs[i].text }));
+            const tr = await lvTranslate(sub, L, j.product || 'NORIKS', j);
+            idx.forEach((i, k) => { if (tr[k]) { j.translations[L][i] = tr[k].text; nRe++; } });
+        } catch (e) {}
+    }
+    (j.log = j.log || []).push(`izvirnik urejen (${changed.length} vrstic) -> v prevode: ${nSwap} zamenjav, ${nRe} ponovnih prevodov`);
+    lvComputeCost(j, false); lvSave();
+    res.json({ ok: true, changed: changed.length, swapped: nSwap, retranslated: nRe, langs: langs.length });
+});
 
 // SHRANI UREJEN prevod za eno drzavo (SRT modal)
 app.post('/api/lipvoice/transcript/:id/:lang', (req, res) => {

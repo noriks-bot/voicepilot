@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=19">
+    <link rel="stylesheet" href="/huel-orange.css?v=20">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8348,15 +8348,32 @@
     <div id="lvJobs"></div>
   </div>
 
-  <!-- Modal: SRT / prebrani tekst (original vs prevod) -->
-  <div id="lvSrtModal" style="display:none;position:fixed;inset:0;background:rgba(20,12,4,.5);z-index:99999;align-items:center;justify-content:center">
+  <!-- Modal: SRT — pregled in urejanje prepisa + prevodov -->
+  <div id="lvSrtModal" style="display:none;position:fixed;inset:0;background:rgba(20,12,4,.55);z-index:99999;align-items:center;justify-content:center;backdrop-filter:blur(3px)">
     <div class="lv-srt-box">
       <div class="lv-srt-topbar">
-        <div id="lvSrtTitle" style="font-size:15px;font-weight:700"></div>
-        <button onclick="lvSrtClose()" class="lv-srt-x">✕</button>
+        <div>
+          <div id="lvSrtTitle" class="lv-srt-title"></div>
+          <div id="lvSrtSub" class="lv-srt-sub"></div>
+        </div>
+        <button onclick="lvSrtClose()" class="lv-srt-x" title="zapri">✕</button>
       </div>
-      <div id="lvSrtTabs" class="lv-srt-tabs"></div>
+      <div class="lv-srt-langbar">
+        <span class="lv-srt-langlabel">Jezik</span>
+        <div id="lvSrtTabs" class="lv-srt-tabs"></div>
+      </div>
+      <div class="lv-srt-hint">
+        <span><b>Levo</b> uredi izvirnik → sprememba se prenese v <b>vse</b> jezike.</span>
+        <span><b>Desno</b> uredi prevod → velja samo za izbrani jezik.</span>
+      </div>
       <div id="lvSrtBody" class="lv-srt-body"></div>
+      <div class="lv-srt-foot">
+        <div id="lvSrtStat" class="lv-srt-stat"></div>
+        <div style="display:flex;gap:10px">
+          <button onclick="lvSrtClose()" class="lv-srt-cancel">Zapri</button>
+          <button id="lvSrtSave" class="lv-srt-save" onclick="lvSrtSave()">💾 Shrani spremembe</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -8554,38 +8571,60 @@ let _lvSrtId=null, _lvSrtData=null, _lvSrtLang=null;
 async function lvSrtOpen(id){
   _lvSrtId=id;
   document.getElementById('lvSrtModal').style.display='flex';
-  document.getElementById('lvSrtBody').innerHTML='<div style="padding:30px;text-align:center;color:#75756F">Nalagam…</div>';
-  document.getElementById('lvSrtTabs').innerHTML='';
+  document.getElementById('lvSrtBody').innerHTML='<div class="lv-srt-empty">Nalagam…</div>';
+  document.getElementById('lvSrtTabs').innerHTML=''; document.getElementById('lvSrtStat').textContent='';
   try{
     _lvSrtData=await (await fetch('/api/lipvoice/transcript/'+id)).json();
-    const langs=Object.keys(_lvSrtData.translations||{});
-    _lvSrtLang=langs.indexOf(_lvSrtLang)>=0?_lvSrtLang:(langs[0]||null);
-    document.getElementById('lvSrtTitle').textContent='📝 '+(_lvSrtData.name||'')+(_lvSrtData.sourceLang?'  ·  izvirnik: '+_lvSrtData.sourceLang:'');
+    document.getElementById('lvSrtTitle').textContent=_lvSrtData.name||'';
+    const n=(_lvSrtData.segments||[]).length;
+    document.getElementById('lvSrtSub').textContent='izvirnik: '+String(_lvSrtData.sourceLang||'?').toUpperCase()+' · '+n+' kadrov';
     lvSrtRender();
-  }catch(e){ document.getElementById('lvSrtBody').innerHTML='<div style="padding:30px;color:#B3402F">Napaka: '+e.message+'</div>'; }
+  }catch(e){ document.getElementById('lvSrtBody').innerHTML='<div class="lv-srt-empty" style="color:#B3402F">Napaka: '+e.message+'</div>'; }
 }
-function lvSrtSetLang(L){ _lvSrtLang=L; lvSrtRender(); }
+function lvSrtSetLang(L){ if(lvSrtDirty()&&!confirm('Imaš neshranjene spremembe. Zamenjam jezik brez shranjevanja?'))return; _lvSrtLang=L; lvSrtRender(); }
 async function lvSrtTranslate(L){
-  const btn=document.getElementById('lvSrtGo'); if(btn){btn.disabled=true;btn.textContent='⏳ Prevajam…';}
+  const st=document.getElementById('lvSrtStat'); st.textContent='⏳ Prevajam '+L+'…';
   try{
     const r=await fetch('/api/lipvoice/translate/'+_lvSrtId+'/'+L,{method:'POST'});
     const d=await r.json();
-    if(!d.ok){alert('Napaka: '+(d.error||r.status));}
-    else { _lvSrtData.translations[L]=d.lines; _lvSrtLang=L; lvSrtRender(); }
-  }catch(e){alert('Napaka: '+e.message);}
-  finally{ if(btn){btn.disabled=false;btn.textContent='🌍 Prevedi';} }
+    if(!d.ok){ st.textContent='✗ '+(d.error||r.status); return; }
+    _lvSrtData.translations[L]=d.lines; _lvSrtLang=L; lvSrtRender(); st.textContent='✓ '+L+' preveden';
+  }catch(e){ st.textContent='✗ '+e.message; }
+}
+function lvSrtDirty(){
+  const d=_lvSrtData; if(!d)return false;
+  const src=[...document.querySelectorAll('#lvSrtBody .lv-srt-orig')].map(x=>x.innerText.trim());
+  const tr=[...document.querySelectorAll('#lvSrtBody .lv-srt-tr')].map(x=>x.innerText.trim());
+  const os=(d.segments||[]).map(x=>String(x.text||'').trim());
+  const ot=((d.translations||{})[_lvSrtLang]||[]).map(x=>String(x||'').trim());
+  return src.some((v,i)=>v!==os[i]) || (_lvSrtLang&&tr.some((v,i)=>v!==(ot[i]||'')));
 }
 async function lvSrtSave(){
-  if(!_lvSrtId||!_lvSrtLang)return;
-  const lines=[...document.querySelectorAll('#lvSrtBody .lv-srt-tr')].map(el=>el.innerText.trim());
-  const btn=document.getElementById('lvSrtSave'); btn.disabled=true; btn.textContent='⏳ Shranjujem…';
+  if(!_lvSrtId)return;
+  const btn=document.getElementById('lvSrtSave'), st=document.getElementById('lvSrtStat');
+  const src=[...document.querySelectorAll('#lvSrtBody .lv-srt-orig')].map(x=>x.innerText.trim());
+  const tr=[...document.querySelectorAll('#lvSrtBody .lv-srt-tr')].map(x=>x.innerText.trim());
+  const os=(_lvSrtData.segments||[]).map(x=>String(x.text||'').trim());
+  const srcChanged=src.some((v,i)=>v!==os[i]);
+  btn.disabled=true; btn.textContent='⏳ Shranjujem…';
   try{
-    const r=await fetch('/api/lipvoice/transcript/'+_lvSrtId+'/'+_lvSrtLang,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines})});
-    const d=await r.json();
-    if(!d.ok){alert('Napaka: '+(d.error||r.status)); btn.textContent='💾 Shrani';}
-    else { _lvSrtData.translations[_lvSrtLang]=lines; (_lvSrtData.trEdited=_lvSrtData.trEdited||{})[_lvSrtLang]=new Date().toISOString();
-           btn.textContent='✓ Shranjeno'; setTimeout(()=>{btn.textContent='💾 Shrani';},1800); lvSrtRender(true); }
-  }catch(e){alert('Napaka: '+e.message); btn.textContent='💾 Shrani';}
+    if(srcChanged){
+      st.textContent='prenašam spremembe izvirnika v vse jezike…';
+      const r=await fetch('/api/lipvoice/transcript/'+_lvSrtId+'/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines:src})});
+      const d=await r.json();
+      if(!d.ok) throw new Error(d.error||'napaka pri izvirniku');
+      st.textContent='✓ izvirnik: '+d.changed+' vrstic → '+d.swapped+' zamenjav, '+d.retranslated+' ponovnih prevodov';
+    }
+    if(_lvSrtLang && !srcChanged){
+      const r2=await fetch('/api/lipvoice/transcript/'+_lvSrtId+'/'+_lvSrtLang,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines:tr})});
+      const d2=await r2.json();
+      if(!d2.ok) throw new Error(d2.error||'napaka pri prevodu');
+      st.textContent='✓ shranjeno ('+_lvSrtLang+')';
+    }
+    _lvSrtData=await (await fetch('/api/lipvoice/transcript/'+_lvSrtId)).json();
+    lvSrtRender(true);
+    btn.textContent='✓ Shranjeno'; setTimeout(()=>{btn.textContent='💾 Shrani spremembe';},1600);
+  }catch(e){ st.textContent='✗ '+e.message; btn.textContent='💾 Shrani spremembe'; }
   finally{ btn.disabled=false; }
 }
 function lvSrtRender(keepScroll){
@@ -8595,29 +8634,30 @@ function lvSrtRender(keepScroll){
   const have=Object.keys(d.translations||{}).filter(L=>(d.translations[L]||[]).length);
   const all=(typeof LV_ALL_LANGS!=='undefined')?LV_ALL_LANGS:have;
   if(!_lvSrtLang||have.indexOf(_lvSrtLang)<0) _lvSrtLang=have[0]||null;
-  const tabs=all.map(L=>{
-    const ok=have.indexOf(L)>=0;
-    const ed=(d.trEdited||{})[L]?' •':'';
-    return ok
-      ? '<button class="lv-srt-tab'+(L===_lvSrtLang?' on':'')+'" onclick="lvSrtSetLang(\''+L+'\')">'+(LV_FLAGS2[L]||'')+' '+L+ed+'</button>'
-      : '<button class="lv-srt-tab miss" title="prevod se ni narejen" onclick="lvSrtTranslate(\''+L+'\')">'+(LV_FLAGS2[L]||'')+' '+L+' +</button>';
+  document.getElementById('lvSrtTabs').innerHTML = all.map(L=>{
+    const ok=have.indexOf(L)>=0, ed=(d.trEdited||{})[L];
+    if(!ok) return '<button class="lv-srt-tab miss" title="prevod še ni narejen — klikni za prevod" onclick="lvSrtTranslate(\''+L+'\')">'+(LV_FLAGS2[L]||'')+' '+L+' <span class="pl">+</span></button>';
+    return '<button class="lv-srt-tab'+(L===_lvSrtLang?' on':'')+'" onclick="lvSrtSetLang(\''+L+'\')">'+(LV_FLAGS2[L]||'')+' '+L+(ed?'<span class="dot" title="ročno urejeno">•</span>':'')+'</button>';
   }).join('');
-  document.getElementById('lvSrtTabs').innerHTML = tabs
-    + '<span style="flex:1"></span>'
-    + (_lvSrtLang?'<button id="lvSrtSave" class="lv-srt-save" onclick="lvSrtSave()">💾 Shrani</button>':'');
-  const tt=function(x){ x=Math.max(0,x||0); const m=Math.floor(x/60), sec=(x%60); return String(m).padStart(2,'0')+':'+sec.toFixed(2).padStart(5,'0'); };
+  const tt=function(x){ x=Math.max(0,x||0); const m=Math.floor(x/60), sec=(x%60); return String(m).padStart(2,'0')+':'+sec.toFixed(1).padStart(4,'0'); };
   const tr=(d.translations||{})[_lvSrtLang]||[];
   const rows=(d.segments||[]).map(function(sg,i){ return '<div class="lv-srt-row">'
-    +'<div class="lv-srt-time">'+tt(sg.s)+' — '+tt(sg.e)+'</div>'
+    +'<div class="lv-srt-num">'+(i+1)+'</div>'
     +'<div class="lv-srt-cols">'
-    +'<div class="lv-srt-orig">'+String(sg.text||'').replace(/</g,'&lt;')+'</div>'
-    +'<div class="lv-srt-tr" contenteditable="'+(_lvSrtLang?'true':'false')+'" spellcheck="false">'+(tr[i]!=null?String(tr[i]).replace(/</g,'&lt;'):'')+'</div>'
+      +'<div class="lv-srt-cell"><div class="lv-srt-time">'+tt(sg.s)+' → '+tt(sg.e)+'</div>'
+        +'<div class="lv-srt-orig" contenteditable="true" spellcheck="false">'+String(sg.text||'').replace(/</g,'&lt;')+'</div></div>'
+      +'<div class="lv-srt-cell">'+(_lvSrtLang
+        ? '<div class="lv-srt-tr" contenteditable="true" spellcheck="false">'+(tr[i]!=null?String(tr[i]).replace(/</g,'&lt;'):'')+'</div>'
+        : '<div class="lv-srt-none">izberi jezik zgoraj</div>')+'</div>'
     +'</div></div>'; }).join('');
-  body.innerHTML =
-    '<div class="lv-srt-head"><div>'+(d.sourceLang||'original').toUpperCase()+'</div><div>'+(_lvSrtLang?((LV_FLAGS2[_lvSrtLang]||'')+' '+_lvSrtLang+' — klikni v besedilo za urejanje'):'izberi državo zgoraj')+'</div></div>'
-    +(rows||'<div style="padding:20px;color:#75756F">ni segmentov</div>');
+  body.innerHTML='<div class="lv-srt-head"><div>📄 IZVIRNIK — '+String(d.sourceLang||'').toUpperCase()+'</div><div>'
+    +(_lvSrtLang?((LV_FLAGS2[_lvSrtLang]||'')+' PREVOD — '+_lvSrtLang):'PREVOD')+'</div></div>'
+    +(rows||'<div class="lv-srt-empty">ni kadrov</div>');
   if(keepScroll) body.scrollTop=sc;
+  const st=document.getElementById('lvSrtStat');
+  if(st&&!st.textContent) st.textContent=(d.segments||[]).length+' kadrov · '+have.length+'/'+all.length+' jezikov prevedenih';
 }
+
 function lvSrtClose(){ document.getElementById('lvSrtModal').style.display='none'; _lvSrtId=null; }
 
 // ── MAPE (produktne mape + drag&drop videov) ──
