@@ -448,3 +448,25 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 .lv-srt-text.lv-srt-orig { color:#5D5D5E; background:#FBFAF8; }
 .lv-srt-text.lv-srt-tr { color:#0C0C0D; font-weight:500; background:#fff; }
 @media (max-width:820px){ .lv-srt-panes{ grid-template-columns:1fr; gap:12px; } }
+
+/* ── 18. Znova generiraj + izbirnik mape ── */
+.lv-redo { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px; padding:10px 12px; background:#FBF7F1; border:1px dashed #E8DCC9; border-radius:10px; }
+.lv-redo-t { font-size:12px; color:#8A6A45; font-weight:600; }
+.lv-redo-b { padding:7px 12px; background:#fff; border:1.5px solid #E3D9C9 !important; color:#7A4408; border-radius:10px !important; font-weight:700; font-size:12.5px; cursor:pointer; font-family:inherit; }
+.lv-redo-b:hover { border-color:var(--brand) !important; background:#FDF4E8; }
+.lv-redo-b:disabled { opacity:.6; cursor:not-allowed; }
+.lv-folsel { padding:8px 10px; border:1px solid #E3E3E0; border-radius:10px; background:#fff; color:#5D5D5E; font-size:12.5px; font-weight:600; font-family:inherit; cursor:pointer; max-width:170px; }
+.lv-folsel:hover { border-color:#D3CFC7; }
+.lv-folsel:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-glow); }
+
+/* predpriprava koncana -> svetlo zelena kartica (ceka izbiro drzav) */
+.lv-jobrow.prep { background:#F4FBF3 !important; border-color:#CFE8CB !important; }
+.lv-jobrow.prep:hover { border-color:#B9DDB4 !important; }
+.lv-jobrow.prep .lv-row-prog { background:#E2F1DF; }
+.lv-jobrow.prep .lv-genpanel { background:#FCFEFB; border-color:#D8EDD4; }
+/* V predpripravi (se tece) -> topla peščena */
+.lv-jobrow.inprep { background:#FDF9EF !important; border-color:#EBDFC4 !important; }
+.lv-jobrow.inprep .lv-row-prog { background:#F3E8D2; }
+/* Generira drzave -> oranzen rob */
+.lv-jobrow.gen { background:#FFFDFB !important; border-color:#EFCFA9 !important; }
+.lv-jobrow.gen .lv-row-prog { background:#F6E4D2; }

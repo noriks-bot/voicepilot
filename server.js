@@ -7198,34 +7198,49 @@ async function lvGenerateLang(job, lang) {
 
 // ── 6b) vrsta: naenkrat tece najvec LIPVOICE_CONCURRENCY jobov (privzeto 1) ──
 // vec hkratnih jobov bi se stepalo za 4 CPU jedra (lipsync!) in vmake/TTS limite
-let _lvActive = 0;
-const LV_CONC = Math.max(1, parseInt(process.env.LIPVOICE_CONCURRENCY || '1'));
 // enotna vrsta za DVE vrsti dela: (1) priprava joba, (2) generiranje ene drzave
-function _lvNextWork() {
+// LOCENI omejitvi: priprava veckrat hkrati (veciden cas se CAKA na vmake/STT/GPT),
+// generiranje manj (ffmpeg/lipsync zreta CPU). 4 jedra -> prep 3, gen 2, lipsync 1.
+let _lvPrepActive = 0, _lvGenActive = 0;
+const LV_PREP_CONC = Math.max(1, parseInt(process.env.LIPVOICE_PREP_CONC || '3'));
+const LV_GEN_CONC = Math.max(1, parseInt(process.env.LIPVOICE_GEN_CONC || '2'));
+function _lvGenLimit() {
+    // ce katerikoli tekoci job dela lipsync (Wav2Lip zre vsa jedra), pusti samo enega
+    for (const j of lvJobs.values()) {
+        if (!j.lipsync) continue;
+        const st = j.langState || {};
+        if (Object.keys(st).some(L => st[L] === 'running')) return 1;
+    }
+    return LV_GEN_CONC;
+}
+function _lvNextPrep() {
+    return [...lvJobs.values()].sort((a, b) => String(a.created).localeCompare(String(b.created)))
+        .find(j => j.status === 'queued') || null;
+}
+function _lvNextLang() {
     const jobs = [...lvJobs.values()].sort((a, b) => String(a.created).localeCompare(String(b.created)));
-    // priprava ima prednost (da uporabnik cimprej vidi prepis)
-    const prep = jobs.find(j => j.status === 'queued');
-    if (prep) return { kind: 'prepare', job: prep };
     for (const j of jobs) {
         if (j.cancel) continue;
         const st = j.langState || {};
         const lang = Object.keys(st).find(L => st[L] === 'queued');
-        if (lang) return { kind: 'lang', job: j, lang };
+        if (lang) return { job: j, lang };
     }
     return null;
 }
 function lvKick() {
-    while (_lvActive < LV_CONC) {
-        const w = _lvNextWork();
-        if (!w) return;
-        _lvActive++;
-        if (w.kind === 'prepare') {
-            w.job.status = 'starting';
-            lvPrepare(w.job).catch(() => {}).finally(() => { _lvActive--; setImmediate(lvKick); });
-        } else {
-            w.job.langState[w.lang] = 'running'; lvSave();
-            lvGenerateLang(w.job, w.lang).catch(() => {}).finally(() => { _lvActive--; setImmediate(lvKick); });
-        }
+    // 1) priprave (I/O) — vec hkrati
+    while (_lvPrepActive < LV_PREP_CONC) {
+        const j = _lvNextPrep();
+        if (!j) break;
+        j.status = 'starting'; _lvPrepActive++;
+        lvPrepare(j).catch(() => {}).finally(() => { _lvPrepActive--; setImmediate(lvKick); });
+    }
+    // 2) generiranje (CPU) — omejeno
+    while (_lvGenActive < _lvGenLimit()) {
+        const w = _lvNextLang();
+        if (!w) break;
+        w.job.langState[w.lang] = 'running'; lvSave(); _lvGenActive++;
+        lvGenerateLang(w.job, w.lang).catch(() => {}).finally(() => { _lvGenActive--; setImmediate(lvKick); });
     }
 }
 // ob zagonu streznika: jobi, ki so obtičali v queued, se pozenejo
@@ -7262,12 +7277,19 @@ app.post('/api/lipvoice/generate/:id', (req, res) => {
     // nastavitve izrisa se izberejo SELE tu (korak 2)
     if (req.body && req.body.subpos !== undefined) j.subpos = String(req.body.subpos) === 'middle' ? 'middle' : 'bottom';
     if (req.body && req.body.lipsync !== undefined) j.lipsync = String(req.body.lipsync) === '1' || req.body.lipsync === true;
+    const force = !!(req.body && (req.body.force === true || req.body.force === '1'));   // ZNOVA (po popravku SRT)
     j.langState = j.langState || {}; j.langProgress = j.langProgress || {};
     const started = [], skipped = [];
     for (const L of want) {
         const st = j.langState[L];
         if (st === 'running' || st === 'queued') { skipped.push(L); continue; }
-        if ((j.outputs || {})[L] && st === 'done') { skipped.push(L); continue; }
+        if ((j.outputs || {})[L] && st === 'done' && !force) { skipped.push(L); continue; }
+        if (force && (j.outputs || {})[L]) {
+            // staro datoteko odstranimo sele ob uspesni novi (spodaj lvGenerateLang prepise pot);
+            // tu jo samo umaknemo iz seznama, da UI kaze "v teku"
+            delete j.outputs[L];
+            (j.log = j.log || []).push('[' + L + '] ZNOVA generiram (po popravku SRT)');
+        }
         if (!j.langs.includes(L)) j.langs.push(L);
         if (j.langErrors) delete j.langErrors[L];
         j.langState[L] = 'queued'; j.langProgress[L] = 0;

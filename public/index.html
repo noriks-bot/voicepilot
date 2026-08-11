@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=22">
+    <link rel="stylesheet" href="/huel-orange.css?v=25">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8513,13 +8513,18 @@ function _lvSel(jid, j){
 function lvGenPanel(j){
   const LS=j.langState||{};
   const rem=LV_ALL_LANGS.filter(L=>{ const st=LS[L]; return !(st==='done'||st==='running'||st==='queued'); });
-  if(!rem.length) return '<div style="margin-top:8px;font-size:12px;color:#75756F">vse države generirane</div>';
   const jid=j.id, sel=_lvSel(jid,j);
   sel.langs = sel.langs.filter(L=>rem.indexOf(L)>=0);
-  const chips=rem.map(L=>'<label class="lv-gen-chip'+(sel.langs.indexOf(L)>=0?' on':'')+'"><input type="checkbox" value="'+L+'"'+(sel.langs.indexOf(L)>=0?' checked':'')+' onchange="lvGenSync(this,\''+jid+'\')"> '+(LV_FLAGS2[L]||'')+' '+L+'</label>').join('');
+  const chips=!rem.length?'<span style="font-size:12.5px;color:#75756F">vse države so generirane</span>':rem.map(L=>'<label class="lv-gen-chip'+(sel.langs.indexOf(L)>=0?' on':'')+'"><input type="checkbox" value="'+L+'"'+(sel.langs.indexOf(L)>=0?' checked':'')+' onchange="lvGenSync(this,\''+jid+'\')"> '+(LV_FLAGS2[L]||'')+' '+L+'</label>').join('');
+  const doneL=LV_ALL_LANGS.filter(L=>LS[L]==='done');
+  const redo=doneL.length
+    ? '<div class="lv-redo"><span class="lv-redo-t">Že narejeno — po popravku SRT lahko narediš znova:</span>'
+      +doneL.map(L=>'<button class="lv-redo-b" onclick="lvRegen(\''+jid+'\',\''+L+'\',this)" title="generiraj '+L+' znova z novim besedilom">'+(LV_FLAGS2[L]||'')+' '+L+' ↻</button>').join('')
+      +'</div>' : '';
   return '<div class="lv-genpanel" data-job="'+jid+'">'
     +'<div class="lv-genpanel-t">🌍 Generiraj države</div>'
     +'<div class="lv-genchips">'+chips+'</div>'
+    +redo
     +'<div class="lv-genopts">'
       +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="bottom"'+(sel.subpos!=='middle'?' checked':'')+' onchange="lvGenOpt(\''+jid+'\',this)"> ⬇️ Spodaj</label>'
       +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="middle"'+(sel.subpos==='middle'?' checked':'')+' onchange="lvGenOpt(\''+jid+'\',this)"> ↔️ Sredina</label>'
@@ -8528,6 +8533,33 @@ function lvGenPanel(j){
     +'</div>'
     +'<button class="lv-gengo" onclick="lvGenerate(\'' + jid + '\',this)">🚀 Generiraj izbrane</button>'
     +'</div>';
+}
+async function lvRegen(id,lang,btn){
+  if(!confirm('Generiram '+lang+' ZNOVA?\n\nUporabi se trenutni (popravljen) SRT. Star video se prepiše.'))return;
+  const panel=btn.closest('.lv-genpanel');
+  const subpos=(panel.querySelector('input[type=radio]:checked')||{}).value||'bottom';
+  const lipsync=panel.querySelector('.lv-ls')&&panel.querySelector('.lv-ls').checked?'1':'0';
+  btn.disabled=true; const t0=btn.textContent; btn.textContent='⏳…';
+  try{
+    const r=await fetch('/api/lipvoice/generate/'+id,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({langs:lang, force:true, subpos, lipsync})});
+    const d=await r.json();
+    if(!d.ok||!(d.started||[]).length){ alert('Napaka: '+(d.error||'ni se zagnalo')); btn.disabled=false; btn.textContent=t0; return; }
+    lvPoll();
+  }catch(e){ alert('Napaka: '+e.message); btn.disabled=false; btn.textContent=t0; }
+}
+async function lvSetFolderSel(id,sel){
+  const folderId=sel.value||null;
+  try{
+    await fetch('/api/lipvoice/job/'+id+'/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folderId})});
+    const j=(window._lvAllJobs||[]).find(x=>x.id===id); if(j){ if(folderId) j.folderId=folderId; else delete j.folderId; }
+    lvRenderFolders(); lvPoll();
+  }catch(e){ alert('Napaka: '+e.message); }
+}
+function lvFolderSelect(j){
+  const opts=['<option value="">— brez mape —</option>']
+    .concat((_lvFolders||[]).map(f=>'<option value="'+f.id+'"'+(j.folderId===f.id?' selected':'')+'>'+String(f.name||'').replace(/</g,'&lt;')+'</option>'));
+  return '<select class="lv-folsel" title="premakni v mapo" onchange="lvSetFolderSel(\''+j.id+'\',this)" onclick="event.stopPropagation()">'+opts.join('')+'</select>';
 }
 function lvGenOpt(jid,el){
   const sel=_lvSel(jid);
@@ -8823,14 +8855,19 @@ async function lvPoll(){
         + (j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'">📦 ZIP</a>':'');
       const cancelBtn = (sharedActive||anyLangActive)
         ? '<a class="lv-cancel" href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')">✖</a>' : '';
-      html+='<div class="lv-jobrow'+(isOpen?' open':'')+'">'
+      // barva kartice po stanju: v pripravi (rumeno) / pripravljen (zeleno) / generira (oranzno)
+      let rowCls='';
+      if(j.status==='preparing'||j.status==='queued') rowCls=' inprep';
+      else if(anyLangActive) rowCls=' gen';
+      else if(j.status==='prepared'&&!(j.outputs||[]).length) rowCls=' prep';
+      html+='<div class="lv-jobrow'+(isOpen?' open':'')+rowCls+'">'
        +'<div class="lv-row-main" onclick="lvRowClick(event,\''+j.id+'\')">'
          +'<div class="lv-grip" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" title="povleci v mapo">⠿</div>'
          +'<div class="lv-row-name"><strong>'+j.name+'</strong>'+folderBadge+(ur?'<span class="lv-row-time">'+ur+'</span>':'')+'</div>'
          +'<span class="lv-row-status" style="color:'+col+'">'+(j.status==='queued'?'V VRSTI':(j.status==='prepared'?'PRIPRAVLJEN':j.status.toUpperCase()+' '+(j.progress||0)+'%'))+'</span>'
          +srtBtn
          +'<div class="lv-row-sp"></div>'
-         +'<div class="lv-row-actions">'+dlBtns+cancelBtn
+         +'<div class="lv-row-actions">'+lvFolderSelect(j)+dlBtns+cancelBtn
            +'<a class="lv-del" href="javascript:void(0)" onclick="lvDelete(\''+j.id+'\')" title="izbrisi">🗑</a>'
            +'<button class="lv-row-toggle" onclick="lvToggleRow(\''+j.id+'\',this)" title="'+(isOpen?'skrij':'pokazi vec')+'">'+(isOpen?'▴':'▾')+'</button>'
          +'</div>'
