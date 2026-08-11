@@ -6357,6 +6357,13 @@ function _lvBrandNorm(s) {
         .replace(/(.)\1+/g, '$1')          // podvojene crke: Norrix -> Norix, Norikss -> Noriks
         .replace(/cks|kz|gs|qs|x/g, 'ks');
 }
+const _lvNoVow = (x) => String(x || '').replace(/[aeiouy]/g, '');
+function _lvBrandSame(a, b) {
+    const na = _lvBrandNorm(a), nb = _lvBrandNorm(b);
+    if (na === nb) return true;
+    const va = _lvNoVow(na), vb = _lvNoVow(nb);
+    return va.length >= 3 && va === vb && Math.abs(na.length - nb.length) <= 2;
+}
 function lvBrandWord(word, product) {
     const P = String(product || 'NORIKS').trim();
     const bn = _lvBrandNorm(P);
@@ -6367,7 +6374,7 @@ function lvBrandWord(word, product) {
     // dovolimo do 3 znake sklonske koncnice (Noriksa, Noriksu, Noriksom)
     for (let cut = 0; cut <= 3 && cut < letters.length; cut++) {
         const head = letters.slice(0, letters.length - cut);
-        if (_lvBrandNorm(head) === bn) {
+        if (_lvBrandSame(head, P)) {
             const suf = letters.slice(letters.length - cut);
             const base = (head === head.toUpperCase() && head.length > 1)
                 ? P.toUpperCase()
@@ -6382,7 +6389,7 @@ function lvBrandText(text, product) {
     // ime, razbito na dva dela ("no riks", "nori ks")
     const P = String(product || 'NORIKS').trim();
     t = t.replace(/(\p{L}+)\s+(\p{L}+)/gu, (m, a, b) =>
-        _lvBrandNorm(a + b) === _lvBrandNorm(P) ? P : m);
+        _lvBrandSame(a + b, P) ? P : m);
     return t.replace(/[^\s]+/gu, w => lvBrandWord(w, P));
 }
 // isto nad besedami STT — sosednji par zdruzimo v eno besedo s skupnim casom
@@ -6392,7 +6399,7 @@ function lvBrandWords(words, product) {
     const out = [];
     for (let i = 0; i < words.length; i++) {
         const w = words[i];
-        if (i + 1 < words.length && _lvBrandNorm(w.w + words[i + 1].w) === bn) {
+        if (i + 1 < words.length && _lvBrandSame(w.w + words[i + 1].w, P)) {
             out.push({ w: P, s: w.s, e: words[i + 1].e });
             i++; continue;
         }
@@ -7042,22 +7049,31 @@ async function lvGenerateLang(job, lang) {
         segTempo = parts.map(() => 1);
         tempo = 1; vidPad = 0;
         if (timesOk && parts.length) {
+            // MEJA pohitritve: cez njo govor "zasumi" (prej do 10x!). Presezek se PRELIJE naprej,
+            // na koncu po potrebi blaga ENAKOMERNA kompresija cez cel posnetek.
+            const MAXT = parseFloat(process.env.LIPVOICE_MAX_TEMPO || '1.30');
             startsF = new Array(parts.length);
             durF = new Array(parts.length);
+            let cursor = 0;
             for (let i = 0; i < parts.length; i++) {
-                const segStart = Math.max(0, Math.min(parts[i].srcS, i === 0 ? MAX_LEAD : DUR - 0.2));
-                const nextStart = (i + 1 < parts.length) ? Math.max(segStart + 0.3, parts[i + 1].srcS) : DUR;
-                const slot = Math.max(0.3, nextStart - segStart);
-                const t = parts[i].d > slot + 0.02 ? parts[i].d / slot : 1;
+                const wish = Math.max(0, Math.min(parts[i].srcS, i === 0 ? MAX_LEAD : DUR - 0.2));
+                const segStart = Math.max(wish, cursor);
+                const nextWish = (i + 1 < parts.length) ? Math.max(segStart + 0.3, parts[i + 1].srcS) : DUR;
+                const slot = Math.max(0.3, nextWish - segStart);
+                const t = Math.min(MAXT, Math.max(1, parts[i].d / slot));
                 segTempo[i] = t; startsF[i] = segStart; durF[i] = parts[i].d / t;
+                cursor = segStart + durF[i];
             }
             const L = parts.length - 1;
-            if (startsF[L] + durF[L] > DUR) {
-                const slotL = Math.max(0.3, DUR - startsF[L]);
-                segTempo[L] = parts[L].d / slotL; durF[L] = slotL;
+            let end = startsF[L] + durF[L];
+            if (end > DUR + 0.02 && DUR > 0) {
+                const g = end / DUR;
+                for (let i = 0; i < parts.length; i++) { segTempo[i] *= g; startsF[i] /= g; durF[i] /= g; }
+                end = startsF[L] + durF[L];
+                lvLog(job, `[${lang}] + enakomerna kompresija ${g.toFixed(3)}x (govor daljsi od videa)`);
             }
-            totalF = startsF[L] + durF[L];
-            lvLog(job, `[${lang}] casovnica po sekcijah: ${parts.length} sekcij, hitrost ${Math.min(...segTempo).toFixed(2)}–${Math.max(...segTempo).toFixed(2)}x, govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s (brez freza)`);
+            totalF = end;
+            lvLog(job, `[${lang}] casovnica: ${parts.length} sekcij, hitrost ${Math.min(...segTempo).toFixed(2)}–${Math.max(...segTempo).toFixed(2)}x (meja ${MAXT}x), govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s (brez freza)`);
         } else {
             let acc = Math.min(parts[0] ? parts[0].srcS : 0, MAX_LEAD);
             startsF = []; durF = parts.map(p => p.d);
@@ -7072,7 +7088,13 @@ async function lvGenerateLang(job, lang) {
             lvLog(job, `[${lang}] casovnica (rezerva): govor ${totalF.toFixed(1)}s / video ${DUR.toFixed(1)}s` + (tempo > 1.001 ? ` — enoten tempo ${tempo.toFixed(3)}x, brez freza` : ', brez freza'));
         }
 
-        const mkTempo = (tf) => { if (!(tf > 1.001)) return ''; let s = '', r = tf; while (r > 2.0) { s += 'atempo=2.0,'; r /= 2.0; } return s + `atempo=${r.toFixed(3)},`; };
+        // rubberband ohrani barvo glasu bistveno bolje kot atempo (manj "sumenja")
+        const USE_RB = process.env.LIPVOICE_RUBBERBAND !== '0';
+        const mkTempo = (tf) => {
+            if (!(tf > 1.001)) return '';
+            if (USE_RB) return `rubberband=tempo=${tf.toFixed(3)},`;
+            let s = '', r = tf; while (r > 2.0) { s += 'atempo=2.0,'; r /= 2.0; } return s + `atempo=${r.toFixed(3)},`;
+        };
         const ins = parts.map(p => `-i '${lvSh(p.mp3)}'`).join(' ');
         const filt = parts.map((p, i) => {
             const dly = Math.round(startsF[i] * 1000);
