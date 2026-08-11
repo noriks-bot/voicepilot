@@ -6913,9 +6913,27 @@ async function lvPrepare(job) {
             } catch (e) { lvLog(job, 'preverba klona ni uspela (' + String(e.message).slice(0, 60) + ') -> klon ostane'); }
         }
 
+        // ── PREVODI ZA VSE TRGE (da jih lahko uporabnik PREGLEDA/UREDI pred generiranjem) ──
+        lvP(job, 90);
+        const LV_PREP_LANGS = (process.env.LIPVOICE_PREP_LANGS || 'SI,HR,SK,CZ,HU,PL,GR,IT,RO,BG,DE')
+            .split(',').map(x => x.trim().toUpperCase()).filter(Boolean);
+        job.translations = job.translations || {};
+        const _segsForTr = (job.segments || []).map(x => ({ s: x.s, e: x.e, text: x.text }));
+        let _okTr = 0, _failTr = [];
+        for (const L of LV_PREP_LANGS) {
+            if (job.cancel) break;
+            if ((job.translations[L] || []).length) { _okTr++; continue; }
+            try {
+                const tr = await lvTranslate(_segsForTr, L, job.product || 'NORIKS', job);
+                job.translations[L] = tr.map(x => x.text);
+                _okTr++; lvSave();
+            } catch (e) { _failTr.push(L); }
+        }
+        lvLog(job, `prevodi pripravljeni za ${_okTr} trgov${_failTr.length ? ' (padli: ' + _failTr.join(',') + ')' : ''} — lahko jih pregledas/uredis v SRT`);
+
         job.status = 'prepared'; job.progress = 100;
         lvComputeCost(job, false);
-        lvLog(job, 'PRIPRAVA KONCANA ✓ — izberi drzave za generiranje');
+        lvLog(job, 'PRIPRAVA KONCANA ✓ — preveri SRT in izberi drzave za generiranje');
     } catch (e) {
         job.status = 'error'; job.error = e.message; lvLog(job, 'NAPAKA (priprava): ' + e.message);
         if (job.cloneVoiceId) { try { await lvDeleteVoice(job.cloneVoiceId); } catch (_) {} job.cloneVoiceId = null; }
@@ -6947,9 +6965,17 @@ async function lvGenerateLang(job, lang) {
         if (!fs.existsSync(aud)) { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`); }
         const bgWav = process.env.LIPVOICE_BG === '1' ? await lvBackground(job, work) : null;
 
-        lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
-        const tr = await lvTranslate(segs, lang, job.product || "NORIKS", job);
-        (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
+        let tr;
+        const _saved = (job.translations || {})[lang];
+        if (Array.isArray(_saved) && _saved.length === segs.length) {
+            // prevod je ze narejen v pripravi (in ga je uporabnik morda UREDIL) -> uporabi njega
+            tr = segs.map((sg, i) => ({ s: sg.s, e: sg.e, text: lvBrandText(_saved[i] || sg.text, job.product || 'NORIKS') }));
+            lvLog(job, `[${lang}] uporabljam ${job.trEdited && job.trEdited[lang] ? 'UREJEN' : 'pripravljen'} prevod (brez ponovnega prevajanja)`);
+        } else {
+            lvLog(job, `[${lang}] prevajam (znamke -> ${job.product || 'NORIKS'})…`);
+            tr = await lvTranslate(segs, lang, job.product || "NORIKS", job);
+            (job.translations = job.translations || {})[lang] = tr.map(s => s.text);
+        }
         setP(10);
 
         const voice = path.join(work, `voice-${lang}.wav`);
@@ -7198,6 +7224,39 @@ app.get('/api/lipvoice/jobs', (req, res) => res.json(
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 
+// SHRANI UREJEN prevod za eno drzavo (SRT modal)
+app.post('/api/lipvoice/transcript/:id/:lang', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    const L = String(req.params.lang || '').toUpperCase();
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    const lines = (req.body && req.body.lines);
+    if (!Array.isArray(lines)) return res.status(400).json({ error: 'Ni vrstic' });
+    const n = (j.segments || []).length;
+    if (lines.length !== n) return res.status(400).json({ error: `Pricakovanih ${n} vrstic, prejetih ${lines.length}` });
+    j.translations = j.translations || {};
+    j.translations[L] = lines.map(x => String(x == null ? '' : x));
+    (j.trEdited = j.trEdited || {})[L] = new Date().toISOString();
+    (j.log = j.log || []).push('[' + L + '] prevod UREJEN rocno ✓');
+    lvSave();
+    res.json({ ok: true, lang: L, lines: j.translations[L].length });
+});
+
+// prevedi eno drzavo na zahtevo (ce prevod v pripravi ni uspel)
+app.post('/api/lipvoice/translate/:id/:lang', async (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    const L = String(req.params.lang || '').toUpperCase();
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    if (!(j.segments || []).length) return res.status(409).json({ error: 'Priprava se ni koncana' });
+    try {
+        const segs = j.segments.map(x => ({ s: x.s, e: x.e, text: x.text }));
+        const tr = await lvTranslate(segs, L, j.product || 'NORIKS', j);
+        j.translations = j.translations || {};
+        j.translations[L] = tr.map(x => x.text);
+        lvComputeCost(j, false); lvSave();
+        res.json({ ok: true, lang: L, lines: j.translations[L] });
+    } catch (e) { res.status(500).json({ error: String(e.message).slice(0, 160) }); }
+});
+
 // SRT/prepis: original po segmentih + prevodi po drzavah (za modal)
 app.get('/api/lipvoice/transcript/:id', (req, res) => {
     const j = lvJobs.get(req.params.id);
@@ -7206,6 +7265,7 @@ app.get('/api/lipvoice/transcript/:id', (req, res) => {
         id: j.id, name: j.name, sourceLang: j.sourceLang || null,
         segments: (j.segments || []).map(s => ({ s: s.s, e: s.e, text: s.text })),
         translations: j.translations || {},
+        trEdited: j.trEdited || {},
         langs: Object.keys(j.translations || {})
     });
 });

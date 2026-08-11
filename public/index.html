@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=14">
+    <link rel="stylesheet" href="/huel-orange.css?v=19">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8486,25 +8486,53 @@ async function lvAddSubmit(){
 }
 document.getElementById('lvAddModal').addEventListener('click',e=>{ if(e.target.id==='lvAddModal') lvAddClose(); });
 // ── FAZA 2: panel za izbiro drzav znotraj kartice ──
+// izbira v panelu se OHRANI cez osvezevanje seznama (poll vsake 3s)
+window._lvGenSel = window._lvGenSel || {};
+function _lvSel(jid, j){
+  if(!window._lvGenSel[jid]) window._lvGenSel[jid] = { langs:[], subpos:(j&&j.subpos)||'bottom', lipsync:!!(j&&j.lipsync) };
+  return window._lvGenSel[jid];
+}
 function lvGenPanel(j){
   const LS=j.langState||{};
   const rem=LV_ALL_LANGS.filter(L=>{ const st=LS[L]; return !(st==='done'||st==='running'||st==='queued'); });
-  if(!rem.length) return '<div style="margin-top:8px;font-size:11px;color:#75756F">vse države generirane</div>';
-  const chips=rem.map(L=>'<label class="lv-gen-chip"><input type="checkbox" value="'+L+'" onchange="lvGenSync(this)"> '+(LV_FLAGS2[L]||'')+' '+L+'</label>').join('');
-  const sp=j.subpos||'bottom', ls=!!j.lipsync, jid=j.id;
+  if(!rem.length) return '<div style="margin-top:8px;font-size:12px;color:#75756F">vse države generirane</div>';
+  const jid=j.id, sel=_lvSel(jid,j);
+  sel.langs = sel.langs.filter(L=>rem.indexOf(L)>=0);
+  const chips=rem.map(L=>'<label class="lv-gen-chip'+(sel.langs.indexOf(L)>=0?' on':'')+'"><input type="checkbox" value="'+L+'"'+(sel.langs.indexOf(L)>=0?' checked':'')+' onchange="lvGenSync(this,\''+jid+'\')"> '+(LV_FLAGS2[L]||'')+' '+L+'</label>').join('');
   return '<div class="lv-genpanel" data-job="'+jid+'">'
     +'<div class="lv-genpanel-t">🌍 Generiraj države</div>'
     +'<div class="lv-genchips">'+chips+'</div>'
     +'<div class="lv-genopts">'
-      +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="bottom"'+(sp!=='middle'?' checked':'')+'> ⬇️ Spodaj</label>'
-      +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="middle"'+(sp==='middle'?' checked':'')+'> ↔️ Sredina</label>'
+      +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="bottom"'+(sel.subpos!=='middle'?' checked':'')+' onchange="lvGenOpt(\''+jid+'\',this)"> ⬇️ Spodaj</label>'
+      +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="middle"'+(sel.subpos==='middle'?' checked':'')+' onchange="lvGenOpt(\''+jid+'\',this)"> ↔️ Sredina</label>'
       +'<span class="lv-genopt-sep"></span>'
-      +'<label class="lv-genopt"><input type="checkbox" class="lv-ls"'+(ls?' checked':'')+'> 💋 Lipsync <span style="opacity:.6;font-weight:500">(~15 min/min videa)</span></label>'
+      +'<label class="lv-genopt"><input type="checkbox" class="lv-ls"'+(sel.lipsync?' checked':'')+' onchange="lvGenOpt(\''+jid+'\',this)"> 💋 Lipsync <span style="opacity:.6;font-weight:500">(~15 min/min videa)</span></label>'
     +'</div>'
     +'<button class="lv-gengo" onclick="lvGenerate(\'' + jid + '\',this)">🚀 Generiraj izbrane</button>'
     +'</div>';
 }
-function lvGenSync(cb){ const l=cb.closest('label'); if(cb.checked) l.classList.add('on'); else l.classList.remove('on'); }
+function lvGenOpt(jid,el){
+  const sel=_lvSel(jid);
+  if(el.type==='radio') sel.subpos=el.value; else sel.lipsync=el.checked;
+}
+
+function lvRowClick(e,id){
+  if(e.target.closest('a,button,input,label,select,textarea,summary,.lv-genpanel')) return;
+  lvToggleRow(id, e.currentTarget);
+}
+function lvToggleRow(id, el){
+  const row=el.closest('.lv-jobrow'); if(!row)return;
+  const more=row.querySelector('.lv-row-more'); const tg=row.querySelector('.lv-row-toggle');
+  window._lvOpenRows=window._lvOpenRows||new Set();
+  if(more.hasAttribute('hidden')){ more.removeAttribute('hidden'); row.classList.add('open'); window._lvOpenRows.add(id); if(tg){tg.textContent='▴';tg.title='skrij';} }
+  else { more.setAttribute('hidden',''); row.classList.remove('open'); window._lvOpenRows.delete(id); if(tg){tg.textContent='▾';tg.title='pokazi vec';} }
+}
+function lvGenSync(cb,jid){
+  const l=cb.closest('label'); if(cb.checked) l.classList.add('on'); else l.classList.remove('on');
+  if(!jid) return;
+  const sel=_lvSel(jid); const i=sel.langs.indexOf(cb.value);
+  if(cb.checked){ if(i<0) sel.langs.push(cb.value); } else if(i>=0) sel.langs.splice(i,1);
+}
 async function lvGenerate(id,btn){
   const panel=btn.closest('.lv-genpanel');
   const langs=[...panel.querySelectorAll('.lv-gen-chip input:checked')].map(x=>x.value);
@@ -8516,6 +8544,7 @@ async function lvGenerate(id,btn){
     const r=await fetch('/api/lipvoice/generate/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({langs:langs.join(','),subpos,lipsync})});
     const d=await r.json();
     if(!d.ok){alert('Napaka: '+(d.error||r.status)); btn.disabled=false; btn.textContent='🚀 Generiraj izbrane'; return;}
+    if(window._lvGenSel[id]) window._lvGenSel[id].langs=[];
     lvPoll();
   }catch(e){alert('Napaka: '+e.message); btn.disabled=false; btn.textContent='🚀 Generiraj izbrane';}
 }
@@ -8536,23 +8565,58 @@ async function lvSrtOpen(id){
   }catch(e){ document.getElementById('lvSrtBody').innerHTML='<div style="padding:30px;color:#B3402F">Napaka: '+e.message+'</div>'; }
 }
 function lvSrtSetLang(L){ _lvSrtLang=L; lvSrtRender(); }
-function lvSrtRender(){
+async function lvSrtTranslate(L){
+  const btn=document.getElementById('lvSrtGo'); if(btn){btn.disabled=true;btn.textContent='⏳ Prevajam…';}
+  try{
+    const r=await fetch('/api/lipvoice/translate/'+_lvSrtId+'/'+L,{method:'POST'});
+    const d=await r.json();
+    if(!d.ok){alert('Napaka: '+(d.error||r.status));}
+    else { _lvSrtData.translations[L]=d.lines; _lvSrtLang=L; lvSrtRender(); }
+  }catch(e){alert('Napaka: '+e.message);}
+  finally{ if(btn){btn.disabled=false;btn.textContent='🌍 Prevedi';} }
+}
+async function lvSrtSave(){
+  if(!_lvSrtId||!_lvSrtLang)return;
+  const lines=[...document.querySelectorAll('#lvSrtBody .lv-srt-tr')].map(el=>el.innerText.trim());
+  const btn=document.getElementById('lvSrtSave'); btn.disabled=true; btn.textContent='⏳ Shranjujem…';
+  try{
+    const r=await fetch('/api/lipvoice/transcript/'+_lvSrtId+'/'+_lvSrtLang,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lines})});
+    const d=await r.json();
+    if(!d.ok){alert('Napaka: '+(d.error||r.status)); btn.textContent='💾 Shrani';}
+    else { _lvSrtData.translations[_lvSrtLang]=lines; (_lvSrtData.trEdited=_lvSrtData.trEdited||{})[_lvSrtLang]=new Date().toISOString();
+           btn.textContent='✓ Shranjeno'; setTimeout(()=>{btn.textContent='💾 Shrani';},1800); lvSrtRender(true); }
+  }catch(e){alert('Napaka: '+e.message); btn.textContent='💾 Shrani';}
+  finally{ btn.disabled=false; }
+}
+function lvSrtRender(keepScroll){
   const d=_lvSrtData; if(!d)return;
-  const langs=Object.keys(d.translations||{});
-  document.getElementById('lvSrtTabs').innerHTML = langs.length
-    ? langs.map(L=>'<button class="lv-srt-tab'+(L===_lvSrtLang?' on':'')+'" onclick="lvSrtSetLang(\'' + L + '\')">'+(LV_FLAGS2[L]||'')+' '+L+'</button>').join('')
-    : '<span style="font-size:12px;color:#75756F">še ni prevodov — najprej generiraj državo</span>';
+  const body=document.getElementById('lvSrtBody');
+  const sc=keepScroll?body.scrollTop:0;
+  const have=Object.keys(d.translations||{}).filter(L=>(d.translations[L]||[]).length);
+  const all=(typeof LV_ALL_LANGS!=='undefined')?LV_ALL_LANGS:have;
+  if(!_lvSrtLang||have.indexOf(_lvSrtLang)<0) _lvSrtLang=have[0]||null;
+  const tabs=all.map(L=>{
+    const ok=have.indexOf(L)>=0;
+    const ed=(d.trEdited||{})[L]?' •':'';
+    return ok
+      ? '<button class="lv-srt-tab'+(L===_lvSrtLang?' on':'')+'" onclick="lvSrtSetLang(\''+L+'\')">'+(LV_FLAGS2[L]||'')+' '+L+ed+'</button>'
+      : '<button class="lv-srt-tab miss" title="prevod se ni narejen" onclick="lvSrtTranslate(\''+L+'\')">'+(LV_FLAGS2[L]||'')+' '+L+' +</button>';
+  }).join('');
+  document.getElementById('lvSrtTabs').innerHTML = tabs
+    + '<span style="flex:1"></span>'
+    + (_lvSrtLang?'<button id="lvSrtSave" class="lv-srt-save" onclick="lvSrtSave()">💾 Shrani</button>':'');
   const tt=function(x){ x=Math.max(0,x||0); const m=Math.floor(x/60), sec=(x%60); return String(m).padStart(2,'0')+':'+sec.toFixed(2).padStart(5,'0'); };
   const tr=(d.translations||{})[_lvSrtLang]||[];
   const rows=(d.segments||[]).map(function(sg,i){ return '<div class="lv-srt-row">'
     +'<div class="lv-srt-time">'+tt(sg.s)+' — '+tt(sg.e)+'</div>'
     +'<div class="lv-srt-cols">'
     +'<div class="lv-srt-orig">'+String(sg.text||'').replace(/</g,'&lt;')+'</div>'
-    +'<div class="lv-srt-tr">'+(tr[i]!=null?String(tr[i]).replace(/</g,'&lt;'):'<span style="color:#B9B6B0">—</span>')+'</div>'
+    +'<div class="lv-srt-tr" contenteditable="'+(_lvSrtLang?'true':'false')+'" spellcheck="false">'+(tr[i]!=null?String(tr[i]).replace(/</g,'&lt;'):'')+'</div>'
     +'</div></div>'; }).join('');
-  document.getElementById('lvSrtBody').innerHTML =
-    '<div class="lv-srt-head"><div>'+(d.sourceLang||'original').toUpperCase()+'</div><div>'+(_lvSrtLang?((LV_FLAGS2[_lvSrtLang]||'')+' '+_lvSrtLang):'prevod')+'</div></div>'
+  body.innerHTML =
+    '<div class="lv-srt-head"><div>'+(d.sourceLang||'original').toUpperCase()+'</div><div>'+(_lvSrtLang?((LV_FLAGS2[_lvSrtLang]||'')+' '+_lvSrtLang+' — klikni v besedilo za urejanje'):'izberi državo zgoraj')+'</div></div>'
     +(rows||'<div style="padding:20px;color:#75756F">ni segmentov</div>');
+  if(keepScroll) body.scrollTop=sc;
 }
 function lvSrtClose(){ document.getElementById('lvSrtModal').style.display='none'; _lvSrtId=null; }
 
@@ -8592,8 +8656,17 @@ async function lvDeleteFolder(id){
   if(!confirm('Izbrišem mapo? (videi ostanejo, samo razvrstitev se odstrani)'))return;
   try{ await fetch('/api/lipvoice/folders/'+id,{method:'DELETE'}); if(_lvActiveFolder===id)_lvActiveFolder=null; await lvLoadFolders(); lvPoll(); }catch(e){}
 }
-function lvRowDragStart(e,id){ window._lvDragging=true; try{e.dataTransfer.setData('text/plain',id);e.dataTransfer.effectAllowed='move';e.currentTarget.style.opacity=0.45;}catch(_){}}
-function lvRowDragEnd(e){ window._lvDragging=false; try{e.currentTarget.style.opacity=1;}catch(_){}}
+function lvRowDragStart(e,id){
+  window._lvDragging=true;
+  try{
+    e.dataTransfer.setData('text/plain',id);
+    e.dataTransfer.effectAllowed='move';
+    const row=e.currentTarget.closest('.lv-jobrow');
+    if(row&&e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(row,30,24);
+    if(row) row.style.opacity=0.5;
+  }catch(_){}
+}
+function lvRowDragEnd(e){ window._lvDragging=false; try{const row=e.currentTarget.closest('.lv-jobrow'); if(row) row.style.opacity=1;}catch(_){}}
 async function lvDropOnFolder(e,fid){
   e.preventDefault(); const el=e.currentTarget; el.classList.remove('drop'); window._lvDragging=false;
   const jobId=e.dataTransfer.getData('text/plain'); if(!jobId)return;
@@ -8659,27 +8732,42 @@ async function lvPoll(){
       const _fn=j.folderId&&(window._lvFoldersById||{})[j.folderId]?window._lvFoldersById[j.folderId].name:'';
       const folderBadge=_fn?'<span class="lv-row-folder" title="v mapi">📁 '+_fn.replace(/</g,'&lt;')+'</span>':'';
       // ena vrstica na video; povlecljiva v mapo; drzave (prenosi) desno v enem rowu
-      html+='<div class="lv-jobrow" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;gap:16px;align-items:flex-start">'
-       +'<div class="lv-grip" title="povleci v mapo">⠿</div>'
-       +'<div style="flex:1;min-width:0">'
-       +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><strong>'+j.name+'</strong>'+folderBadge
-       +(ur?'<span style="font-size:11px;color:#94a3b8">'+ur+'</span>':'')
-       +'<span style="color:'+col+';font-weight:700;font-size:12px">'+(j.status==='queued'?'V VRSTI':j.status.toUpperCase()+' '+j.progress+'%')+'</span>'+cost+'</div>'
-       +(info?'<div style="font-size:11px;color:#64748b;margin-top:4px">'+info+'</div>':'')
-       +(langChips?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+langChips+'</div>':'')
-       +(prepDone?lvGenPanel(j):'')
-       +'<div style="height:5px;background:#f1f5f9;border-radius:3px;margin:8px 0"><div style="height:100%;width:'+(sharedActive?(j.progress||0):100)+'%;background:'+col+';border-radius:3px;transition:.3s"></div></div>'
-       +(j.error?'<div style="color:#dc2626;font-size:12px">✗ '+j.error+'</div>':'')
-       +'<details'+(j.status==='running'?' open':'')+' style="margin-top:4px"><summary style="cursor:pointer;font-size:11px;color:#64748b;user-select:none">log</summary>'
-       +'<div style="font-family:monospace;font-size:10px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px;max-height:130px;overflow:auto">'+(j.log||[]).join('<br>')+'</div></details>'
-       +'</div>'
-       +'<div style="display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center;max-width:56%;min-width:0;padding-top:2px">'
-         +((j.status==='running'||j.status==='queued'||j.status==='starting')?'<a href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')" style="display:inline-block;padding:6px 10px;background:#dc2626;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">✖ prekini</a>':'')
-         +'<a href="javascript:void(0)" onclick="lvDelete(\''+j.id+'\')" title="izbrisi vrstico" style="display:inline-block;padding:6px 9px;background:#f1f5f9;color:#64748b;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px">🗑</a>'
-         +(j.hasSegments?'<a class="lv-srt" href="javascript:void(0)" onclick="lvSrtOpen(\''+j.id+'\')" title="prebrani tekst / prevodi" style="display:inline-block;padding:6px 11px;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">📝 SRT</a>':'')
-         +outs
-         +(j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'" style="display:inline-block;padding:6px 12px;background:#0f172a;color:#fff;border-radius:7px;text-decoration:none;font-weight:800;font-size:11px;white-space:nowrap">📦 VSE (ZIP)</a>':'')
+      // prvic videna vrstica -> samodejno odpri, ce potrebuje pozornost
+      window._lvOpenRows = window._lvOpenRows || new Set();
+      window._lvSeenRows = window._lvSeenRows || new Set();
+      const anyLangActive = Object.keys(LS).some(k=>LS[k]==='running'||LS[k]==='queued');
+      if(!window._lvSeenRows.has(j.id)){
+        window._lvSeenRows.add(j.id);
+        if(sharedActive || anyLangActive || (prepDone && !(j.outputs||[]).length)) window._lvOpenRows.add(j.id);
+      }
+      const isOpen = window._lvOpenRows.has(j.id);
+      const srtBtn = j.hasSegments
+        ? '<a class="lv-srt" href="javascript:void(0)" onclick="lvSrtOpen(\''+j.id+'\')" title="prebrani tekst / prevodi">📝 SRT</a>' : '';
+      const dlBtns = outs
+        + (j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'">📦 ZIP</a>':'');
+      const cancelBtn = (sharedActive||anyLangActive)
+        ? '<a class="lv-cancel" href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')">✖</a>' : '';
+      html+='<div class="lv-jobrow'+(isOpen?' open':'')+'">'
+       +'<div class="lv-row-main" onclick="lvRowClick(event,\''+j.id+'\')">'
+         +'<div class="lv-grip" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" title="povleci v mapo">⠿</div>'
+         +'<div class="lv-row-name"><strong>'+j.name+'</strong>'+folderBadge+(ur?'<span class="lv-row-time">'+ur+'</span>':'')+'</div>'
+         +'<span class="lv-row-status" style="color:'+col+'">'+(j.status==='queued'?'V VRSTI':(j.status==='prepared'?'PRIPRAVLJEN':j.status.toUpperCase()+' '+(j.progress||0)+'%'))+'</span>'
+         +srtBtn
+         +'<div class="lv-row-sp"></div>'
+         +'<div class="lv-row-actions">'+dlBtns+cancelBtn
+           +'<a class="lv-del" href="javascript:void(0)" onclick="lvDelete(\''+j.id+'\')" title="izbrisi">🗑</a>'
+           +'<button class="lv-row-toggle" onclick="lvToggleRow(\''+j.id+'\',this)" title="'+(isOpen?'skrij':'pokazi vec')+'">'+(isOpen?'▴':'▾')+'</button>'
          +'</div>'
+       +'</div>'
+       +'<div class="lv-row-prog"><div style="width:'+(sharedActive?(j.progress||0):100)+'%;background:'+col+'"></div></div>'
+       +'<div class="lv-row-more"'+(isOpen?'':' hidden')+'>'
+         +(info?'<div class="lv-row-info">'+info+'</div>':'')
+         +(langChips.trim()?'<div class="lv-row-chips">'+langChips+'</div>':'')
+         +(prepDone?lvGenPanel(j):'')
+         +(j.error?'<div class="lv-row-err">✗ '+j.error+'</div>':'')
+         +'<details style="margin-top:6px"><summary class="lv-row-logsum">log</summary>'
+         +'<div class="lv-row-log">'+(j.log||[]).join('<br>')+'</div></details>'
+       +'</div>'
        +'</div>';
     }
     document.getElementById('lvJobs').innerHTML = html || '<div style="color:#94a3b8;text-align:center;padding:30px">Ni opravil</div>';
