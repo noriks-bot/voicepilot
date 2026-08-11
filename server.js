@@ -6179,11 +6179,29 @@ async function lvSTT(audioPath, job, langHint) {
         words: (d.words || []).map(w => ({ w: w.word, s: w.start, e: w.end })) };
 }
 
-// besede -> stavcni segmenti
-function lvSegs(words, fallbackText) {
+// ── REZI V VIDEU (menjava kadra) — ffmpeg scene detection ──
+async function lvSceneCuts(video, job) {
+    try {
+        const thr = parseFloat(process.env.LIPVOICE_SCENE_THR || '0.28');
+        const out = (await execPromise(
+            `ffmpeg -i '${lvSh(video)}' -vf "select='gt(scene,${thr})',metadata=print:file=-" -an -sn -f null - 2>/dev/null`,
+            { timeout: 6 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 })).stdout || '';
+        const raw = [...String(out).matchAll(/pts_time:([\d.]+)/g)].map(m => parseFloat(m[1])).filter(x => isFinite(x) && x > 0.6);
+        const cuts = [];
+        for (const c of raw) if (!cuts.length || c - cuts[cuts.length - 1] > 1.2) cuts.push(c);   // preblizu skupaj -> en rez
+        if (job) lvLog(job, `rezi v videu: ${cuts.length}${cuts.length ? ' (' + cuts.slice(0, 8).map(x => x.toFixed(1) + 's').join(', ') + (cuts.length > 8 ? '…' : '') + ')' : ' — brez menjav kadra'}`);
+        return cuts;
+    } catch (e) { if (job) lvLog(job, 'zaznava rezov ni uspela -> kadri samo po govoru'); return []; }
+}
+const _lvCutBetween = (cuts, a, b) => (cuts || []).some(t => t > a + 0.05 && t < b + 0.35);
+
+// besede -> stavcni segmenti (prelom tudi na REZU v videu)
+function lvSegs(words, fallbackText, cuts) {
     if (!words.length) return fallbackText ? [{ s: 0, e: 4, text: fallbackText, words: [] }] : [];
     const out = []; let c = null;
     for (const w of words) {
+        // REZ v videu med prejsnjo in to besedo -> nov kader
+        if (c && _lvCutBetween(cuts, c.e, w.s)) { out.push(c); c = null; }
         if (!c) c = { s: w.s, e: w.e, text: w.w, words: [w] };
         else { c.text += (/^[.,!?;:]/.test(w.w) ? '' : ' ') + w.w; c.e = w.e; c.words.push(w); }
         if (/[.!?]$/.test(w.w) || (c.e - c.s) >= 6 || c.text.length >= 80) { out.push(c); c = null; }
@@ -6200,7 +6218,8 @@ function lvMergeSegs(segs, o) {
         const pause = c ? (g.s - c.e) : 0;
         const canMerge = c && (c.e - c.s) + (g.e - g.s) <= o.maxDur
             && (c.text.length + g.text.length) <= o.maxChars
-            && pause < o.minPause;
+            && pause < o.minPause
+            && !_lvCutBetween(o.cuts, c.e, g.s);   // REZ v videu = konec kadra
         if (canMerge) { c.text += ' ' + g.text; c.e = g.e; c.words = (c.words || []).concat(g.words || []); }
         else { if (c) out.push(c); c = { s: g.s, e: g.e, text: g.text, words: (g.words || []).slice() }; }
     }
@@ -6859,9 +6878,14 @@ async function lvPrepare(job) {
         job.cloned = !!clonedVoice;
         lvP(job, 55);
 
+        // rezi v videu (menjava kadra) -> kadri se poravnajo z montazo
+        const sceneCuts = (process.env.LIPVOICE_SCENES === '0') ? [] : await lvSceneCuts(job.videoPath, job);
+        job.sceneCuts = sceneCuts;
+
         const stt = await lvSTT(aud, job);
-        const segsRaw = lvSegs(stt.words, stt.text);
+        const segsRaw = lvSegs(stt.words, stt.text, sceneCuts);
         const segs = lvMergeSegs(segsRaw, {
+            cuts: sceneCuts,
             maxDur: parseFloat(process.env.LIPVOICE_SEG_DUR || '8.5'),
             maxChars: parseInt(process.env.LIPVOICE_SEG_CHARS || '170', 10),
             minPause: 0.45
@@ -7250,15 +7274,37 @@ app.post('/api/lipvoice/transcript/:id/source', async (req, res) => {
     const segs = j.segments || [];
     if (lines.length !== segs.length) return res.status(400).json({ error: `Pricakovanih ${segs.length} vrstic` });
 
+    const full = !!(req.body && req.body.retranslateAll);   // "prevedi vse znova"
     const changed = [];
     for (let i = 0; i < segs.length; i++) {
         const nw = String(lines[i] == null ? '' : lines[i]).trim();
         if (nw && nw !== String(segs[i].text || '').trim()) changed.push({ i, old: segs[i].text, nw });
     }
-    if (!changed.length) return res.json({ ok: true, changed: 0, swapped: 0, retranslated: 0 });
+    if (!changed.length && !full) return res.json({ ok: true, changed: 0, swapped: 0, retranslated: 0 });
 
     for (const c of changed) segs[c.i].text = c.nw;
     j.sourceText = segs.map(x => x.text).join(' ');
+
+    // ── POLNI PONOVNI PREVOD vseh trgov iz (popravljenega) izvirnika ──
+    if (full) {
+        const PREP = (process.env.LIPVOICE_PREP_LANGS || 'SI,HR,SK,CZ,HU,PL,GR,IT,RO,BG,DE')
+            .split(',').map(x => x.trim().toUpperCase()).filter(Boolean);
+        const target = [...new Set([...Object.keys(j.translations || {}), ...PREP])];
+        const sub = segs.map(x => ({ s: x.s, e: x.e, text: x.text }));
+        j.translations = j.translations || {};
+        let okN = 0; const failN = [];
+        for (const L of target) {
+            try {
+                const tr = await lvTranslate(sub, L, j.product || 'NORIKS', j);
+                j.translations[L] = tr.map(x => x.text);
+                if (j.trEdited) delete j.trEdited[L];   // rocne popravke prepise nov prevod
+                okN++; lvSave();
+            } catch (e) { failN.push(L); }
+        }
+        (j.log = j.log || []).push(`izvirnik popravljen (${changed.length} vrstic) -> PONOVNO PREVEDENO ${okN} trgov${failN.length ? ' (padli: ' + failN.join(',') + ')' : ''}`);
+        lvComputeCost(j, false); lvSave();
+        return res.json({ ok: true, changed: changed.length, swapped: 0, retranslated: okN, full: true, failed: failN });
+    }
 
     const langs = Object.keys(j.translations || {}).filter(L => (j.translations[L] || []).length === segs.length);
     let nSwap = 0; const needTr = {};

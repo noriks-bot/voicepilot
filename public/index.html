@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=20">
+    <link rel="stylesheet" href="/huel-orange.css?v=21">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8371,6 +8371,7 @@
         <div id="lvSrtStat" class="lv-srt-stat"></div>
         <div style="display:flex;gap:10px">
           <button onclick="lvSrtClose()" class="lv-srt-cancel">Zapri</button>
+          <button id="lvSrtFix" class="lv-srt-fix" onclick="lvSrtFixSource()" title="shrani izvirnik in ZNOVA prevedi vse jezike">🔁 Popravi izvirnik → prevedi vse znova</button>
           <button id="lvSrtSave" class="lv-srt-save" onclick="lvSrtSave()">💾 Shrani spremembe</button>
         </div>
       </div>
@@ -8626,6 +8627,25 @@ async function lvSrtSave(){
     btn.textContent='✓ Shranjeno'; setTimeout(()=>{btn.textContent='💾 Shrani spremembe';},1600);
   }catch(e){ st.textContent='✗ '+e.message; btn.textContent='💾 Shrani spremembe'; }
   finally{ btn.disabled=false; }
+}
+async function lvSrtFixSource(){
+  if(!_lvSrtId)return;
+  const n=(_lvSrtData&&_lvSrtData.segments||[]).length;
+  if(!confirm('Shranim popravljen izvirnik in ZNOVA prevedem vse jezike?\n\n('+n+' kadrov · ročni popravki prevodov se prepišejo)'))return;
+  const btn=document.getElementById('lvSrtFix'), sv=document.getElementById('lvSrtSave'), st=document.getElementById('lvSrtStat');
+  const src=[...document.querySelectorAll('#lvSrtBody .lv-srt-orig')].map(x=>x.innerText.trim());
+  btn.disabled=true; sv.disabled=true; btn.textContent='⏳ Prevajam vse jezike…'; st.textContent='to lahko traja minuto…';
+  try{
+    const r=await fetch('/api/lipvoice/transcript/'+_lvSrtId+'/source',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({lines:src, retranslateAll:true})});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error||'napaka');
+    _lvSrtData=await (await fetch('/api/lipvoice/transcript/'+_lvSrtId)).json();
+    lvSrtRender(true);
+    st.textContent='✓ izvirnik popravljen · znova prevedeno '+d.retranslated+' jezikov'+(d.failed&&d.failed.length?(' (padli: '+d.failed.join(',')+')'):'');
+    btn.textContent='✓ Prevedeno'; setTimeout(()=>{btn.textContent='🔁 Popravi izvirnik → prevedi vse znova';},2200);
+  }catch(e){ st.textContent='✗ '+e.message; btn.textContent='🔁 Popravi izvirnik → prevedi vse znova'; }
+  finally{ btn.disabled=false; sv.disabled=false; }
 }
 function lvSrtRender(keepScroll){
   const d=_lvSrtData; if(!d)return;

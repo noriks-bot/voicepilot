@@ -443,3 +443,7 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 .lv-srt-save:hover { background:#252527; }
 .lv-srt-save:disabled { opacity:.6; cursor:not-allowed; }
 @media (max-width:820px){ .lv-srt-cols,.lv-srt-head{ grid-template-columns:1fr; gap:10px; } .lv-srt-head{ padding-left:0; } }
+.lv-srt-fix { padding:11px 18px; background:#fff; border:1.5px solid var(--brand); color:var(--brand); border-radius:12px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; }
+.lv-srt-fix:hover { background:#FDF4E8; }
+.lv-srt-fix:disabled { opacity:.6; cursor:not-allowed; }
+@media (max-width:900px){ .lv-srt-foot{ flex-wrap:wrap } .lv-srt-fix{ font-size:12px; padding:10px 12px } }
