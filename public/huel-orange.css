@@ -307,3 +307,19 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 #lvJobs a.lv-zip { color:#FFFFFF !important; }                 /* crn ZIP gumb: tekst spet viden */
 #lvJobs a.lv-add { background:#FBEAD5 !important; color:#9C4A0C !important; border:1px solid #F2D5B4 !important; }
 #lvJobs a.lv-add:hover { background:#F6DFC2 !important; }
+
+/* ── 12. LipVoice: mape (produktne mape + drag&drop) ── */
+#lvFolders { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px; }
+#lvFolders .lv-folder { display:inline-flex; align-items:center; gap:5px; padding:7px 13px; border:1px solid #E3E3E0; border-radius:10px; background:#fff; cursor:pointer; font-weight:600; font-size:13px; color:#47474A; transition:all .12s; user-select:none; }
+#lvFolders .lv-folder:hover { border-color:#D9D7D2; }
+#lvFolders .lv-folder .cnt { opacity:.55; font-variant-numeric:tabular-nums; }
+#lvFolders .lv-folder .del { margin-left:4px; opacity:.4; font-size:11px; }
+#lvFolders .lv-folder .del:hover { opacity:1; color:var(--danger); }
+#lvFolders .lv-folder.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+#lvFolders .lv-folder.active .cnt { opacity:.85; }
+#lvFolders .lv-folder.drop { border:1px dashed var(--brand); background:#FDF4E8; box-shadow:0 0 0 3px var(--brand-glow); }
+#lvFolders .lv-newfolder { padding:7px 13px; border:1px dashed #C9C6C0; border-radius:10px; background:transparent; color:#75756F; cursor:pointer; font-weight:600; font-size:13px; font-family:inherit; }
+#lvFolders .lv-newfolder:hover { border-color:var(--brand); color:var(--brand); }
+.lv-jobrow { cursor:grab; }
+.lv-jobrow:active { cursor:grabbing; }
+.lv-row-folder { font-size:10px; font-weight:700; color:#9C4A0C; background:#FBEAD5; border-radius:6px; padding:2px 7px; }

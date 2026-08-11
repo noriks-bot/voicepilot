@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=8">
+    <link rel="stylesheet" href="/huel-orange.css?v=9">
 </head>
 <body>
     <!-- Login Modal -->
@@ -2181,7 +2181,7 @@
                 <span class="icon">🎙️</span><span class="label">Voiceover Maker</span>
             </a>
             <a class="nav-item" data-page="lipvoice" onclick="switchPage('lipvoice')">
-                <span class="icon">💋</span><span class="label">LipVoiceMaker (v2)</span>
+                <span class="icon">💋</span><span class="label">LipVoiceSubMaker (v2)</span>
             </a>
 
             <div class="sidebar-section-label">Account</div>
@@ -8368,6 +8368,8 @@
       <div id="lvMsg" style="margin-top:10px;font-size:12px"></div>
     </div>
 
+    <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin:6px 0 8px">📁 Mape (povleci video v mapo)</div>
+    <div id="lvFolders"></div>
     <div id="lvJobs"></div>
   </div>
 
@@ -8504,16 +8506,65 @@ async function lvAddSubmit(){
   finally{ b.disabled=false; b.textContent='🚀 Generiraj'; }
 }
 document.getElementById('lvAddModal').addEventListener('click',e=>{ if(e.target.id==='lvAddModal') lvAddClose(); });
-function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvPoll(); }
+// ── MAPE (produktne mape + drag&drop videov) ──
+let _lvFolders = [];
+let _lvActiveFolder = null; // null=vse, '__none'=nerazvrsceno, sicer f-id
+async function lvLoadFolders(){
+  try{ _lvFolders = await (await fetch('/api/lipvoice/folders')).json(); }catch(e){ _lvFolders=[]; }
+  window._lvFoldersById={}; _lvFolders.forEach(f=>window._lvFoldersById[f.id]=f);
+  lvRenderFolders();
+}
+function _lvCount(fid){
+  const a=window._lvAllJobs||[];
+  if(fid==='__all') return a.length;
+  if(fid==='__none') return a.filter(j=>!j.folderId).length;
+  return a.filter(j=>j.folderId===fid).length;
+}
+function lvRenderFolders(){
+  const el=document.getElementById('lvFolders'); if(!el) return;
+  window._lvFoldersById={}; _lvFolders.forEach(f=>window._lvFoldersById[f.id]=f);
+  const chip=(fid,label,active,del)=>'<div class="lv-folder'+(active?' active':'')+'" data-fid="'+fid+'" ondragover="event.preventDefault();this.classList.add(\'drop\')" ondragleave="this.classList.remove(\'drop\')" ondrop="lvDropOnFolder(event,\''+fid+'\')" onclick="lvSetFolder(\''+fid+'\')">📁 '+label+' <span class="cnt">'+_lvCount(fid)+'</span>'+(del||'')+'</div>';
+  let h=chip('__all','Vse',(_lvActiveFolder===null||_lvActiveFolder==='__all'),'');
+  h+=chip('__none','Nerazvrščeno',(_lvActiveFolder==='__none'),'');
+  for(const f of _lvFolders){
+    const del='<span class="del" onclick="event.stopPropagation();lvDeleteFolder(\''+f.id+'\')" title="izbriši mapo">✕</span>';
+    h+=chip(f.id, (f.name||'').replace(/</g,'&lt;'), (_lvActiveFolder===f.id), del);
+  }
+  h+='<button class="lv-newfolder" onclick="lvNewFolder()">➕ Nova mapa</button>';
+  el.innerHTML=h;
+}
+function lvSetFolder(fid){ _lvActiveFolder=(fid==='__all')?null:fid; lvRenderFolders(); lvPoll(); }
+async function lvNewFolder(){
+  const name=prompt('Ime mape / produkta:'); if(!name||!name.trim())return;
+  try{ const r=await fetch('/api/lipvoice/folders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()})}); const d=await r.json(); if(d.ok) await lvLoadFolders(); else alert('Napaka: '+(d.error||r.status)); }catch(e){alert('Napaka: '+e.message);}
+}
+async function lvDeleteFolder(id){
+  if(!confirm('Izbrišem mapo? (videi ostanejo, samo razvrstitev se odstrani)'))return;
+  try{ await fetch('/api/lipvoice/folders/'+id,{method:'DELETE'}); if(_lvActiveFolder===id)_lvActiveFolder=null; await lvLoadFolders(); lvPoll(); }catch(e){}
+}
+function lvRowDragStart(e,id){ window._lvDragging=true; try{e.dataTransfer.setData('text/plain',id);e.dataTransfer.effectAllowed='move';e.currentTarget.style.opacity=0.45;}catch(_){}}
+function lvRowDragEnd(e){ window._lvDragging=false; try{e.currentTarget.style.opacity=1;}catch(_){}}
+async function lvDropOnFolder(e,fid){
+  e.preventDefault(); const el=e.currentTarget; el.classList.remove('drop'); window._lvDragging=false;
+  const jobId=e.dataTransfer.getData('text/plain'); if(!jobId)return;
+  const folderId=(fid==='__all'||fid==='__none')?null:fid;
+  try{ await fetch('/api/lipvoice/job/'+jobId+'/folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folderId})}); }catch(_){}
+  const j=(window._lvAllJobs||[]).find(x=>x.id===jobId); if(j){ if(folderId)j.folderId=folderId; else delete j.folderId; }
+  lvRenderFolders(); lvPoll();
+}
+function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvLoadFolders(); lvPoll(); }
 async function lvPoll(){
   if(!document.body.classList.contains('page-lipvoice')){ _lvPolling = false; return; }
   try{
     const jobs=await (await fetch('/api/lipvoice/jobs')).json();
+    window._lvAllJobs=jobs;
+    window._lvJobsById={}; jobs.forEach(j=>window._lvJobsById[j.id]=j);
+    lvRenderFolders();
+    if(window._lvDragging){ setTimeout(lvPoll,3000); return; }   // med vlecenjem ne prerisuj
+    const shown=_lvActiveFolder?jobs.filter(j=>(_lvActiveFolder==='__none'?!j.folderId:j.folderId===_lvActiveFolder)):jobs;
     const DNEVI=['NED','PON','TOR','SRE','ČET','PET','SOB'];
     let html='', lastDay='';
-    window._lvJobsById={};
-    for(const j of jobs){
-      window._lvJobsById[j.id]=j;
+    for(const j of shown){
       // datumski locilnik (kronoloski pogled po dnevih)
       const dt=j.created?new Date(j.created):null;
       const dayKey=dt?(dt.getFullYear()+'-'+dt.getMonth()+'-'+dt.getDate()):'';
@@ -8558,10 +8609,12 @@ async function lvPoll(){
         return '<span style="padding:3px 10px;border-radius:999px;background:'+bg+';color:'+fg+';font-size:11px;font-weight:700">'+(FLAGS[L]||'')+' '+ico+L+st+'</span>';
       }).join(' ');
       const ur=dt?String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'):'';
-      // ena vrstica na video; drzave (prenosi) desno v enem rowu
-      html+='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;gap:16px;align-items:flex-start">'
+      const _fn=j.folderId&&(window._lvFoldersById||{})[j.folderId]?window._lvFoldersById[j.folderId].name:'';
+      const folderBadge=_fn?'<span class="lv-row-folder" title="v mapi">📁 '+_fn.replace(/</g,'&lt;')+'</span>':'';
+      // ena vrstica na video; povlecljiva v mapo; drzave (prenosi) desno v enem rowu
+      html+='<div class="lv-jobrow" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;gap:16px;align-items:flex-start">'
        +'<div style="flex:1;min-width:0">'
-       +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><strong>'+j.name+'</strong>'
+       +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><strong>'+j.name+'</strong>'+folderBadge
        +(ur?'<span style="font-size:11px;color:#94a3b8">'+ur+'</span>':'')
        +'<span style="color:'+col+';font-weight:700;font-size:12px">'+(j.status==='queued'?'V VRSTI':j.status.toUpperCase()+' '+j.progress+'%')+'</span>'+cost+'</div>'
        +(info?'<div style="font-size:11px;color:#64748b;margin-top:4px">'+info+'</div>':'')

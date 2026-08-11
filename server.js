@@ -5970,6 +5970,35 @@ const lvJobs = new Map();
 const LV_STATE = path.join(LV_DIR, 'jobs.json');
 try { if (fs.existsSync(LV_STATE)) JSON.parse(fs.readFileSync(LV_STATE, 'utf8')).forEach(j => lvJobs.set(j.id, j)); } catch (e) {}
 function lvSave() { try { fs.writeFileSync(LV_STATE, JSON.stringify([...lvJobs.values()].slice(-40), null, 1)); } catch (e) {} }
+// ── MAPE (produktne mape za razvrscanje videov) ──
+const LV_FOLDERS_FILE = path.join(LV_DIR, 'folders.json');
+let lvFolders = [];
+try { if (fs.existsSync(LV_FOLDERS_FILE)) lvFolders = JSON.parse(fs.readFileSync(LV_FOLDERS_FILE, 'utf8')); } catch (e) {}
+function lvFoldersSave() { try { fs.writeFileSync(LV_FOLDERS_FILE, JSON.stringify(lvFolders, null, 1)); } catch (e) {} }
+// ── ZAZNAVA SPOLA PO VISINI GLASU (F0) — deterministicno prek librose (wav2lip venv) ──
+const LV_PITCH_PY = path.join(LV_DIR, 'pitch_gender.py');
+try { fs.writeFileSync(LV_PITCH_PY, [
+    'import sys, warnings',
+    'warnings.filterwarnings("ignore")',
+    'import librosa, numpy as np',
+    'try:',
+    '    y, sr = librosa.load(sys.argv[1], sr=16000, mono=True)',
+    '    try:',
+    '        yt, _ = librosa.effects.trim(y, top_db=30)',   // odrezi tisino/uvod
+    '        if len(yt) > sr: y = yt',
+    '    except Exception: pass',
+    '    f0, v, p = librosa.pyin(y, fmin=65, fmax=400, sr=sr)',
+    '    f0v = f0[~np.isnan(f0)]',
+    '    if len(f0v) < 12:',
+    '        print("F0=NA;N=0;MALE=0;FEM=0")',
+    '    else:',
+    '        med = float(np.median(f0v))',
+    '        male = int(np.sum(f0v < 165)); fem = int(np.sum(f0v >= 165))',
+    '        print("F0=%.1f;N=%d;MALE=%d;FEM=%d" % (med, len(f0v), male, fem))',
+    'except Exception as e:',
+    '    print("F0=ERR")',
+    ''
+].join('\n')); } catch (e) {}
 function lvP(j, v) { j.progress = Math.max(j.progress || 0, Math.min(100, Math.round(v))); lvSave(); }
 function lvLog(j, m) { (j.log = j.log || []).push(m); console.log(`[LV ${j.id}] ${m}`); lvSave(); }
 const lvUpload = multer({
@@ -6633,16 +6662,39 @@ async function lvAccentCheck(mp3Path, lang, job) {
     return null;
 }
 
-async function lvSpeakerGender(audioPath, work, job) {
-    // a) po zvoku (najbolj zanesljivo — deluje tudi brez obraza v kadru)
+// zanesljiva zaznava spola po VISINI GLASU (F0) — deterministicno (librosa pyin), brez AI ugibanja
+async function lvPitchGender(mp3Path, job, oznaka) {
     try {
+        const out = (await execPromise(`'${lvSh(W2L_PY)}' '${lvSh(LV_PITCH_PY)}' '${lvSh(mp3Path)}'`, { timeout: 90000, maxBuffer: 2 * 1024 * 1024 })).stdout || '';
+        const m = String(out).match(/F0=([\d.]+);N=(\d+);MALE=(\d+);FEM=(\d+)/);
+        if (!m) return null;
+        const f0 = parseFloat(m[1]), N = parseInt(m[2], 10), male = parseInt(m[3], 10), fem = parseInt(m[4], 10);
+        if (!isFinite(f0) || f0 <= 0 || N < 12) return null;
+        const gender = f0 < 165 ? 'male' : 'female';
+        const ratio = gender === 'male' ? male / N : fem / N;   // delez okvirjev v pravo smer = zanesljivost
+        const firm = N >= 25 && ratio >= 0.68 && (f0 < 158 || f0 > 174);
+        if (job) lvLog(job, `spol ${oznaka || 'govorca'} po visini glasu: F0 ${f0.toFixed(0)} Hz, ${Math.round(ratio * 100)}% okvirjev ${gender === 'female' ? 'zensko' : 'mosko'} -> ${gender === 'female' ? 'ZENSKA' : 'MOSKI'}${firm ? ' ✓' : ' (mejno)'}`);
+        return { gender, f0, firm, ratio };
+    } catch (e) { return null; }
+}
+
+async function lvSpeakerGender(audioPath, work, job) {
+    // a) VISINA GLASU (F0) — deterministicno, najzanesljivejse. Merim na CELEM posnetku (veliko okvirjev).
+    try {
+        const pitFull = await lvPitchGender(audioPath, job, 'govorca (cel posnetek)');
+        if (pitFull && pitFull.firm) return pitFull.gender;
+        // mejno -> se vzorec iz SREDINE (brez uvodne glasbe)
         const clip = path.join(work, 'gender.mp3');
-        // vzorec iz SREDINE (na zacetku so pogosto glasba/uvodi/drug glas)
         const _dur = (job.meta && job.meta.DUR) || 30;
         const _ss = Math.max(0, Math.min(_dur * 0.35, _dur - 12)).toFixed(1);
         await execPromise(`ffmpeg -y -ss ${_ss} -i '${lvSh(audioPath)}' -t 12 -ac 1 -ar 16000 -b:a 64k '${lvSh(clip)}' 2>/dev/null`);
-        const g = await lvAudioGender(clip, job, 'govorca');
+        const pitMid = await lvPitchGender(clip, job, 'govorca (sredina)');
+        if (pitMid && pitMid.firm) return pitMid.gender;
+        // oba mejna/neuspela -> gpt-audio kot RAZSODNIK
+        const g = await lvAudioGender(clip, job, 'govorca (razsodnik)');
         if (g) return g;
+        if (pitFull) return pitFull.gender;   // vsaj visinska ocena
+        if (pitMid) return pitMid.gender;
         lvLog(job, 'spol po zvoku ni sel -> poskusim po sliki');
     } catch (e) { lvLog(job, 'spol po zvoku ni uspel -> poskusim po sliki'); }
 
@@ -6793,9 +6845,14 @@ async function lvRun(job) {
 
         const fa = await lvHasFace(job.videoPath, work, job);
         job.hasFace = fa.face;
-        // spol govorca zaznamo VEDNO — rezervni glas mora biti istega spola kot izvirnik
-        // spol zaznamo VEDNO (tudi ob klonu — za preverbo klona in za rezervo)
-        job.gender = await lvSpeakerGender(aud, work, job);
+        // spol govorca: ROCNO nastavljen (uporabnik) je merodajen; sicer samodejna zaznava
+        if (job.genderForced === 'male' || job.genderForced === 'female') {
+            job.gender = job.genderForced;
+            lvLog(job, `spol govorca: ROCNO nastavljen -> ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} (brez samodejne zaznave)`);
+        } else {
+            // spol zaznamo VEDNO (tudi ob klonu — za preverbo klona in za rezervo)
+            job.gender = await lvSpeakerGender(aud, work, job);
+        }
         lvLog(job, `>>> SPOL GOVORCA: ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} <<<`);
 
         // ── PREVERBA KLONA: kratek testni TTS -> ali klon zveni kot pravi spol govorca? ──
@@ -6804,11 +6861,12 @@ async function lvRun(job) {
                 const probe = path.join(work, 'probe.mp3');
                 await lvTTS('Dobar dan! Ovo je test glasa za NORIKS video.', (job.langs[0] || 'HR'), probe, clonedVoice, job.gender);
                 job.cost_ttsChars = (job.cost_ttsChars || 0) + 42;
-                const pg = await lvAudioGender(probe, job, 'klona');
-                if (pg && pg !== job.gender) {
-                    // KLON JE ZGRAJEN IZ DEJANSKEGA GLASU -> njegov zvok je mocnejsi dokaz od zaznave.
-                    // Klona NE zavrzemo; popravimo zaznani spol (rezerva bi sicer sla v napacen glas).
-                    lvLog(job, `klon zveni ${pg === 'female' ? 'ZENSKO' : 'MOSKO'}, zaznava izvirnika pa ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} -> VERJAMEM KLONU, spol popravljen na ${pg === 'female' ? 'ZENSKA' : 'MOSKI'}`);
+                // klon je CIST signal (brez glasbe) -> visina glasu je tu najzanesljivejsa
+                const pgP = await lvPitchGender(probe, job, 'klona');
+                const pg = pgP ? pgP.gender : await lvAudioGender(probe, job, 'klona');
+                // popravek le, ce je klonska meritev TRDNA (sicer verjamemo izvirniku)
+                if (pg && pg !== job.gender && !job.genderForced && (!pgP || pgP.firm)) {
+                    lvLog(job, `klon (cist signal) zveni ${pg === 'female' ? 'ZENSKO' : 'MOSKO'}, izvirnik pa ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} -> VERJAMEM KLONU, spol popravljen na ${pg === 'female' ? 'ZENSKA' : 'MOSKI'}`);
                     job.gender = pg;
                     lvLog(job, `>>> SPOL GOVORCA (popravljen po klonu): ${job.gender === 'female' ? 'ZENSKA' : 'MOSKI'} <<<`);
                 } else if (pg) {
@@ -7102,6 +7160,8 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
         lipsync: String(req.body.lipsync || '0') === '1',
         subpos: String(req.body.subpos || 'bottom') === 'middle' ? 'middle' : 'bottom',
         voiceMode: String(req.body.voicemode || 'clone') === 'native' ? 'native' : 'clone',
+        genderForced: ['male', 'female'].includes(String(req.body.gender || '').toLowerCase()) ? String(req.body.gender).toLowerCase() : null,
+        folderId: (req.body.folderId && String(req.body.folderId).trim()) || null,
         status: 'queued', progress: 0, done: 0,
         created: new Date().toISOString(), log: [] };
     lvJobs.set(id, job); lvSave(); setImmediate(lvKick);
@@ -7110,7 +7170,7 @@ app.post('/api/lipvoice/upload', lvUpload.single('video'), (req, res) => {
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].filter(j => !j.hidden).sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
-        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
+        cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, genderForced: j.genderForced || null, folderId: j.folderId || null, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
 // javni URL izvirnika — vmake mora video prenesti k sebi (zato brez prijave, le po ID-ju joba)
@@ -7156,7 +7216,7 @@ app.post('/api/lipvoice/rerun/:id/:lang', (req, res) => {
     const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
         langs: [L], product: old.product || 'NORIKS',
         clean: src !== old.srcPath ? false : (old.clean !== false), // ze ocisceni video -> brez vmake
-        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'clone',
+        lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'clone', genderForced: old.genderForced || null,
         hidden: true, parentId: old.id, parentLang: L,   // tece SKRITO, rezultat gre v starsev row
         status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
         log: ['ponovitev drzave ' + L + ' iz joba ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
@@ -7188,7 +7248,7 @@ app.post('/api/lipvoice/addlangs/:id', (req, res) => {
         const job = { id, name: old.name + '-' + L, videoPath: src, srcPath: src,
             langs: [L], product: old.product || 'NORIKS',
             clean: src !== old.srcPath ? false : (old.clean !== false),  // ze ocisceni video -> brez vmake
-            lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'clone',
+            lipsync: !!old.lipsync, subpos: old.subpos || 'bottom', voiceMode: old.voiceMode || 'clone', genderForced: old.genderForced || null,
             hidden: true, parentId: old.id, parentLang: L,               // tece SKRITO, rezultat gre v starsev row
             status: 'queued', progress: 0, done: 0, created: new Date().toISOString(),
             log: ['dodajanje drzave ' + L + ' k jobu ' + old.id + (src !== old.srcPath ? ' (uporabljam ze ocisceni video, vmake preskocen)' : '')] };
@@ -7200,6 +7260,40 @@ app.post('/api/lipvoice/addlangs/:id', (req, res) => {
     if (added.length) { old.status = 'running'; old.progress = Math.min(old.progress || 100, 99); }
     lvSave(); setImmediate(lvKick);
     res.json({ ok: true, added, skipped });
+});
+
+// ── MAPE: seznam / ustvari / preimenuj / izbrisi + razvrsti job ──
+app.get('/api/lipvoice/folders', (req, res) => res.json(lvFolders));
+app.post('/api/lipvoice/folders', (req, res) => {
+    const name = String((req.body && req.body.name) || '').trim();
+    if (!name) return res.status(400).json({ error: 'Ni imena mape' });
+    const f = { id: 'f-' + Date.now(), name, created: new Date().toISOString() };
+    lvFolders.push(f); lvFoldersSave();
+    res.json({ ok: true, folder: f });
+});
+app.post('/api/lipvoice/folders/:id/rename', (req, res) => {
+    const f = lvFolders.find(x => x.id === req.params.id);
+    if (!f) return res.status(404).json({ error: 'Ni mape' });
+    const name = String((req.body && req.body.name) || '').trim();
+    if (!name) return res.status(400).json({ error: 'Ni imena' });
+    f.name = name; lvFoldersSave();
+    res.json({ ok: true });
+});
+app.delete('/api/lipvoice/folders/:id', (req, res) => {
+    lvFolders = lvFolders.filter(x => x.id !== req.params.id); lvFoldersSave();
+    for (const j of lvJobs.values()) { if (j.folderId === req.params.id) delete j.folderId; }
+    lvSave();
+    res.json({ ok: true });
+});
+// razvrsti job v mapo (folderId null = odstrani iz mape)
+app.post('/api/lipvoice/job/:id/folder', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    const fid = (req.body && req.body.folderId) || null;
+    if (fid && !lvFolders.some(x => x.id === fid)) return res.status(400).json({ error: 'Ni take mape' });
+    if (fid) j.folderId = fid; else delete j.folderId;
+    lvSave();
+    res.json({ ok: true, folderId: fid || null });
 });
 
 // prenos VSEH drzav enega joba v ZIP
