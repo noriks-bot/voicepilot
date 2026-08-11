@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=10">
+    <link rel="stylesheet" href="/huel-orange.css?v=11">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8339,16 +8339,6 @@
       <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">🏷️ Ime tvojega izdelka (zamenja vse tuje znamke)</div>
       <input type="text" id="lvProduct" value="NORIKS" placeholder="npr. NORIKS BUNION" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;margin-bottom:14px;font-weight:600">
 
-      <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">💬 Pozicija podnapisov</div>
-      <div style="display:flex;gap:14px;margin-bottom:14px;font-size:13px;font-weight:600">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvSubPos" value="bottom" checked> ⬇️ Spodaj</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="lvSubPos" value="middle"> ↔️ Sredina (vertikalno)</label>
-      </div>
-
-      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;font-weight:600;cursor:pointer">
-        <input type="checkbox" id="lvLipsync"> 💋 Lipsync (sinhronizacija ust — POCASNO: ~15 min na minuto videa)
-      </label>
-
       <button onclick="lvStart()" id="lvBtn" style="width:100%;padding:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🚀 Start (priprava)</button>
       <div id="lvMsg" style="margin-top:10px;font-size:12px"></div>
     </div>
@@ -8419,8 +8409,6 @@ async function lvStart(){
     const fd=new FormData();
     fd.append('video',files[i]);
     fd.append('product',document.getElementById('lvProduct').value.trim()||'NORIKS');
-    fd.append('lipsync',document.getElementById('lvLipsync').checked?'1':'0');
-    fd.append('subpos',(document.querySelector('input[name=lvSubPos]:checked')||{}).value||'bottom');
     try{
       const r=await fetch('/api/lipvoice/upload',{method:'POST',body:fd});
       const d=await r.json();
@@ -8503,20 +8491,29 @@ function lvGenPanel(j){
   const rem=LV_ALL_LANGS.filter(L=>{ const st=LS[L]; return !(st==='done'||st==='running'||st==='queued'); });
   if(!rem.length) return '<div style="margin-top:8px;font-size:11px;color:#75756F">vse države generirane</div>';
   const chips=rem.map(L=>'<label class="lv-gen-chip"><input type="checkbox" value="'+L+'" onchange="lvGenSync(this)"> '+(LV_FLAGS2[L]||'')+' '+L+'</label>').join('');
-  return '<div class="lv-genpanel" data-job="'+j.id+'">'
+  const sp=j.subpos||'bottom', ls=!!j.lipsync, jid=j.id;
+  return '<div class="lv-genpanel" data-job="'+jid+'">'
     +'<div class="lv-genpanel-t">🌍 Generiraj države</div>'
     +'<div class="lv-genchips">'+chips+'</div>'
-    +'<button class="lv-gengo" onclick="lvGenerate(\'' + j.id + '\',this)">🚀 Generiraj izbrane</button>'
+    +'<div class="lv-genopts">'
+      +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="bottom"'+(sp!=='middle'?' checked':'')+'> ⬇️ Spodaj</label>'
+      +'<label class="lv-genopt"><input type="radio" name="sp-'+jid+'" value="middle"'+(sp==='middle'?' checked':'')+'> ↔️ Sredina</label>'
+      +'<span class="lv-genopt-sep"></span>'
+      +'<label class="lv-genopt"><input type="checkbox" class="lv-ls"'+(ls?' checked':'')+'> 💋 Lipsync <span style="opacity:.6;font-weight:500">(~15 min/min videa)</span></label>'
+    +'</div>'
+    +'<button class="lv-gengo" onclick="lvGenerate(\'' + jid + '\',this)">🚀 Generiraj izbrane</button>'
     +'</div>';
 }
 function lvGenSync(cb){ const l=cb.closest('label'); if(cb.checked) l.classList.add('on'); else l.classList.remove('on'); }
 async function lvGenerate(id,btn){
   const panel=btn.closest('.lv-genpanel');
-  const langs=[...panel.querySelectorAll('input:checked')].map(x=>x.value);
+  const langs=[...panel.querySelectorAll('.lv-gen-chip input:checked')].map(x=>x.value);
   if(!langs.length){alert('Izberi vsaj eno državo');return;}
+  const subpos=(panel.querySelector('input[type=radio]:checked')||{}).value||'bottom';
+  const lipsync=panel.querySelector('.lv-ls')&&panel.querySelector('.lv-ls').checked?'1':'0';
   btn.disabled=true; btn.textContent='⏳ Zaganjam…';
   try{
-    const r=await fetch('/api/lipvoice/generate/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({langs:langs.join(',')})});
+    const r=await fetch('/api/lipvoice/generate/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({langs:langs.join(','),subpos,lipsync})});
     const d=await r.json();
     if(!d.ok){alert('Napaka: '+(d.error||r.status)); btn.disabled=false; btn.textContent='🚀 Generiraj izbrane'; return;}
     lvPoll();

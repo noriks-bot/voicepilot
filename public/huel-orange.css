@@ -350,3 +350,6 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 .lv-srt-orig { font-size:13.5px; line-height:1.5; color:#5D5D5E; }
 .lv-srt-tr { font-size:13.5px; line-height:1.5; color:#0C0C0D; font-weight:500; }
 @media (max-width:760px){ .lv-srt-cols,.lv-srt-head{ grid-template-columns:1fr; gap:6px; } }
+.lv-genopts { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:2px 0 10px; font-size:12px; font-weight:600; color:#5D5D5E; }
+.lv-genopt { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
+.lv-genopt-sep { width:1px; height:14px; background:#E3E0DA; }

@@ -7170,6 +7170,9 @@ app.post('/api/lipvoice/generate/:id', (req, res) => {
     const want = String((req.body && req.body.langs) || req.query.langs || '')
         .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     if (!want.length) return res.status(400).json({ error: 'Ni izbranih drzav' });
+    // nastavitve izrisa se izberejo SELE tu (korak 2)
+    if (req.body && req.body.subpos !== undefined) j.subpos = String(req.body.subpos) === 'middle' ? 'middle' : 'bottom';
+    if (req.body && req.body.lipsync !== undefined) j.lipsync = String(req.body.lipsync) === '1' || req.body.lipsync === true;
     j.langState = j.langState || {}; j.langProgress = j.langProgress || {};
     const started = [], skipped = [];
     for (const L of want) {
@@ -7190,6 +7193,7 @@ app.get('/api/lipvoice/jobs', (req, res) => res.json(
     [...lvJobs.values()].filter(j => !j.hidden).sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
         langState: j.langState || {}, langProgress: j.langProgress || {}, hasSegments: !!(j.segments || []).length,
+        subpos: j.subpos || 'bottom', lipsync: !!j.lipsync,
         cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, genderForced: j.genderForced || null, folderId: j.folderId || null, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, cost: j.cost, cost_breakdown: j.cost_breakdown, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
