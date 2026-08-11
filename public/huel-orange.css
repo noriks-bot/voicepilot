@@ -357,3 +357,11 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 .lv-grip { flex:none; align-self:center; padding:6px 4px; margin:-4px 2px -4px -6px; color:#C9C6C0; font-size:15px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; transition:color .12s; }
 .lv-jobrow:hover .lv-grip { color:var(--brand); }
 .lv-grip:active { cursor:grabbing; }
+
+/* ── 14. Mape 2x VECJE (lazji drop cilj) ── */
+#lvFolders { gap:14px; margin-bottom:20px; }
+#lvFolders .lv-folder { padding:18px 26px; font-size:19px; border-radius:16px; gap:10px; border-width:2px; }
+#lvFolders .lv-folder .cnt { font-size:17px; }
+#lvFolders .lv-folder .del { margin-left:8px; font-size:16px; }
+#lvFolders .lv-folder.drop { border-width:2.5px; transform:scale(1.05); }
+#lvFolders .lv-newfolder { padding:18px 26px; font-size:18px; border-radius:16px; border-width:2px; }
