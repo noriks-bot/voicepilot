@@ -6224,7 +6224,18 @@ function lvMergeSegs(segs, o) {
         else { if (c) out.push(c); c = { s: g.s, e: g.e, text: g.text, words: (g.words || []).slice() }; }
     }
     if (c) out.push(c);
-    return out;
+    // VARNOSTNA MREZA: predkratki kadri (npr. ena beseda) se zlijejo s sosedom
+    const MINDUR = parseFloat(process.env.LIPVOICE_SEG_MIN || '1.8');
+    const MINW = parseInt(process.env.LIPVOICE_SEG_MINW || '4', 10);
+    const fix = [];
+    for (const g of out) {
+        const short = (g.e - g.s) < MINDUR || (g.words || []).length < MINW;
+        const prev = fix[fix.length - 1];
+        if (short && prev && (prev.e - prev.s) + (g.e - g.s) <= o.maxDur * 1.4) {
+            prev.text += ' ' + g.text; prev.e = g.e; prev.words = (prev.words || []).concat(g.words || []);
+        } else fix.push(g);
+    }
+    return fix;
 }
 
 // ── 2) klon glasu govorca (ob napaki rezervni glas) ──
@@ -6886,7 +6897,9 @@ async function lvPrepare(job) {
         lvP(job, 55);
 
         // rezi v videu (menjava kadra) -> kadri se poravnajo z montazo
-        const sceneCuts = (process.env.LIPVOICE_SCENES === '0') ? [] : await lvSceneCuts(job.videoPath, job);
+        // rezi v videu privzeto IZKLOPLJENI (delali so predrobne kadre, tudi enobesedne).
+        // Vklop z LIPVOICE_SCENES=1.
+        const sceneCuts = (process.env.LIPVOICE_SCENES === '1') ? await lvSceneCuts(job.videoPath, job) : [];
         job.sceneCuts = sceneCuts;
 
         const stt = await lvSTT(aud, job);
