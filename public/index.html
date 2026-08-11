@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=11">
+    <link rel="stylesheet" href="/huel-orange.css?v=12">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8660,6 +8660,7 @@ async function lvPoll(){
       const folderBadge=_fn?'<span class="lv-row-folder" title="v mapi">📁 '+_fn.replace(/</g,'&lt;')+'</span>':'';
       // ena vrstica na video; povlecljiva v mapo; drzave (prenosi) desno v enem rowu
       html+='<div class="lv-jobrow" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;gap:16px;align-items:flex-start">'
+       +'<div class="lv-grip" title="povleci v mapo">⠿</div>'
        +'<div style="flex:1;min-width:0">'
        +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><strong>'+j.name+'</strong>'+folderBadge
        +(ur?'<span style="font-size:11px;color:#94a3b8">'+ur+'</span>':'')
