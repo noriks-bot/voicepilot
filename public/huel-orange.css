@@ -472,7 +472,7 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 .lv-jobrow.gen .lv-row-prog { background:#F6E4D2; }
 
 /* ── 19. Kartice videov v 3 STOLPCE ── */
-#lvJobs { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-items:start; }
+#lvJobs { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; align-items:start; }
 #lvJobs > div:not(.lv-jobrow) { grid-column:1 / -1; }   /* datumski locilnik cez celo sirino */
 #lvJobs .lv-jobrow { margin-bottom:0; }
 /* v ozjem stolpcu naj se drobne stvari lepse zlozijo */
@@ -480,8 +480,9 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 #lvJobs .lv-row-actions { gap:6px; }
 #lvJobs .lv-folsel { max-width:130px; }
 #lvJobs .lv-gen-chip { padding:8px 12px; font-size:13.5px; }
-@media (max-width:1700px){ #lvJobs { grid-template-columns:repeat(2,1fr); } }
-@media (max-width:1150px){ #lvJobs { grid-template-columns:1fr; } }
+@media (max-width:1900px){ #lvJobs { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:1450px){ #lvJobs { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:1050px){ #lvJobs { grid-template-columns:1fr; } }
 /* v 3-stolpcnem razporedu se kompaktneje */
 #lvJobs .lv-row-main { padding:13px 14px; }
 #lvJobs .lv-row-name strong { font-size:15px; }
@@ -492,3 +493,9 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 #lvJobs .lv-genopts { gap:12px; font-size:13px; }
 #lvJobs .lv-folsel { max-width:120px; padding:7px 9px; font-size:12px; }
 #lvJobs .lv-row-prog { margin:0 14px; }
+/* vedno odprto -> brez toggle gumba; se kompaktneje za 4 stolpce */
+.lv-row-toggle { display:none !important; }
+.lv-row-main { cursor:default; }
+#lvJobs .lv-gen-chip { padding:6px 9px; font-size:12.5px; }
+#lvJobs .lv-genopts { gap:10px; font-size:12.5px; }
+#lvJobs .lv-row-name strong { font-size:14.5px; }

@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=27">
+    <link rel="stylesheet" href="/huel-orange.css?v=28">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8860,8 +8860,8 @@ async function lvPoll(){
       if(j.status==='preparing'||j.status==='queued') rowCls=' inprep';
       else if(anyLangActive) rowCls=' gen';
       else if(j.status==='prepared'&&!(j.outputs||[]).length) rowCls=' prep';
-      html+='<div class="lv-jobrow'+(isOpen?' open':'')+rowCls+'">'
-       +'<div class="lv-row-main" onclick="lvRowClick(event,\''+j.id+'\')">'
+      html+='<div class="lv-jobrow open'+rowCls+'">'
+       +'<div class="lv-row-main">'
          +'<div class="lv-grip" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" title="povleci v mapo">⠿</div>'
          +'<div class="lv-row-name"><strong>'+j.name+'</strong>'+folderBadge+(ur?'<span class="lv-row-time">'+ur+'</span>':'')+'</div>'
          +'<span class="lv-row-status" style="color:'+col+'">'+(j.status==='queued'?'V VRSTI':(j.status==='prepared'?'PRIPRAVLJEN':j.status.toUpperCase()+' '+(j.progress||0)+'%'))+'</span>'
@@ -8869,11 +8869,10 @@ async function lvPoll(){
          +'<div class="lv-row-sp"></div>'
          +'<div class="lv-row-actions">'+lvFolderSelect(j)+dlBtns+cancelBtn
            +'<a class="lv-del" href="javascript:void(0)" onclick="lvDelete(\''+j.id+'\')" title="izbrisi">🗑</a>'
-           +'<button class="lv-row-toggle" onclick="lvToggleRow(\''+j.id+'\',this)" title="'+(isOpen?'skrij':'pokazi vec')+'">'+(isOpen?'▴':'▾')+'</button>'
          +'</div>'
        +'</div>'
        +'<div class="lv-row-prog"><div style="width:'+(sharedActive?(j.progress||0):100)+'%;background:'+col+'"></div></div>'
-       +'<div class="lv-row-more"'+(isOpen?'':' hidden')+'>'
+       +'<div class="lv-row-more">'
          +(info?'<div class="lv-row-info">'+info+'</div>':'')
          +(langChips.trim()?'<div class="lv-row-chips">'+langChips+'</div>':'')
          +(prepDone?lvGenPanel(j):'')

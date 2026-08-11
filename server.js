@@ -5969,6 +5969,19 @@ const LV_UP = path.join(LV_DIR, 'uploads'), LV_OUT = path.join(LV_DIR, 'out');
 const lvJobs = new Map();
 const LV_STATE = path.join(LV_DIR, 'jobs.json');
 try { if (fs.existsSync(LV_STATE)) JSON.parse(fs.readFileSync(LV_STATE, 'utf8')).forEach(j => lvJobs.set(j.id, j)); } catch (e) {}
+// OKREVANJE PO PADCU/RESTARTU: kar je obviselo v 'running', gre nazaj v vrsto
+for (const j of lvJobs.values()) {
+    if (j.status === 'starting' || j.status === 'preparing') { j.status = 'queued'; (j.log = j.log || []).push('priprava prekinjena (restart) -> ponovno v vrsto'); }
+    const st = j.langState || {};
+    for (const L of Object.keys(st)) {
+        if (st[L] === 'running' || st[L] === 'starting') {
+            st[L] = 'queued'; (j.langProgress = j.langProgress || {})[L] = 0;
+            // pokvarjen (nedokoncan) izhod pobrisi, da se ne ponuja za prenos
+            try { const f = (j.outputs || {})[L]; if (f && fs.existsSync(f)) { fs.unlinkSync(f); delete j.outputs[L]; } } catch (e) {}
+            (j.log = j.log || []).push('[' + L + '] prekinjeno (restart) -> ponovno v vrsto');
+        }
+    }
+}
 function lvSave() { try { fs.writeFileSync(LV_STATE, JSON.stringify([...lvJobs.values()].slice(-40), null, 1)); } catch (e) {} }
 // ── MAPE (produktne mape za razvrscanje videov) ──
 const LV_FOLDERS_FILE = path.join(LV_DIR, 'folders.json');
@@ -6008,6 +6021,8 @@ const lvUpload = multer({
     }), limits: { fileSize: 500 * 1024 * 1024 }
 });
 const LV_EL = 'https://api.elevenlabs.io/v1';
+// casovna omejitev za ffmpeg klice — da noben proces ne visi v nedogled (zgodilo se je: 5 dni, 95% CPU)
+const RENDER_TO = { timeout: parseInt(process.env.LIPVOICE_RENDER_TIMEOUT_MIN || '25', 10) * 60 * 1000, maxBuffer: 16 * 1024 * 1024 };
 const lvSh = (s) => String(s).replace(/'/g, "'\\''");
 
 // ═══ KORAK 0: VMAKE — odstrani vzgane podnapise / logotipe / watermarke ═══
@@ -6544,7 +6559,7 @@ async function lvBackground(job, work) {
     if (fs.existsSync(out)) return out;
     try {
         const src = path.join(work, 'bg-src.wav');
-        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 2 -ar 44100 -c:a pcm_s16le '${lvSh(src)}' 2>/dev/null`);
+        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 2 -ar 44100 -c:a pcm_s16le '${lvSh(src)}' 2>/dev/null`, RENDER_TO);
         lvLog(job, 'locujem glasbo od govora (Demucs)…');
         await execPromise(`cd '${lvSh(work)}' && OMP_NUM_THREADS=3 nice -n 10 '${lvSh(DEMUCS_PY)}' -m demucs.separate --two-stems=vocals -n htdemucs -o '${lvSh(work)}/demucs' '${lvSh(src)}' 2>&1 | tail -1`,
             { timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 });
@@ -6799,7 +6814,7 @@ async function lvPrepare(job) {
         // kadri (uporabimo jih za: ali je kaj za odstraniti, obraz, spol)
         const frDir = path.join(work, 'fr');
         if (!fs.existsSync(frDir)) fs.mkdirSync(frDir, { recursive: true });
-        try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`); } catch (e) {}
+        try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`, RENDER_TO); } catch (e) {}
 
         // ── KORAK 0: ocisti izvirnik (vzgani podnapisi, logotipi, watermarki) ──
         if (VM_AK && VM_SK && job.clean !== false) {
@@ -6814,7 +6829,7 @@ async function lvPrepare(job) {
                     ];
                     const regenFrames = async () => {
                         fs.readdirSync(frDir).forEach(f => { try { fs.unlinkSync(path.join(frDir, f)); } catch (e) {} });
-                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
+                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`, RENDER_TO);
                     };
                     for (let mi = 0; mi < metode.length; mi++) {
                         lvCk();
@@ -6860,7 +6875,7 @@ async function lvPrepare(job) {
                     lvP(job, 15);
                     try {
                         fs.readdirSync(frDir).forEach(f => { try { fs.unlinkSync(path.join(frDir, f)); } catch (e) {} });
-                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`);
+                        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "fps=1/3,scale=320:-1" -q:v 5 '${lvSh(frDir)}/f-%03d.jpg' 2>/dev/null`, RENDER_TO);
                     } catch (e) {}
                 } else {
                     lvLog(job, 'vmake: na videu ni vzganih napisov -> ciscenje ni potrebno');
@@ -6879,7 +6894,7 @@ async function lvPrepare(job) {
         job.meta = { W, H, DUR }; lvLog(job, `video ${W}x${H}, ${DUR.toFixed(1)}s`);
 
         const aud = path.join(work, 'src.mp3');
-        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`);
+        await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`, RENDER_TO);
         lvLog(job, 'zvok izlocen');
         lvP(job, 40);
 
@@ -6889,7 +6904,7 @@ async function lvPrepare(job) {
             clonedVoice = null;
         } else {
             const cloneSrc = path.join(work, 'clone-src.mp3');
-            try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 44100 -b:a 192k '${lvSh(cloneSrc)}' 2>/dev/null`); } catch (e) {}
+            try { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 44100 -b:a 192k '${lvSh(cloneSrc)}' 2>/dev/null`, RENDER_TO); } catch (e) {}
             clonedVoice = await lvClone(fs.existsSync(cloneSrc) ? cloneSrc : aud, job);
         }
         job.cloneVoiceId = clonedVoice || null;   // OHRANI klon za fazo 2 (NE brisi)
@@ -7010,7 +7025,7 @@ async function lvGenerateLang(job, lang) {
         if (!segs.length) throw new Error('ni segmentov — priprava ni koncana');
         const clonedVoice = job.cloneVoiceId || null;
         const aud = path.join(work, 'src.mp3');
-        if (!fs.existsSync(aud)) { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`); }
+        if (!fs.existsSync(aud)) { await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vn -ac 1 -ar 22050 -b:a 96k '${lvSh(aud)}' 2>/dev/null`, RENDER_TO); }
         const bgWav = process.env.LIPVOICE_BG === '1' ? await lvBackground(job, work) : null;
 
         let tr;
@@ -7129,7 +7144,7 @@ async function lvGenerateLang(job, lang) {
                 let lsIn = job.videoPath;
                 if (vidPad > 0.05) {
                     lsIn = path.join(work, `padded-${lang}.mp4`);
-                    await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)}" -an -c:v libx264 -preset veryfast -crf 20 '${lvSh(lsIn)}' 2>/dev/null`);
+                    await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -vf "tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)}" -an -c:v libx264 -preset veryfast -crf 20 '${lvSh(lsIn)}' 2>/dev/null`, RENDER_TO);
                 }
                 const lsOut = path.join(work, `lipsync-${lang}.mp4`);
                 const rf = Math.max(1, Math.round(Math.min(W, H) / 720));
@@ -7171,18 +7186,26 @@ async function lvGenerateLang(job, lang) {
         const out = path.join(work, `${job.name}-${lang}.mp4`);
         if (lipVideo) {
             if (bgWav) {
-                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'[vo];[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[sp];[1:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'[vo];[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[sp];[1:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
             } else {
-                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(lipVideo)}' -vf "scale=${W}:${H}:flags=lanczos,ass='${lvSh(ass)}'" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
             }
         } else {
             const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
             if (bgWav) {
-                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo];[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,apad[sp];[2:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo];[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,apad[sp];[2:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
             } else {
-                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`);
+                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
             }
         }
+            // PREVERBA IZHODA: nedokoncan/pokvarjen mp4 (brez moov atoma) NE sme veljati za uspeh
+            try {
+                if (!fs.existsSync(out) || fs.statSync(out).size < 50000) throw new Error('prazna datoteka');
+                await execPromise(`ffprobe -v error -show_entries format=duration -of csv=p=0 '${lvSh(out)}'`, { timeout: 60000 });
+            } catch (eChk) {
+                try { if (fs.existsSync(out)) fs.unlinkSync(out); } catch (e) {}
+                throw new Error('izris ni uspel (pokvarjena datoteka) — poskusi znova');
+            }
         (job.outputs = job.outputs || {})[lang] = out;
         job.langState[lang] = 'done'; setP(100);
         lvLog(job, `[${lang}] KONCANO ✓`);
