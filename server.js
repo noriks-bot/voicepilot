@@ -6890,7 +6890,9 @@ async function lvPrepare(job) {
 
         const probe = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -show_entries format=duration -of csv=p=0 '${lvSh(job.videoPath)}'`);
         const nums = String(probe.stdout || probe).match(/[\d.]+/g) || [];
-        const W = parseInt(nums[0]) || 1080, H = parseInt(nums[1]) || 1920, DUR = parseFloat(nums[2]) || 60;
+        let W = parseInt(nums[0]) || 1080, H = parseInt(nums[1]) || 1920; const DUR = parseFloat(nums[2]) || 60;
+        // libx264 + yuv420p zahteva SODE dimenzije — liha visina (npr. 700x875) sesuje VSE izrise
+        W = W - (W % 2); H = H - (H % 2);
         job.meta = { W, H, DUR }; lvLog(job, `video ${W}x${H}, ${DUR.toFixed(1)}s`);
 
         const aud = path.join(work, 'src.mp3');
@@ -7193,9 +7195,9 @@ async function lvGenerateLang(job, lang) {
         } else {
             const padF = vidPad > 0.05 ? `tpad=stop_mode=clone:stop_duration=${vidPad.toFixed(2)},` : '';
             if (bgWav) {
-                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo];[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,apad[sp];[2:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
+                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -i '${lvSh(bgWav)}' -filter_complex "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,${padF}ass='${lvSh(ass)}'[vo];[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,apad[sp];[2:a]volume=0.9,apad[bg];[sp][bg]amix=inputs=2:duration=first:dropout_transition=0[ao]" -map "[vo]" -map "[ao]" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
             } else {
-                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
+                await execPromise(`ffmpeg -y -i '${lvSh(job.videoPath)}' -i '${lvSh(voice)}' -filter_complex "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,${padF}ass='${lvSh(ass)}'[vo]" -map "[vo]" -map 1:a -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p -c:a aac -b:a 192k -af "loudnorm=I=-16:TP=-1.5:LRA=11,apad" -shortest '${lvSh(out)}' 2>/dev/null`, RENDER_TO);
             }
         }
             // PREVERBA IZHODA: nedokoncan/pokvarjen mp4 (brez moov atoma) NE sme veljati za uspeh
