@@ -8856,8 +8856,8 @@ async function lvPoll(){
       const isOpen = window._lvOpenRows.has(j.id);
       const srtBtn = j.hasSegments
         ? '<a class="lv-srt" href="javascript:void(0)" onclick="lvSrtOpen(\''+j.id+'\')" title="prebrani tekst / prevodi">📝 SRT</a>' : '';
-      const dlBtns = outs
-        + (j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'">📦 ZIP</a>':'');
+      // prenosi po jezikih so SAMO v cipih spodaj (prej podvojeno tu in tam)
+      const dlBtns = (j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'">📦 ZIP</a>':'');
       let cancelBtn='';
       if(j.paused) cancelBtn='<a class="lv-go" href="javascript:void(0)" onclick="lvResume(\''+j.id+'\')" title="nadaljuj generiranje">▶ Nadaljuj</a>';
       else if(anyLangActive) cancelBtn='<a class="lv-stop" href="javascript:void(0)" onclick="lvPause(\''+j.id+'\')" title="ustavi — drugi videi pridejo prej na vrsto">⏸ Stop</a>';
