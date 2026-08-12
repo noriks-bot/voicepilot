@@ -7252,6 +7252,15 @@ function _lvNextPrep() {
 function _lvNextLang() {
     const jobs = [...lvJobs.values()].sort((a, b) => String(a.created).localeCompare(String(b.created)));
     for (const j of jobs) {
+        // SAMO-POPRAVILO: obtican cancel (npr. iz starega ✖) brez pavze in brez tekocih jezikov
+        // bi za vedno blokiral cakajoce jezike -> pocisti ga
+        if (j.cancel && !j.paused) {
+            const st0 = j.langState || {};
+            const anyRun = Object.values(st0).some(v => v === 'running');
+            if (!anyRun && Object.values(st0).some(v => v === 'queued')) {
+                j.cancel = false; (j.log = j.log || []).push('samodejno: pocistil obtican preklic -> vrsta tece naprej'); lvSave();
+            }
+        }
         if (j.cancel || j.paused) continue;
         const st = j.langState || {};
         const lang = Object.keys(st).find(L => st[L] === 'queued');
