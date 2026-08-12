@@ -467,9 +467,18 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 /* V predpripravi (se tece) -> topla peščena */
 .lv-jobrow.inprep { background:#FDF9EF !important; border-color:#EBDFC4 !important; }
 .lv-jobrow.inprep .lv-row-prog { background:#F3E8D2; }
-/* Generira drzave -> oranzen rob */
-.lv-jobrow.gen { background:#FFFDFB !important; border-color:#EFCFA9 !important; }
-.lv-jobrow.gen .lv-row-prog { background:#F6E4D2; }
+/* SE TRENUTNO DELA -> ZIVO ZELEN 5px okvir (nezgresljivo) */
+.lv-jobrow.gen { border:5px solid #1FB141 !important; background:#FCFFFC !important;
+  box-shadow:0 0 0 4px rgba(31,177,65,.14), 0 12px 30px -14px rgba(31,177,65,.35) !important;
+  animation:lvGenPulse 1.5s ease-in-out infinite; }
+@keyframes lvGenPulse { 0%,100%{ box-shadow:0 0 0 3px rgba(31,177,65,.10);} 50%{ box-shadow:0 0 0 8px rgba(31,177,65,.28);} }
+.lv-jobrow.gen .lv-row-prog { background:#DFF3E2; }
+.lv-jobrow.gen .lv-row-prog > div { background:#1FB141 !important; }
+/* v vrsti (caka na prosto mesto) -> tanek oranzen rob */
+.lv-jobrow.queued { border:1.5px solid #EFCFA9 !important; background:#FFFDFB !important; }
+/* USTAVLJENO -> siva crtkana */
+.lv-jobrow.paused { border:2px dashed #C9C6C0 !important; background:#FAFAF8 !important; }
+.lv-jobrow.paused .lv-genpanel { opacity:.7; }
 
 /* ── 19. Kartice videov v 3 STOLPCE ── */
 #lvJobs { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; align-items:start; }
@@ -499,3 +508,8 @@ input[type="radio"], input[type="checkbox"], input[type="range"], progress {
 #lvJobs .lv-gen-chip { padding:6px 9px; font-size:12.5px; }
 #lvJobs .lv-genopts { gap:10px; font-size:12.5px; }
 #lvJobs .lv-row-name strong { font-size:14.5px; }
+/* gumba Stop / Nadaljuj */
+#lvJobs a.lv-stop { background:#fff !important; border:1.5px solid #B3402F !important; color:#B3402F !important; font-weight:800; }
+#lvJobs a.lv-stop:hover { background:#FBE9E7 !important; }
+#lvJobs a.lv-go { background:#1FB141 !important; color:#fff !important; font-weight:800; }
+#lvJobs a.lv-go:hover { background:#178A33 !important; }

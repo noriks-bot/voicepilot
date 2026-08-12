@@ -5982,7 +5982,7 @@ for (const j of lvJobs.values()) {
         }
     }
 }
-function lvSave() { try { fs.writeFileSync(LV_STATE, JSON.stringify([...lvJobs.values()].slice(-40), null, 1)); } catch (e) {} }
+function lvSave() { try { fs.writeFileSync(LV_STATE, JSON.stringify([...lvJobs.values()].slice(-500), null, 1)); } catch (e) {} }
 // ── MAPE (produktne mape za razvrscanje videov) ──
 const LV_FOLDERS_FILE = path.join(LV_DIR, 'folders.json');
 let lvFolders = [];
@@ -7211,9 +7211,16 @@ async function lvGenerateLang(job, lang) {
         lvLog(job, `[${lang}] KONCANO ✓`);
         lvComputeCost(job, true);
     } catch (e) {
-        (job.langErrors = job.langErrors || {})[lang] = String(e.message).slice(0, 200);
-        job.langState[lang] = 'error';
-        lvLog(job, `[${lang}] NAPAKA (${String(e.message).slice(0, 120)})`);
+        if (job.paused && job.cancel) {
+            // STOP: ne belezi napake — drzava ostane v vrsti in se nadaljuje ob ▶
+            job.langState[lang] = 'queued'; job.langProgress[lang] = 0;
+            job.cancel = false;
+            lvLog(job, `[${lang}] ⏸ ustavljeno — ostane v vrsti (▶ Nadaljuj jo pozene)`);
+        } else {
+            (job.langErrors = job.langErrors || {})[lang] = String(e.message).slice(0, 200);
+            job.langState[lang] = 'error';
+            lvLog(job, `[${lang}] NAPAKA (${String(e.message).slice(0, 120)})`);
+        }
         lvComputeCost(job, false);
     } finally { lvSave(); }
 }
@@ -7238,12 +7245,12 @@ function _lvGenLimit() {
 }
 function _lvNextPrep() {
     return [...lvJobs.values()].sort((a, b) => String(a.created).localeCompare(String(b.created)))
-        .find(j => j.status === 'queued') || null;
+        .find(j => j.status === 'queued' && !j.paused) || null;
 }
 function _lvNextLang() {
     const jobs = [...lvJobs.values()].sort((a, b) => String(a.created).localeCompare(String(b.created)));
     for (const j of jobs) {
-        if (j.cancel) continue;
+        if (j.cancel || j.paused) continue;
         const st = j.langState || {};
         const lang = Object.keys(st).find(L => st[L] === 'queued');
         if (lang) return { job: j, lang };
@@ -7318,16 +7325,16 @@ app.post('/api/lipvoice/generate/:id', (req, res) => {
         j.langState[L] = 'queued'; j.langProgress[L] = 0;
         started.push(L);
     }
-    if (started.length) { j.cancel = false; (j.log = j.log || []).push('sprozeno generiranje: ' + started.join(', ')); }
+    if (started.length) { j.cancel = false; j.paused = false; (j.log = j.log || []).push('sprozeno generiranje: ' + started.join(', ')); }
     lvSave(); setImmediate(lvKick);
     res.json({ ok: true, started, skipped });
 });
 
 app.get('/api/lipvoice/jobs', (req, res) => res.json(
-    [...lvJobs.values()].filter(j => !j.hidden).sort((a, b) => b.created.localeCompare(a.created)).slice(0, 25).map(j => ({
+    [...lvJobs.values()].filter(j => !j.hidden).sort((a, b) => b.created.localeCompare(a.created)).slice(0, 500).map(j => ({
         id: j.id, name: j.name, langs: j.langs, status: j.status, progress: j.progress, error: j.error,
         langState: j.langState || {}, langProgress: j.langProgress || {}, hasSegments: !!(j.segments || []).length,
-        subpos: j.subpos || 'bottom', lipsync: !!j.lipsync,
+        subpos: j.subpos || 'bottom', lipsync: !!j.lipsync, paused: !!j.paused,
         cloned: j.cloned, hasFace: j.hasFace, gender: j.gender, genderForced: j.genderForced || null, folderId: j.folderId || null, cleaned: j.cleaned, enhanced: j.enhanced, langErrors: j.langErrors, rerunning: j.rerunning, sourceLang: j.sourceLang, vmakeTasks: j.vmakeTasks, product: j.product, created: j.created,
         sourceText: (j.sourceText || '').slice(0, 500), translations: j.translations,
         log: (j.log || []).slice(-8), outputs: Object.keys(j.outputs || {}) }))));
@@ -7473,6 +7480,28 @@ app.get('/api/lipvoice/src/:id', (req, res) => {
     res.type('video/mp4');
     fs.createReadStream(f).pipe(res);
 });
+// ⏸ STOP: ustavi generiranje tega videa (cakajoce drzave pocakajo, tekoca se vrne v vrsto)
+app.post('/api/lipvoice/pause/:id', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    j.paused = true;
+    const st = j.langState || {};
+    const running = Object.keys(st).filter(L => st[L] === 'running');
+    if (running.length) j.cancel = true;   // kooperativno ustavi tekoco (vrne se v vrsto)
+    (j.log = j.log || []).push('⏸ STOP — generiranje ustavljeno' + (running.length ? ' (tekoca ' + running.join(',') + ' se vrne v vrsto)' : ''));
+    lvSave(); setImmediate(lvKick);
+    res.json({ ok: true, paused: true });
+});
+// ▶ NADALJUJ
+app.post('/api/lipvoice/resume/:id', (req, res) => {
+    const j = lvJobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'Ni joba' });
+    j.paused = false; j.cancel = false;
+    (j.log = j.log || []).push('▶ NADALJUJEM generiranje');
+    lvSave(); setImmediate(lvKick);
+    res.json({ ok: true, paused: false });
+});
+
 // prekini job (kooperativno — pipeline se ustavi na naslednji kontrolni tocki)
 app.post('/api/lipvoice/cancel/:id', (req, res) => {
     const j = lvJobs.get(req.params.id);

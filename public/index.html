@@ -2117,7 +2117,7 @@
         </style>
     <!-- HUEL ORANGE — isti dizajn kot dash.noriks.com, oranžna namesto zelene -->
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/huel-orange.css?v=29">
+    <link rel="stylesheet" href="/huel-orange.css?v=30">
 </head>
 <body>
     <!-- Login Modal -->
@@ -8783,6 +8783,8 @@ async function lvDropOnFolder(e,fid){
   const j=(window._lvAllJobs||[]).find(x=>x.id===jobId); if(j){ if(folderId)j.folderId=folderId; else delete j.folderId; }
   lvRenderFolders(); lvPoll();
 }
+async function lvPause(id){ try{ await fetch('/api/lipvoice/pause/'+id,{method:'POST'}); }catch(e){} lvPoll(); }
+async function lvResume(id){ try{ await fetch('/api/lipvoice/resume/'+id,{method:'POST'}); }catch(e){} lvPoll(); }
 function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvLoadFolders(); lvPoll(); }
 async function lvPoll(){
   if(!document.body.classList.contains('page-lipvoice')){ _lvPolling = false; return; }
@@ -8844,7 +8846,9 @@ async function lvPoll(){
       // prvic videna vrstica -> samodejno odpri, ce potrebuje pozornost
       window._lvOpenRows = window._lvOpenRows || new Set();
       window._lvSeenRows = window._lvSeenRows || new Set();
-      const anyLangActive = Object.keys(LS).some(k=>LS[k]==='running'||LS[k]==='queued');
+      const anyLangRunning = Object.keys(LS).some(k=>LS[k]==='running');
+      const anyLangQueued = Object.keys(LS).some(k=>LS[k]==='queued');
+      const anyLangActive = anyLangRunning || anyLangQueued;
       if(!window._lvSeenRows.has(j.id)){
         window._lvSeenRows.add(j.id);
         if(sharedActive || anyLangActive || (prepDone && !(j.outputs||[]).length)) window._lvOpenRows.add(j.id);
@@ -8854,18 +8858,22 @@ async function lvPoll(){
         ? '<a class="lv-srt" href="javascript:void(0)" onclick="lvSrtOpen(\''+j.id+'\')" title="prebrani tekst / prevodi">📝 SRT</a>' : '';
       const dlBtns = outs
         + (j.status==='done'&&(j.outputs||[]).length>1?'<a class="lv-zip" href="/api/lipvoice/download-zip/'+j.id+'">📦 ZIP</a>':'');
-      const cancelBtn = (sharedActive||anyLangActive)
-        ? '<a class="lv-cancel" href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')">✖</a>' : '';
+      let cancelBtn='';
+      if(j.paused) cancelBtn='<a class="lv-go" href="javascript:void(0)" onclick="lvResume(\''+j.id+'\')" title="nadaljuj generiranje">▶ Nadaljuj</a>';
+      else if(anyLangActive) cancelBtn='<a class="lv-stop" href="javascript:void(0)" onclick="lvPause(\''+j.id+'\')" title="ustavi — drugi videi pridejo prej na vrsto">⏸ Stop</a>';
+      else if(sharedActive) cancelBtn='<a class="lv-cancel" href="javascript:void(0)" onclick="lvCancel(\''+j.id+'\')" title="prekini pripravo">✖</a>';
       // barva kartice po stanju: v pripravi (rumeno) / pripravljen (zeleno) / generira (oranzno)
       let rowCls='';
-      if(j.status==='preparing'||j.status==='queued') rowCls=' inprep';
-      else if(anyLangActive) rowCls=' gen';
+      if(j.paused) rowCls=' paused';
+      else if(j.status==='preparing'||j.status==='queued') rowCls=' inprep';
+      else if(anyLangRunning) rowCls=' gen';       // ZIVO ZELEN okvir = ta video se TRENUTNO dela
+      else if(anyLangQueued) rowCls=' queued';
       else if(j.status==='prepared'&&!(j.outputs||[]).length) rowCls=' prep';
       html+='<div class="lv-jobrow open'+rowCls+'">'
        +'<div class="lv-row-main">'
          +'<div class="lv-grip" draggable="true" ondragstart="lvRowDragStart(event,\''+j.id+'\')" ondragend="lvRowDragEnd(event)" title="povleci v mapo">⠿</div>'
          +'<div class="lv-row-name"><strong>'+j.name+'</strong>'+folderBadge+(ur?'<span class="lv-row-time">'+ur+'</span>':'')+'</div>'
-         +'<span class="lv-row-status" style="color:'+col+'">'+(j.status==='queued'?'V VRSTI':(j.status==='prepared'?'PRIPRAVLJEN':j.status.toUpperCase()+' '+(j.progress||0)+'%'))+'</span>'
+         +'<span class="lv-row-status" style="color:'+(j.paused?'#8A8A85':col)+'">'+(j.paused?'⏸ USTAVLJENO':(j.status==='queued'?'V VRSTI':(j.status==='prepared'?'PRIPRAVLJEN':j.status.toUpperCase()+' '+(j.progress||0)+'%')))+'</span>'
          +srtBtn
          +'<div class="lv-row-sp"></div>'
          +'<div class="lv-row-actions">'+lvFolderSelect(j)+dlBtns+cancelBtn
