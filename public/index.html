@@ -3274,6 +3274,26 @@
                 log.scrollTop = log.scrollHeight;
             }
 
+            // [2026-08-17] Lastno posiljanje s casovno omejitvijo. Prej je zahteva
+            // lahko obticala v brskalniku brez sledi in brez sporocila.
+            function postQueue(payload) {
+                return new Promise(function(resolve, reject) {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/api/localizer/queue', true);
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    xhr.timeout = 60000;
+                    xhr.ontimeout = function() { reject(new Error('casovna omejitev 60s - zahteva ni sla skozi')); };
+                    xhr.onerror = function() { reject(new Error('omrezna napaka')); };
+                    xhr.onload = function() {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try { resolve(JSON.parse(xhr.responseText || '{}')); }
+                            catch(e) { reject(new Error('neveljaven odgovor streznika')); }
+                        } else { reject(new Error('streznik: ' + xhr.status)); }
+                    };
+                    xhr.send(JSON.stringify(payload));
+                });
+            }
+
             // Sequential submit
             async function submitAll() {
                 var btn = document.getElementById('vo-bulk-generate');
@@ -3291,6 +3311,8 @@
                     prepared.push({ row: row, segs: segs, idx: i });
                 }
 
+                if (!prepared.length) { alert('Ni nobene vrstice za pošiljanje.'); return; }
+
                 btn.disabled = true; btn.textContent = '⏳ Pošiljam...';
                 addBtn.disabled = true;
                 document.getElementById('vo-bulk-progress-log').innerHTML = '';
@@ -3298,7 +3320,7 @@
 
                 var allCountries = ['SI','HR','CZ','PL','GR','IT','HU','SK','RO','DE'];
                 var nowDate = (function(){ var d = new Date(); return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getFullYear()).slice(-2); })();
-                var ok = 0, fail = 0;
+                var ok = 0, fail = 0, queuedIds = [];
                 for (var j = 0; j < prepared.length; j++) {
                     var item = prepared[j];
                     var row = item.row;
@@ -3312,7 +3334,7 @@
                     setStatus(row.id, '⏳ pošiljam...', '#0A59D2');
                     plog('Vrstica ' + (item.idx+1) + ': pošiljam (' + segs.length + ' segmentov, ' + videoDuration.toFixed(1) + 's)...');
                     try {
-                        await window.postJSON('/api/localizer/queue', {
+                        var _r = await postQueue({
                             videoClean: row.videoFile,
                             name: name,
                             namingParts: { id: voId, date: nowDate, product: 'tshirt', type: 'VO', author: 'BULK' },
@@ -3328,6 +3350,7 @@
                             muteOriginal: row.muteOriginal,
                             voiceGender: row.voiceGender || 'male'
                         });
+                        if (_r && (_r.jobId || _r.id)) queuedIds.push(_r.jobId || _r.id);
                         ok++;
                         setStatus(row.id, '✅ v Jobs', '#10b981');
                         plog('Vrstica ' + (item.idx+1) + ': ✅ v vrsti', '#10b981');
@@ -3338,9 +3361,32 @@
                     }
                 }
 
-                plog('Končano. ✅ ' + ok + ' uspešno · ❌ ' + fail + ' napak. Pojdi v Jobs in pritisni ▶ RUN.', ok > 0 ? '#10b981' : '#B91C1C');
-                if (fail === 0) {
-                    alert('✅ Vse vrstice (' + ok + ') v vrsti! Pojdi v Jobs in pritisni ▶ RUN.');
+                // [2026-08-17] PREVERBA PRI VIRU: preberi Jobs s streznika in potrdi,
+                // da so dela RES tam. Brez tega je aplikacija javila uspeh, tudi ce
+                // zahteva sploh ni prisla do streznika.
+                var potrjenih = -1;
+                if (ok > 0) {
+                    plog('Preverjam v Jobs...', '#0A59D2');
+                    try {
+                        var _resp = await fetch('/api/localizer/jobs', { cache: 'no-store' });
+                        var _d = await _resp.json();
+                        var _arr = Array.isArray(_d) ? _d : (_d.jobs || []);
+                        var _idx = {};
+                        _arr.forEach(function(j){ if (j && j.id) _idx[j.id] = 1; });
+                        potrjenih = queuedIds.filter(function(id){ return _idx[id]; }).length;
+                    } catch(e) { potrjenih = -1; }
+                }
+
+                plog('Končano. ✅ ' + ok + ' poslano · ❌ ' + fail + ' napak.', ok > 0 ? '#10b981' : '#B91C1C');
+
+                if (ok > 0 && potrjenih >= 0 && potrjenih < ok) {
+                    plog('⚠️ V Jobs jih je potrjenih le ' + potrjenih + ' od ' + ok + '!', '#B91C1C');
+                    alert('⚠️ POZOR: poslanih ' + ok + ', v Jobs pa je potrjenih samo ' + potrjenih + '.\nNE zanašaj se na to — odpri Jobs in preveri.');
+                } else if (fail === 0 && potrjenih > 0) {
+                    plog('✔ Potrjeno v Jobs: ' + potrjenih, '#10b981');
+                    alert('✅ Preverjeno v Jobs: vseh ' + potrjenih + '. Pojdi v Jobs in pritisni ▶ RUN.');
+                } else if (fail === 0) {
+                    alert('✅ Poslano (' + ok + '). Preverbe ni bilo mogoče izvesti — odpri Jobs in poglej.');
                 } else {
                     alert('Končano: ✅ ' + ok + ' · ❌ ' + fail + '. Glej napredek za podrobnosti.');
                 }
@@ -8455,6 +8501,7 @@ document.getElementById('lvFile').addEventListener('change',lvShowFiles);
   });
 })();
 let _lvPolling = false;
+let _lvPollTimer = null;   // [2026-08-17] samo ENA cakajoca zanka
 async function lvCancel(id){
   if(!confirm('Prekinem ta job?'))return;
   try{await fetch('/api/lipvoice/cancel/'+id,{method:'POST'});}catch(e){}
@@ -8787,13 +8834,16 @@ async function lvPause(id){ try{ await fetch('/api/lipvoice/pause/'+id,{method:'
 async function lvResume(id){ try{ await fetch('/api/lipvoice/resume/'+id,{method:'POST'}); }catch(e){} lvPoll(); }
 function lvStartPolling(){ if(_lvPolling) return; _lvPolling = true; lvLoadFolders(); lvPoll(); }
 async function lvPoll(){
+  // [2026-08-17] Vsak neposreden klic je prej zagnal SVOJO zanko -> 7 zahtev/s.
+  // Zdaj obstaja vedno le en cakajoc casovnik.
+  if(_lvPollTimer){ clearTimeout(_lvPollTimer); _lvPollTimer = null; }
   if(!document.body.classList.contains('page-lipvoice')){ _lvPolling = false; return; }
   try{
     const jobs=await (await fetch('/api/lipvoice/jobs')).json();
     window._lvAllJobs=jobs;
     window._lvJobsById={}; jobs.forEach(j=>window._lvJobsById[j.id]=j);
     lvRenderFolders();
-    if(window._lvDragging){ setTimeout(lvPoll,3000); return; }   // med vlecenjem ne prerisuj
+    if(window._lvDragging){ _lvPollTimer = setTimeout(lvPoll,3000); return; }   // med vlecenjem ne prerisuj
     const shown=_lvActiveFolder?jobs.filter(j=>(_lvActiveFolder==='__none'?!j.folderId:j.folderId===_lvActiveFolder)):jobs;
     const DNEVI=['NED','PON','TOR','SRE','ČET','PET','SOB'];
     let html='', lastDay='';
@@ -8894,7 +8944,7 @@ async function lvPoll(){
     }
     document.getElementById('lvJobs').innerHTML = html || '<div style="color:#94a3b8;text-align:center;padding:30px">Ni opravil</div>';
   }catch(e){}
-  setTimeout(lvPoll,3000);
+  _lvPollTimer = setTimeout(lvPoll,3000);
 }
 
 (function(){
